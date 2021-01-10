@@ -80,6 +80,7 @@ then, after seeing the second part of the problem, we'd either do 4d in a simila
 <ul>
 <li><a href="#parsing-the-input">parsing the input</a></li>
 <li><a href="#the-world">the world</a></li>
+<li><a href="#simulation">simulation</a></li>
 </ul>
 </section>
 <h2 id="parsing-the-input">parsing the input<span class="headerlink"> <a href="#parsing-the-input" title="permalink">#</a></span></h2>
@@ -172,6 +173,68 @@ will contain the (same) inner list y_size times.</p>
 ........
 ........
 </code></pre>
+<h2 id="simulation">simulation<span class="headerlink"> <a href="#simulation" title="permalink">#</a></span></h2>
+<p>Let's simulate one cycle.</p>
+<p>We have to go through each cell, count its neighbors, and change the state of the cells according to the given rule.</p>
+<p>The cube state is changing <em>simultaneously</em> for all cubes, so we cannot update the world in place: given two neighboring cubes updated in order, the old state of the first cube will be gone when we get around to updating the second cube, replaced by the new state. To avoid this, we will have two worlds, and always read from the old one and update the new.</p>
+<p>We'll put the logic for one simulation cycle in a function, and pass both the old and the new worlds as arguments:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>43</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">do_cycle</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">new</span><span class="p">):</span>
+</code></pre></div>
+</td></tr></table><p>Then, we go through each cell:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>44
+45</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">for</span> <span class="n">y</span><span class="p">,</span> <span class="n">line</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">old</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">active</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">line</span><span class="p">):</span>
+</code></pre></div>
+</td></tr></table><p>The cell's neighbors are all the cubes in a 3x3 square centered on the current cube, <em>except</em> the cube itself:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>47
+48
+49
+50
+51
+52
+53
+54
+55</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>            <span class="n">active_neighbors</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span>
+
+                    <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="n">j</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="k">continue</span>
+
+                    <span class="n">nx</span> <span class="o">=</span> <span class="n">x</span> <span class="o">+</span> <span class="n">i</span>
+                    <span class="n">ny</span> <span class="o">=</span> <span class="n">y</span> <span class="o">+</span> <span class="n">j</span>
+</code></pre></div>
+</td></tr></table><p>We should now be able to get the neighbor's state with <code>old[ny][nx]</code>; however, we have a couple of (literal) edge cases:</p>
+<ul>
+<li><p>when the current cell has one of the coordinates 0 (the left or top edges); e.g. the first neighbor will be at (-1, -1); due to how list indexing works, that will actually get the bottom right corner; that is not what we want, since the world is supposed to be infinite in every direction, not wrap around</p>
+</li>
+<li><p>when the current cell has one of the coordinates <code>size - 1</code> (the right or bottom edge); we'll get an IndexError when trying to look at the right/bottom neighbor</p>
+</li>
+</ul>
+<p>In both cases, we want to know if the current cube is active, since it's possible one of the neighbors that's out of bounds should become active.</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>                    <span class="k">if</span> <span class="n">nx</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">ny</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">active</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;active on edge: </span><span class="si">{</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                        <span class="k">continue</span>
+
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">active_neighbors</span> <span class="o">+=</span> <span class="o">=</span> <span class="n">old</span><span class="p">[</span><span class="n">ny</span><span class="p">][</span><span class="n">nx</span><span class="p">]</span>
+                    <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">active</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;active on edge: </span><span class="si">{</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                        <span class="k">continue</span>
+</code></pre></div>
+</td></tr></table><p>Here is where representing cubes as 0/1 comes in handy: we can just add the cube state to the active neighbors counter.</p>
 
 
 
