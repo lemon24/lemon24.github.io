@@ -97,14 +97,15 @@ and then follow along as we do it again here.</p>
 </section>
 </details>
 <h2 id="the-problem">The problem<span class="headerlink"> <a href="#the-problem" title="permalink">#</a></span></h2>
-<p>The problem might look familiar<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>:</p>
+<p>The problem might look familiar<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
+(if you didn't read it yet, <a href="https://adventofcode.com/2020/day/17">go and do that first</a>):</p>
 <ul>
 <li>we have a grid of cells that can be either <em>active</em> or <em>inactive</em></li>
 <li>cells change state at each step in time depending on their neighbors</li>
 </ul>
-<p>These things are called <a href="https://en.wikipedia.org/wiki/Cellular_automaton">cellular automata</a>, of which the most famous
-is probably Conway's <a href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life">Game of Life</a>;
-our problem seems to have the same rules as Life:</p>
+<p>These things are called <a href="https://en.wikipedia.org/wiki/Cellular_automaton">cellular automata</a>,
+the most famous of which is probably Conway's <a href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life">Game of Life</a>.
+Our problem seems to have the same rules as Life:</p>
 <ul>
 <li>any <em>active</em> cell with 2 or 3 <em>active</em> neighbors remains <em>active</em></li>
 <li>any <em>inactive</em> cell with 3 <em>active</em> neighbors becomes <em>active</em></li>
@@ -115,50 +116,41 @@ our problem seems to have the same rules as Life:</p>
 <summary>Minor spoiler alert:</summary>
 <p>In part two of the problem, the grid is <em>4-dimensional</em>.</p>
 </details>
-<p>From the start, we notice this may be relatively hard to visualize:
-in the example output, for 3D we have 5 layers (2D planes) after 3 cycles,
-and for 4D we have 25 layers after only 2 cycles!</p>
-<p>Understanding what's happening in 4D seems difficult
+<p>You might notice that this is relatively hard to visualize:
+the example output has 5 layers after 3 cycles in 3 dimensions,
+and 25 layers after only 2 cycles in 4 dimensions!
+Understanding what's happening in 4D seems difficult
 even assuming the number of planes remains 25 for future iterations.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
 <p>The normal flow of solving the problem would be something like this:</p>
 <ul>
 <li>implement the 3D version; then,</li>
-<li>after seeing the second part of the problem, either do 4D in a similar fashion,
-or generalize the 3D version to an arbitrary number of dimensions.</li>
+<li>after seeing the second part, either<ul>
+<li>do 4D in a similar fashion, or</li>
+<li>generalize 3D to an arbitrary number of dimensions.</li>
 </ul>
-<p>Instead, <strong>we'll go the opposite way</strong>:
+</li>
+</ul>
+<p><strong>We'll do the opposite</strong>:
 implement 2D, which is trivial to check by hand,
-and once we have a test suite, generalize <em>that</em>.</p>
+and once we have some tests, generalize <em>that</em>.</p>
 <h2 id="parsing-the-input">Parsing the input<span class="headerlink"> <a href="#parsing-the-input" title="permalink">#</a></span></h2>
 <p>First, let's parse the input.</p>
 <p>We'll transform the input string into a list of lists of integers,
 where 0 and 1 represent inactive and active cubes, respectively.
-For the test input, it should look like this:
-<code>[[0, 1, 0], [0, 0, 1], [1, 1, 1]]</code>.</p>
-<p>Using numbers separates content and presentation,
-but also allows for nicer code: we can say
-<code>if active</code> instead of <code>if active == '#'</code> and
+For the test input, it should look like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
+</code></pre></div>
+<p>Using numbers <a href="https://en.wikipedia.org/wiki/Separation_of_concerns">separates concerns</a>, but also allows for nicer code:
+we can write <code>if active</code> instead of <code>if active == '#'</code>, and
 <code>sum(cubes)</code> instead of <code>sum(active == '#' for active in cubes)</code>.</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code> 1
- 2
- 3
- 4
- 5
- 6
- 7
- 8
- 9
-10
-11
-12
-13
-14</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">TEST_INPUT</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
-<span class="s2">.#.</span>
-<span class="s2">..#</span>
-<span class="s2">###</span>
-<span class="s2">&quot;&quot;&quot;</span>
-
-<span class="n">CHARACTERS</span> <span class="o">=</span> <span class="s1">&#39;.#&#39;</span>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>1
+2
+3
+4
+5
+6
+7
+8</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">CHARACTERS</span> <span class="o">=</span> <span class="s1">&#39;.#&#39;</span>
 <span class="n">CHR_TO_NUM</span> <span class="o">=</span> <span class="p">{</span><span class="n">c</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">CHARACTERS</span><span class="p">)}</span>
 
 <span class="k">def</span> <span class="nf">parse_input</span><span class="p">(</span><span class="nb">input</span><span class="p">):</span>
@@ -167,16 +159,14 @@ but also allows for nicer code: we can say
         <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="nb">input</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span>
     <span class="p">]</span>
 </code></pre></div>
-</td></tr></table><p>Let's also write a function to turn that back into a string.</p>
-<p>We won't bother trying to minimize the output (e.g. not show empty rows/columns),
-like the example does, since we won't look at more than one layer per cycle anyway.</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>16
-17
-18
-19
-20
-21
-22</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">NUM_TO_CHR</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">enumerate</span><span class="p">(</span><span class="n">CHARACTERS</span><span class="p">))</span>
+</td></tr></table><p>Later on, we'll need to turn that back into a string; let's take care of it now:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>10
+11
+12
+13
+14
+15
+16</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">NUM_TO_CHR</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">enumerate</span><span class="p">(</span><span class="n">CHARACTERS</span><span class="p">))</span>
 
 <span class="k">def</span> <span class="nf">format_2d</span><span class="p">(</span><span class="n">plane</span><span class="p">):</span>
     <span class="k">return</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
@@ -184,17 +174,32 @@ like the example does, since we won't look at more than one layer per cycle anyw
         <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">plane</span>
     <span class="p">)</span>
 </code></pre></div>
-</td></tr></table><p>Having both functions, we can also write a small round-trip test:</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>24</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">assert</span> <span class="n">format_2d</span><span class="p">(</span><span class="n">parse_input</span><span class="p">(</span><span class="n">TEST_INPUT</span><span class="p">))</span> <span class="o">==</span> <span class="n">TEST_INPUT</span>
+</td></tr></table><p>We're not bothering to minimize the output like the example does
+(hide empty rows/columns),
+since we won't be looking at more than one layer per cycle anyway.</p>
+<p>Having both functions, we can write a basic round-trip test:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>18
+19
+20
+21
+22
+23
+24</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">TEST_INPUT</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
+<span class="s2">.#.</span>
+<span class="s2">..#</span>
+<span class="s2">###</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+<span class="k">assert</span> <span class="n">format_2d</span><span class="p">(</span><span class="n">parse_input</span><span class="p">(</span><span class="n">TEST_INPUT</span><span class="p">))</span> <span class="o">==</span> <span class="n">TEST_INPUT</span>
 </code></pre></div>
 </td></tr></table><h2 id="the-world">The world<span class="headerlink"> <a href="#the-world" title="permalink">#</a></span></h2>
-<p>There are multiple ways of representing the world,
-but the most straightforward is do it the same way we did the input,
+<p>There's more than one way to represent the world,
+but most straightforward should be the same we did the input,
 as a nested list of integers.</p>
-<p>The problem says the grid is infinite,
-but there are no infinite lists in Python, so we have to cheat:
-we'll make a big enough world, and raise an exception if we reach the edges.</p>
-<p>For now, 8 ought to be enough:</p>
+<p>The grid is supposed to be infinite;
+there are no infinite lists in Python, so we have to cheat:
+we'll make a big enough world, and check if we've reached the edges.</p>
+<p>For now, 8 cubes ought to be enough for anyone:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>27
 28
 29</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">x_size</span> <span class="o">=</span> <span class="n">y_size</span> <span class="o">=</span> <span class="mi">8</span>
@@ -204,7 +209,14 @@ we'll make a big enough world, and raise an exception if we reach the edges.</p>
 </td></tr></table><section class="admonition note">
 <div class="admonition-text">
 <p><code>[[0] * x_size] * y_size</code> won't work, because the outer list
- will contain the (same) inner list y_size times.</p>
+ will contain the (same) inner list y_size times:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">l</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">3</span><span class="p">]</span> <span class="o">*</span> <span class="mi">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">l</span>
+<span class="go">[[0, 0, 0], [0, 0, 0], [0, 0, 0]]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">l</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">l</span>
+<span class="go">[[1, 0, 0], [1, 0, 0], [1, 0, 0]]</span>
+</code></pre></div>
 </div>
 </section>
 <p>We'll place the input in the middle, to give it room to grow in all directions:</p>
@@ -238,18 +250,17 @@ we'll make a big enough world, and raise an exception if we reach the edges.</p>
 </code></pre>
 <h2 id="simulation">Simulation<span class="headerlink"> <a href="#simulation" title="permalink">#</a></span></h2>
 <p>Let's simulate one cycle.</p>
-<p>There are many optimizations to how this can be done,
-but again, we'll do the straightforward thing:
+<p>There are <a href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life#Algorithms">many optimizations</a> to this,
+but again, we'll do the <a href="http://wiki.c2.com/?DoTheSimplestThingThatCouldPossiblyWork">straightforward thing</a>:
 go through each cell, count its neighbors,
 and change its state according to the rules.</p>
-<p>The cube state is changing <em>simultaneously</em> for all cubes,
-so we cannot update the world in place:
+<p>The cube state changes <em>simultaneously</em> for all cubes,
+so we cannot update the world in-place:
 given two neighboring cubes updated in order,
-the first cube's old state will be gone when we update the second one.
+the first cube's old state will be gone when we get to the second one.
 To avoid this, we will use two worlds,
-reading from the old one and updating the new.</p>
-<p>We'll put the logic for one cycle in a function
-that takes the two worlds as arguments:</p>
+always reading from the old world and changing the new one.</p>
+<p>We'll put the logic in a function that takes the two worlds as arguments:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>27</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">simulate</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">new</span><span class="p">):</span>
 </code></pre></div>
 </td></tr></table><p>Going through each cell:</p>
@@ -278,7 +289,7 @@ that takes the two worlds as arguments:</p>
                     <span class="n">ny</span> <span class="o">=</span> <span class="n">y</span> <span class="o">+</span> <span class="n">j</span>
 </code></pre></div>
 </td></tr></table><p><code>old[ny][nx]</code> should now get us the neighbor's state;
-however, we have a couple of (literal) edge cases:</p>
+however, there are a couple of (literal) edge cases:</p>
 <ul>
 <li>The current cell has one of the coordinates 0 (is on the top or left edge).
 Due to how list indexing works, the neighbors to the top/left
@@ -314,8 +325,10 @@ since it's possible one of its out of bounds neighbors should become active:</p>
 </code></pre></div>
 </td></tr></table><section class="admonition note">
 <div class="admonition-text">
-<p>Here's where representing cubes as 0/1 comes in handy:
- we can just add the cell state to the active neighbors counter.</p>
+<p>For now, the exceptions will remain unhandled,
+ and we'll make the world bigger by hand when required.
+ We <em>could</em> do something else, like automatically making the world bigger
+ by some amount and continuing the simulation.</p>
 </div>
 </section>
 <p>Having that, we set the cell's new state according to the rules:</p>
@@ -334,7 +347,7 @@ since it's possible one of its out of bounds neighbors should become active:</p>
 </td></tr></table><p>Let's call that 6 times.
 Instead instead of creating a new world on each iteration,
 we can reuse the old one from the previous iteration,
-since we don't need it anymore.</p>
+since we'd be throwing it away anyway.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>77
 78
 79
@@ -431,7 +444,8 @@ after cycle #6
  this pattern is called a <a href="https://en.wikipedia.org/wiki/Glider_(Conway%27s_Life)">glider</a>.</p>
 </div>
 </section>
-<p>To wrap it up, we'll count the number of active cubes,
+<p>To wrap up, we'll calculate the puzzle answer
+(the number of cubes left in the active state after the sixth cycle),
 and add a test to make sure we won't break anything later on:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code> 87
  88
@@ -1008,8 +1022,8 @@ once we got that general enough, 3D and 4D <em>just worked</em>.</p>
 We'll see at least one way of improving that in a future post.</p>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>Especially if you solved <a href="https://adventofcode.com/2020/day/11">day 11</a>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>And that is a very conservative assumption. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-1"><p>Especially if you already solved <a href="https://adventofcode.com/2020/day/11">day 11</a>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>If you think that's a very conservative assumption, trust your instincts. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
