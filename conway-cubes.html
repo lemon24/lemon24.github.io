@@ -92,13 +92,13 @@ and then follow along as we do it again here.</p>
 <li><a href="#going-multidimensional">Going multidimensional</a></li>
 <li><a href="#3d">3D</a></li>
 <li><a href="#4d">4D</a></li>
-<li><a href="#the-end">The end</a></li>
+<li><a href="#conclusions">Conclusions</a></li>
 </ul>
 </section>
 </details>
 <h2 id="the-problem">The problem<span class="headerlink"> <a href="#the-problem" title="permalink">#</a></span></h2>
-<p>The problem might look familiar<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
-(if you didn't read it yet, <a href="https://adventofcode.com/2020/day/17">go and do that first</a>):</p>
+<p>The problem might look familiar
+(if you didn't read it yet, <a href="https://adventofcode.com/2020/day/17">go do that first</a>):</p>
 <ul>
 <li>we have a grid of cells that can be either <em>active</em> or <em>inactive</em></li>
 <li>cells change state at each step in time depending on their neighbors</li>
@@ -120,7 +120,7 @@ Our problem seems to have the same rules as Life:</p>
 the example output has 5 layers after 3 cycles in 3 dimensions,
 and 25 layers after only 2 cycles in 4 dimensions!
 Understanding what's happening in 4D seems difficult
-even assuming the number of planes remains 25 for future iterations.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
+even assuming the number of planes remains 25 for future iterations.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
 <p>The normal flow of solving the problem would be something like this:</p>
 <ul>
 <li>implement the 3D version; then,</li>
@@ -327,8 +327,8 @@ since it's possible one of its out of bounds neighbors should become active:</p>
 <div class="admonition-text">
 <p>For now, the exceptions will remain unhandled,
  and we'll make the world bigger by hand when required.
- We <em>could</em> do something else, like automatically making the world bigger
- by some amount and continuing the simulation.</p>
+ We <em>could</em> do something else, like catch the exception,
+ scale the world by some constant factor, and continue simulating.</p>
 </div>
 </section>
 <p>Having that, we set the cell's new state according to the rules:</p>
@@ -480,15 +480,15 @@ and add a test to make sure we won't break anything later on:</p>
 <span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table><h2 id="cleaning-up">Cleaning up<span class="headerlink"> <a href="#cleaning-up" title="permalink">#</a></span></h2>
-<p>Now that our 2d implementation is correct, we can make it more general.</p>
+<p>Now that our 2D implementation is correct, we can make it more general.</p>
 <p>We won't do that straight away, though;
 to make it possible to call in multiple ways and generalize incrementally,
 we'll split the script into functions.</p>
 <section class="admonition tip">
 <div class="admonition-text">
-<p>Throughout these changes, our little test suite should keep passing.
- While writing the script, I used <a href="https://eradman.com/entrproject/">entr</a> to re-run the script
- whenever I saved it:</p>
+<p>Throughout these changes, our test suite should keep passing.</p>
+<p>While working on the script, I used <a href="https://eradman.com/entrproject/">entr</a> to re-run it
+ automatically on every save:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="nb">echo</span> conway-cubes.py <span class="p">|</span> entr -rc python conway-cubes.py
 </code></pre></div>
 <p>Your editor may have have a &quot;save and run&quot; function;
@@ -582,7 +582,7 @@ we'll split the script into functions.</p>
 </td></tr></table><p>Finally, let's wrap the whole solution in a function.</p>
 <p>Again, to separate logic from presentation,
 we'll split this into a generator that yields new states, forever;
-note that it first yields the initial state:</p>
+it yields the initial state first for convenience:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>78
 79
 80
@@ -608,7 +608,7 @@ note that it first yields the initial state:</p>
 </td></tr></table><p>... and a function that drives it for 6 cycles, printing the resulting worlds.</p>
 <p>Since we want to use the function for more dimensions,
 but don't want to implement formatting for anything except 2D,
-we'll make that optional through the magic of <a href="https://python-patterns.guide/gang-of-four/factory-method/#dodge-use-dependency-injection">dependency injection</a>.</p>
+we'll make printing optional through the magic of <a href="https://python-patterns.guide/gang-of-four/factory-method/#dodge-use-dependency-injection">dependency injection</a>.</p>
 <p>Also, to keep the tests working,
 we'll return the final state and the number of active cubes.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code> 91
@@ -650,10 +650,10 @@ we'll return the final state and the number of active cubes.</p>
 <span class="n">world</span><span class="p">,</span> <span class="n">active_cubes</span> <span class="o">=</span> <span class="n">run</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="n">parse_input</span><span class="p">(</span><span class="n">TEST_INPUT</span><span class="p">),</span> <span class="n">format_world</span><span class="o">=</span><span class="n">format_2d</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table><h2 id="going-multidimensional">Going multidimensional<span class="headerlink"> <a href="#going-multidimensional" title="permalink">#</a></span></h2>
-<p>OK, we're ready now;
+<p>OK, we're ready now:
 let's follow <code>simulate_forever</code> and make it work with N dimensions.</p>
 <p>First, we'll fix <code>make_world</code>.</p>
-<p>Instead of many size arguments, one per dimension,
+<p>Instead of one size argument per dimension,
 it will take a single argument, a tuple of sizes.
 Using <code>size</code> or <code>sizes</code> as the name might be confusing
 (since they are different <em>kinds</em> of sizes);
@@ -689,7 +689,8 @@ so we can have an n-dimensional &quot;square&quot; world.</p>
 </td></tr></table><table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>113</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">world</span><span class="p">,</span> <span class="n">active_cubes</span> <span class="o">=</span> <span class="n">run</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">parse_input</span><span class="p">(</span><span class="n">TEST_INPUT</span><span class="p">),</span> <span class="n">format_world</span><span class="o">=</span><span class="n">format_2d</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table><p>Next, input copying. For 2D, the destination was the world itself;
-for higher dimensions, the destination is the (2D) plane in the middle:</p>
+for higher dimensions, the destination is the (2D) plane in the middle
+of each higher dimension:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>83
 84
 85
@@ -751,12 +752,14 @@ and instead of <em>i, value</em> pairs, yields <em>(..., k, j, i), value</em> pa
 <p>You may notice we stole the function name <a href="https://numpy.org/doc/stable/reference/generated/numpy.ndenumerate.html">from numpy</a>.
  In the first draft of this article it was called <code>coord_enumerate</code>
  and it generated <em>..., k, j, i, value</em> tuples,
- but I renamed it to keep things familiar.</p>
+ but I changed it to make things easier for people already familiar with numpy.</p>
 <p>Unlike with numpy arrays, we have to infer the number of dimensions,
  since our world doesn't have an explicit shape.</p>
-<p>Also unlike the numpy version, our version only works with lists;
+<p>Also unlike the numpy version, ours only works with lists;
  to make it work with other sequences,
- we could use <code>isinstance(temp, collections.abc.Sequence)</code>.</p>
+ we could use something like:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nb">isinstance</span><span class="p">(</span><span class="n">temp</span><span class="p">,</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Sequence</span><span class="p">)</span>
+</code></pre></div>
 </div>
 </section>
 <p>We'll leave <code>get_active_neighbors</code> last, and finish <code>simulate</code> first:</p>
@@ -792,8 +795,8 @@ so we'll change it to use <code>ndenumerate</code> as well:</p>
 </code></pre></div>
 </td></tr></table><p>Finally, let's do <code>get_active_neighbors</code>.</p>
 <p>First, we need to flatten the loop that generates neighbor coordinates.</p>
-<p>We could use recursion, like we did with <code>make_world</code>,
-but the standard library already has a nifty tool for this:
+<p>We could use recursion, like we did with <code>make_world</code> and <code>ndenumerate</code>,
+but the standard library already has a tool for this:
 <a href="https://docs.python.org/3/library/itertools.html#itertools.product">itertools.product</a> generates the cartesian product of some iterables;
 even better, it can generate the product of an iterable with <em>itself</em>.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>1</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">product</span>
@@ -807,12 +810,13 @@ even better, it can generate the product of an iterable with <em>itself</em>.</p
 </td></tr></table><section class="admonition tip">
 <div class="admonition-text">
 <p>Even if itertools.product did not have a <code>repeat</code> argument,
- we could still emulate it using argument unpacking:</p>
+ we could still emulate it with argument unpacking:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">product</span><span class="p">(</span><span class="o">*</span> <span class="p">[(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">*</span> <span class="n">dimensions</span><span class="p">)</span>
 </code></pre></div>
 </div>
 </section>
-<p>After using it, and making the neighbor counting parts generic as well,
+<p>After using <code>make_directions</code>,
+and making the neighbor counting parts generic as well,
 <code>get_active_neighbors</code> becomes:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>35
 36
@@ -871,13 +875,12 @@ even better, it can generate the product of an iterable with <em>itself</em>.</p
 </code></pre></div>
 </td></tr></table><p>We're done!</p>
 <h2 id="3d">3D<span class="headerlink"> <a href="#3d" title="permalink">#</a></span></h2>
-<p>The problem says that after running 6 cycles with the test input,
-there are 112 active cubes:</p>
+<p>After 6 cycles with the test input, there should be 112 active cubes:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>159
 160</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">_</span><span class="p">,</span> <span class="n">active_cubes</span> <span class="o">=</span> <span class="n">run</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">parse_input</span><span class="p">(</span><span class="n">TEST_INPUT</span><span class="p">))</span>
 <span class="k">assert</span> <span class="n">active_cubes</span> <span class="o">==</span> <span class="mi">112</span>
 </code></pre></div>
-</td></tr></table><p>... which fails:</p>
+</td></tr></table><p>It turns out 8 cubes is not enough:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python Traceback"><span></span><code><span class="x">after cycle #0: ...</span>
 <span class="x">after cycle #1: ...</span>
 <span class="x">after cycle #2: ...</span>
@@ -895,7 +898,7 @@ there are 112 active cubes:</p>
     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;active on edge: </span><span class="si">{</span><span class="n">coords</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 <span class="gr">RuntimeError</span>: <span class="n">active on edge: (2, 3, 0)</span>
 </code></pre></div>
-<p>Good thing we have the checks.
+<p>Good thing we're checking for that.
 Bumping the world size to 16 fixes it:</p>
 <pre class="code code-container"><code>after cycle #0: ...
 after cycle #1: ...
@@ -908,10 +911,10 @@ the result is 112
 </code></pre>
 <p>Time to plug the puzzle input; I assume they are different for everyone,
 so feel free to use yours instead.</p>
-<p>At first I got another &quot;active on edge&quot; error;
+<p>At first I got another <code>active on edge</code> error;
 since running with the test input already takes about a second,
 I increased the world size by smaller increments instead of doubling it;
-20 is enough for me:</p>
+20 is enough for my input:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>162
 163
 164
@@ -938,8 +941,8 @@ I increased the world size by smaller increments instead of doubling it;
 </code></pre></div>
 </td></tr></table><p><code>the result is 386</code>, which unlocks the second part of the problem.</p>
 <h2 id="4d">4D<span class="headerlink"> <a href="#4d" title="permalink">#</a></span></h2>
-<p>Moving on to 4 dimensions.</p>
-<p>The problem says the final cube count for the test input is 848:</p>
+<p>Moving on to even higher dimensions:</p>
+<p>The 4D cube count for the test input should be 848:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>175
 176
 177
@@ -948,7 +951,7 @@ I increased the world size by smaller increments instead of doubling it;
 
 <span class="n">_</span><span class="p">,</span> <span class="n">active_cubes</span> <span class="o">=</span> <span class="n">run</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">parse_input</span><span class="p">(</span><span class="n">INPUT</span><span class="p">))</span>
 </code></pre></div>
-</td></tr></table><p>... and the first cycle for the test input takes about 10 seconds.</p>
+</td></tr></table><p>... and after 10 seconds the first cycle hasn't ended yet.</p>
 <p>Let's add some timings in <code>run</code> before we let this run any further.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>2</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">time</span>
 </code></pre></div>
@@ -1003,27 +1006,34 @@ I increased the world size by smaller increments instead of doubling it;
 <p>We use <a href="https://docs.python.org/3/library/time.html#time.perf_counter">time.perf_counter</a> because it is the
  &quot;clock with the highest available resolution to measure a short duration&quot;;
  since the timescales we're dealing with don't probably need it,
- we could have used <a href="https://docs.python.org/3/library/time.html#time.monotonic">time.monotonic</a> (on Unix, they're <a href="https://github.com/python/cpython/blob/ae6cd7cfdab0599139002c526953d907696d9eef/Python/pytime.c#L1062">actually the same</a>).</p>
+ we could have used <a href="https://docs.python.org/3/library/time.html#time.monotonic">time.monotonic</a> (on Unix, they're <a href="https://github.com/python/cpython/blob/ae6cd7cfdab0599139002c526953d907696d9eef/Python/pytime.c#L1056-L1064">actually the same</a>).</p>
 <p>In general, you should avoid <a href="https://docs.python.org/3/library/time.html#time.time">time.time</a> for measuring durations,
- because it can, in rare cases, go backward or skip forward
- (e.g. when switching to daylight saving time).</p>
+ because it can skip backward or forward (e.g. <a href="https://en.wikipedia.org/wiki/Daylight_saving_time">daylight saving time</a>),
+ or move slower or faster than real time (e.g. <a href="https://en.wikipedia.org/wiki/Leap_second#Workarounds_for_leap_second_problems">leap smearing</a>).</p>
 </div>
 </section>
 <p>After about 1 minute, I get the (correct) result for the test input.</p>
-<p>After 2 more minutes, I get the result for the puzzle input:
-<code>2276</code>; that is also correct.</p>
-<h2 id="the-end">The end<span class="headerlink"> <a href="#the-end" title="permalink">#</a></span></h2>
+<p>After 2 more minutes, <code>the result is 2276</code>; this is also correct.</p>
+<h2 id="conclusions">Conclusions<span class="headerlink"> <a href="#conclusions" title="permalink">#</a></span></h2>
 <p>What have we learned?</p>
-<p>Sometimes, it's easier to start with a simpler problem,
-and iterate towards the real one:
+<p><strong>Sometimes, it's easier to start with a simpler problem,
+and iterate towards the real one</strong>:
 we did most of the coding for 2D, which was easier to understand and debug;
 once we got that general enough, 3D and 4D <em>just worked</em>.</p>
+<p><strong>Tests make refactoring quicker.</strong>
+Even for &quot;exploratory&quot; coding like this,
+when you don't know exactly what the final code will look like,
+or even what you're trying to achieve,
+some parts &quot;settle&quot; earlier than others;
+once that happens,
+a simple high-level test allows you to focus on the <em>next thing</em>
+without having to constantly check
+that stuff that <em>was</em> working is <em>still</em> working.</p>
 <p>The 4D simulation is really slow ... <em>exponentially</em> slow.
 We'll see at least one way of improving that in a future post.</p>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>Especially if you already solved <a href="https://adventofcode.com/2020/day/11">day 11</a>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>If you think that's a very conservative assumption, trust your instincts. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-1"><p>If you think that's a very conservative assumption, trust your instincts. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
