@@ -68,7 +68,7 @@ window.addEventListener('resize', set_vh);
 
 <p>... in which we optimize <a href="/conway-cubes">our Advent of Code 2020 day 17 solution</a>,
 a multidimensional implementation of <a href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life">Game of Life</a>,
-using nothing but pure Python and the stdlib <code>profile</code> module.</p>
+using nothing but pure Python and the stdlib <a href="https://docs.python.org/3/library/profile.html">profile</a> module.</p>
 <p>TODO: mention optimizations aren't to the algorithm, but the Python code</p>
 <p>We'll start from the last version of the solution;
 you can download it <a href="/_file/conway-cubes-perf/conway-cubes-4d.py">here</a>.</p>
@@ -87,8 +87,8 @@ you can download it <a href="/_file/conway-cubes-perf/conway-cubes-4d.py">here</
 <li><a href="#going-multidimensional-again">Going multidimensional, again</a></li>
 <li><a href="#the-real-world">The real world</a></li>
 <li><a href="#bonus-pypy">Bonus: PyPy</a></li>
-<li><a href="#conclusions">conclusions</a></li>
-<li><a href="#appendix-other-things-i-tried">appendix: other things i tried</a></li>
+<li><a href="#conclusions">Conclusions</a></li>
+<li><a href="#bonus-other-things-i-tried">Bonus: other things I tried</a></li>
 </ul>
 </section>
 </details>
@@ -789,7 +789,8 @@ implement one <code>get_active_neighbors()</code> per dimension, and use them li
 </code></pre></div>
 <p>This reminds me of the pattern initially proposed for <code>make_directions()</code>...
 If only there was a way to do the same thing for a function.</p>
-<p>Well, this is Python, we <em>can</em> generate code at runtime:</p>
+<p>Well, this is Python, we <em>can</em> generate code at runtime;
+let's do something <em>stupid</em>:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>3</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">textwrap</span> <span class="kn">import</span> <span class="n">dedent</span>
 </code></pre></div>
 </td></tr></table><table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>31
@@ -848,19 +849,27 @@ If only there was a way to do the same thing for a function.</p>
     <span class="n">exec</span><span class="p">(</span><span class="n">make_get_active_neighbors_str</span><span class="p">(</span><span class="n">dimensions</span><span class="p">),</span> <span class="n">context</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;get_active_neighbors&#39;</span><span class="p">]</span>
 </code></pre></div>
-</td></tr></table><p>Hey, that's the same <code>exec()</code> we used
+</td></tr></table><p>Hey, that's the same <a href="https://docs.python.org/3/library/functions.html#exec">exec</a> we used
 to work around <code>conway-cubes.py</code> not being importable!
 (yup, I left that &quot;issue&quot; there for foreshadowing purposes)</p>
 <p>Unlike in the test file, we use an explicit globals dictionary,
 to avoid polluting the global namespace
 (everything that gets defined in the source code string is a <code>context</code> item).</p>
-<section class="admonition note">
+<p>You may also notice that we're embedding the representation of the directions list
+directly in the code, instead of calling <code>make_directions()</code>;
+I'm not sure this brings a great speed-up, but it can't hurt.</p>
+<section class="admonition attention">
 <div class="admonition-text">
-<p>TBD: no use exec with untrusted code</p>
+<p>Never use <a href="https://docs.python.org/3/library/functions.html#exec">exec</a>/eval with untrusted code,
+ unless you want to get hacked;
+ <a href="https://nedbatchelder.com/blog/201206/eval_really_is_dangerous.html">details</a>.</p>
+<p>Security issues aside, it makes code way harder to understand,
+ and breaks a lot of conventions about where classes and functions come from;
+ <a href="https://lucumr.pocoo.org/2011/2/1/exec-in-python/">more details</a>.</p>
+<p>We're doing it here for ... didactic purposes.
+ And speed. Mostly speed.</p>
 </div>
 </section>
-<p>You may also notice that we're embedding the representation of the directions list
-directly in the code, instead of calling <code>make_directions()</code>.</p>
 <p>Before we try it out, let's pull the dimension counting heuristic
 from <code>ndenumerate()</code> into a separate function:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>61
@@ -902,7 +911,17 @@ from <code>ndenumerate()</code> into a separate function:</p>
      4096    0.090    0.000    0.090    0.000 &lt;string&gt;:3(get_active_neighbors)
 33946/8196    0.010    0.000    0.010    0.000 conway-cubes.py:62(ndenumerate)
 </code></pre>
-<h2 id="the-real-world">The real world<span class="headerlink"> <a href="#the-real-world" title="permalink">#</a></span></h2>
+<p>Since we now have slightly different implementations,
+let's parametrize the edge error test so that we check all the dimensions:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>33
+34
+35
+36</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s1">&#39;dimensions&#39;</span><span class="p">,</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+<span class="k">def</span> <span class="nf">test_edge_errors</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">dimensions</span><span class="p">):</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
+        <span class="n">run</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dimensions</span><span class="p">,</span> <span class="n">parse_input</span><span class="p">(</span><span class="n">dedent</span><span class="p">(</span><span class="nb">input</span><span class="p">)),</span> <span class="n">cycles</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table><h2 id="the-real-world">The real world<span class="headerlink"> <a href="#the-real-world" title="permalink">#</a></span></h2>
 <p>So, with our profiling <code>test 8 4 1</code>,
 we got a 91% (~11x) improvement in <code>get_active_neighbors()</code> run time.</p>
 <p>Does this reflect in the real-world performance?</p>
@@ -916,7 +935,7 @@ we got a 91% (~11x) improvement in <code>get_active_neighbors()</code> run time.
 <span class="go">after cycle #6 (3.35s): ...</span>
 <span class="go">the result is 2276 (20.21s)</span>
 </code></pre></div>
-<p>That's still an 86% (~7x) improvement!</p>
+<p>Almost; that's still an 86% (~7x) improvement.</p>
 <h2 id="bonus-pypy">Bonus: PyPy<span class="headerlink"> <a href="#bonus-pypy" title="permalink">#</a></span></h2>
 <p><a href="https://www.pypy.org/">PyPy</a> is an alternative Python implementation that's
 often faster than CPython (the standard implementation)
@@ -935,8 +954,8 @@ due to its use of <a href="https://en.wikipedia.org/wiki/Just-in-time_compilatio
 <span class="go">the result is 2276 (33.82s)</span>
 </code></pre></div>
 <p>4.2x; not bad, for essentially zero work!
-(Funnily enough, their website says that
-<em>&quot;on average, PyPy is 4.2 times faster than CPython&quot;</em>.)</p>
+Funnily enough, their website says that
+<em>&quot;on average, PyPy is 4.2 times faster than CPython&quot;</em>.</p>
 <p>So, was it all for nothing, could have we just used PyPy from the start?
 Yes and no, but mostly no:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> pypy3 conway-cubes.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
@@ -952,13 +971,25 @@ Yes and no, but mostly no:</p>
 <p>That's a 10x improvement over the same script run with CPython,
 4.2x over the unoptimized script with PyPy,
 and 65x over the unoptimized script with CPython!</p>
-<h2 id="conclusions">conclusions<span class="headerlink"> <a href="#conclusions" title="permalink">#</a></span></h2>
-<ul>
-<li>local maxima</li>
-<li>function calls are slow</li>
-<li>code generation: nice but tricky</li>
-</ul>
-<h2 id="appendix-other-things-i-tried">appendix: other things i tried<span class="headerlink"> <a href="#appendix-other-things-i-tried" title="permalink">#</a></span></h2>
+<h2 id="conclusions">Conclusions<span class="headerlink"> <a href="#conclusions" title="permalink">#</a></span></h2>
+<p><a href="https://wiki.c2.com/?ProfileBeforeOptimizing">Profile before optimizing</a>.
+Most often, your intuition about where the code is slow is wrong.</p>
+<p>Many small optimizations add up.
+It's easy to get stuck where there are no other small optimization left;
+sometimes, a different algorithm is better than many small optimizations.</p>
+<p><a href="https://docs.python.org/3/faq/programming.html#my-program-is-too-slow-how-do-i-speed-it-up">My program is too slow. How do I speed it up?</a> has more better advice.</p>
+<p>Optimizations come with costs.
+Usually, optimizations make code harder to understand.
+More changes increases the likelihood of bugs.
+More changes on harder to understand code even more so.
+Tests help you know you're not breaking anything.
+Profiling helps minimize the amount of code you change.</p>
+<p>PyPy is amazing, give it a try sometime.</p>
+<p>Function calls are slow in Python;
+that only matters if you're calling them millions of times.</p>
+<p>Python has code generation, and you can do cool stuff with it.
+Most of the time, <em>it's not worth it</em>.</p>
+<h2 id="bonus-other-things-i-tried">Bonus: other things I tried<span class="headerlink"> <a href="#bonus-other-things-i-tried" title="permalink">#</a></span></h2>
 <p>making the world bigger by 2, and never passing the edges to get_active_neighbors (which didn't do any check); even without the checks, <code>20 4 6</code> was only 1 second faster; it might be better for bigger things.</p>
 <pre class="code code-container"><code>try:
     for {', '.join(f'o{i}' for i in ids)} in {make_directions(dimensions)}:
