@@ -84,9 +84,9 @@ you can download it <a href="/_file/conway-cubes-perf/conway-cubes-4d.py">here</
 <li><a href="#any-coord-0">any(coord < 0 ...)</a></li>
 <li><a href="#intermision-more-tests">Intermision: more tests</a></li>
 <li><a href="#neighbor-coords">neighbor_coords</a></li>
-<li><a href="#going-generic-again">going generic again</a></li>
-<li><a href="#real-deal">real deal</a></li>
-<li><a href="#bonus-pypy">bonus: pypy</a></li>
+<li><a href="#going-multidimensional-again">Going multidimensional, again</a></li>
+<li><a href="#the-real-world">The real world</a></li>
+<li><a href="#bonus-pypy">Bonus: PyPy</a></li>
 <li><a href="#conclusions">conclusions</a></li>
 <li><a href="#appendix-other-things-i-tried">appendix: other things i tried</a></li>
 </ul>
@@ -365,7 +365,60 @@ it'll take even more, around 25x on my machine.</p>
 <p>Looking at the data, we see that almost the entire 1 second run time
 is spent in <code>get_active_neighbors()</code>,
 which is consistent with our initial calculation.</p>
-<p>Of this, about .4s are spent in the function itself (<code>tottime</code>),
+<p>Let's see it in full:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">get_active_neighbors</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">active</span><span class="p">,</span> <span class="n">coords</span><span class="p">):</span>
+    <span class="n">active_neighbors</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">offsets</span> <span class="ow">in</span> <span class="n">make_directions</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)):</span>
+
+        <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">coord</span> <span class="o">+</span> <span class="n">offset</span>
+            <span class="k">for</span> <span class="n">coord</span><span class="p">,</span> <span class="n">offset</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">offsets</span><span class="p">)</span>
+        <span class="p">]</span>
+
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">coord</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">coord</span> <span class="ow">in</span> <span class="n">neighbor_coords</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">active</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;active on edge: </span><span class="si">{</span><span class="n">coords</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">neighbor</span> <span class="o">=</span> <span class="n">world</span>
+            <span class="k">for</span> <span class="n">coord</span> <span class="ow">in</span> <span class="n">neighbor_coords</span><span class="p">:</span>
+                <span class="n">neighbor</span> <span class="o">=</span> <span class="n">neighbor</span><span class="p">[</span><span class="n">coord</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">active</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;active on edge: </span><span class="si">{</span><span class="n">coords</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="n">active_neighbors</span> <span class="o">+=</span> <span class="n">neighbor</span>
+
+    <span class="k">return</span> <span class="n">active_neighbors</span>
+</code></pre></div>
+</td></tr></table><p>Of this, about .4s are spent in the function itself (<code>tottime</code>),
 and the rest in subfunctions
 (list comprehension etc. seem to be treated as functions as well):</p>
 <ul>
@@ -622,77 +675,70 @@ as long as the old one didn't:</p>
 <span class="go">6 passed, 4 deselected in 0.02s</span>
 </code></pre></div>
 <h2 id="neighbor-coords">neighbor_coords<span class="headerlink"> <a href="#neighbor-coords" title="permalink">#</a></span></h2>
-<p>next up is the neighbor_coords list comprehension</p>
-<p>we could use some function written in C,
-  which removes some of the overhead of the comprehension</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>30
-31
-32
-33
-34
-35
-36
-37
-38
-39
-40
-41
-42</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">add</span>
-<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">starmap</span>
-
-<span class="k">def</span> <span class="nf">get_active_neighbors</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">active</span><span class="p">,</span> <span class="n">coords</span><span class="p">):</span>
-    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">coord</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">coord</span> <span class="ow">in</span> <span class="n">coords</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">active</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;active on edge: </span><span class="si">{</span><span class="n">coords</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-    <span class="n">active_neighbors</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="k">for</span> <span class="n">offsets</span> <span class="ow">in</span> <span class="n">make_directions</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)):</span>
-        <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="n">starmap</span><span class="p">(</span><span class="n">add</span><span class="p">,</span> <span class="nb">zip</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">offsets</span><span class="p">))</span>
-
-    <span class="c1"># ...</span>
+<p>Next up is the <code>neighbor_coords</code> list comprehension.</p>
+<p>Using functions written in C may remove some of the comprehension overhead;
+let's if it works:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>36
+37</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">for</span> <span class="n">offsets</span> <span class="ow">in</span> <span class="n">make_directions</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)):</span>
+        <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">sum</span><span class="p">,</span> <span class="nb">zip</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">offsets</span><span class="p">))</span>
 </code></pre></div>
-</td></tr></table><p>this does work (25% improvement),
-but leaves us with no other obvious avenue for further optimization:</p>
+</td></tr></table><p>It's not much better:</p>
+<pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     4096    0.391    0.000    0.397    0.000 conway-cubes.py:30(get_active_neighbors)
+33938/8194    0.011    0.000    0.011    0.000 conway-cubes.py:53(ndenumerate)
+</code></pre>
+<p>What if instead of using sum, which is generic to any iterable,
+we used a function that's made specifically for 2 numbers?</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>30
+31</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">add</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">starmap</span>
+</code></pre></div>
+</td></tr></table><table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>39
+40</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">for</span> <span class="n">offsets</span> <span class="ow">in</span> <span class="n">make_directions</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)):</span>
+        <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="n">starmap</span><span class="p">(</span><span class="n">add</span><span class="p">,</span> <span class="nb">zip</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">offsets</span><span class="p">))</span>
+</code></pre></div>
+</td></tr></table><p>This is working slighly better, with a 25% improvement:</p>
 <pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
      4096    0.301    0.000    0.306    0.000 conway-cubes.py:33(get_active_neighbors)
 33938/8194    0.011    0.000    0.011    0.000 conway-cubes.py:56(ndenumerate)
 </code></pre>
+<p>We've now exhausted all the obvious things to improve;
+most of the time is spent in <code>get_active_neighbors</code>, not its subfunctions.</p>
+<p>You may remember the <code>any()</code> call spent almost as much time
+in the function itself (<code>tottime</code>) as in the generator expression;
+indeed, calling <em>any</em> function seems to have significant overhead:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> python -m timeit -s <span class="s1">&#39;from operator import add&#39;</span> <span class="s1">&#39;add(1, 2)&#39;</span>
+<span class="go">5000000 loops, best of 5: 49.3 nsec per loop</span>
+<span class="gp">$</span> python -m timeit <span class="s1">&#39;1 + 2&#39;</span>
+<span class="go">50000000 loops, best of 5: 7.98 nsec per loop</span>
+</code></pre></div>
 <p>Let's try something different.</p>
 <p>In the top level loop, we're calling 3 functions to add 4 pairs of numbers.
 What if we didn't?
-Making the code more general did help with testing,
-but we may be reaching a point where it may not be worth it anymore.</p>
-<p>Let's undo the startmap thing and validate this with a quick experiment
-(this will obviously break our non-4d tests, temporarily):</p>
+Having more general code did help with testing,
+but we may be reaching a point where it's not worth it anymore.</p>
+<p>Let's undo the <code>starmap</code> thing and validate it with a quick experiment
+(this will obviously break non-4D, temporarily):</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>36
 37
 38
 39
 40
 41
-42
-43
-44</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">for</span> <span class="n">offsets</span> <span class="ow">in</span> <span class="n">make_directions</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)):</span>
+42</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">for</span> <span class="n">offsets</span> <span class="ow">in</span> <span class="n">make_directions</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)):</span>
         <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">offsets</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
             <span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">offsets</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
             <span class="n">coords</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="n">offsets</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
             <span class="n">coords</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">+</span> <span class="n">offsets</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
         <span class="p">]</span>
-
-        <span class="c1"># ...</span>
 </code></pre></div>
-</td></tr></table><p>Which gives us a 50% improvement!
-(even without doing anything else with the rest of the code)</p>
+</td></tr></table><p>Which gives us a 50% improvement!</p>
 <pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
      4096    0.203    0.000    0.208    0.000 conway-cubes.py:30(get_active_neighbors)
 33938/8194    0.011    0.000    0.011    0.000 conway-cubes.py:58(ndenumerate)
-        1    0.001    0.001    0.006    0.006 {built-in method builtins.sum}
-     4097    0.001    0.000    0.006    0.000 conway-cubes.py:140(&lt;genexpr&gt;)
-     4096    0.003    0.000    0.005    0.000 {built-in method builtins.any}
-    17656    0.002    0.000    0.002    0.000 conway-cubes.py:31(&lt;genexpr&gt;)
 </code></pre>
-<p>let's make everything non-generic:</p>
+<p>Let's make everything non-generic, and get rid of needless intermediary variables:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>30
 31
 32
@@ -729,10 +775,9 @@ but we may be reaching a point where it may not be worth it anymore.</p>
 <pre class="code code-container"><code>     4096    0.095    0.000    0.095    0.000 conway-cubes.py:30(get_active_neighbors)
 33938/8194    0.011    0.000    0.011    0.000 conway-cubes.py:49(ndenumerate)
 </code></pre>
-<h2 id="going-generic-again">going generic again<span class="headerlink"> <a href="#going-generic-again" title="permalink">#</a></span></h2>
-<p>At this point, we could be OK with this not being generic anymore,
-implement a get_active_neighbors() per dimension,
-and use them like this:</p>
+<h2 id="going-multidimensional-again">Going multidimensional, again<span class="headerlink"> <a href="#going-multidimensional-again" title="permalink">#</a></span></h2>
+<p>At this point, we could be OK with part of the code not being generic anymore,
+implement one <code>get_active_neighbors()</code> per dimension, and use them like this:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">GET_ACTIVE_NEIGHBORS</span> <span class="o">=</span> <span class="p">{</span>
     <span class="mi">2</span><span class="p">:</span> <span class="n">get_active_neighbors_2d</span><span class="p">,</span>
     <span class="mi">3</span><span class="p">:</span> <span class="n">get_active_neighbors_3d</span><span class="p">,</span>
@@ -742,9 +787,9 @@ and use them like this:</p>
 <span class="k">def</span> <span class="nf">get_active_neighbors</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">active</span><span class="p">,</span> <span class="n">coords</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">GET_ACTIVE_NEIGHBORS</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)](</span><span class="n">world</span><span class="p">,</span> <span class="n">active</span><span class="p">,</span> <span class="n">coords</span><span class="p">)</span>
 </code></pre></div>
-<p>This reminds me of the pattern we proposed initially for the make_directions() results...
+<p>This reminds me of the pattern initially proposed for <code>make_directions()</code>...
 If only there was a way to do the same thing for a function.</p>
-<p>Well, this is Python, so it turns out we can generate code at runtime.</p>
+<p>Well, this is Python, we <em>can</em> generate code at runtime:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>3</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">textwrap</span> <span class="kn">import</span> <span class="n">dedent</span>
 </code></pre></div>
 </td></tr></table><table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>31
@@ -803,44 +848,83 @@ If only there was a way to do the same thing for a function.</p>
     <span class="n">exec</span><span class="p">(</span><span class="n">make_get_active_neighbors_str</span><span class="p">(</span><span class="n">dimensions</span><span class="p">),</span> <span class="n">context</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;get_active_neighbors&#39;</span><span class="p">]</span>
 </code></pre></div>
-</td></tr></table><table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>79
-80
-81
-82
-83</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">simulate</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">new</span><span class="p">):</span>
-    <span class="n">get_active_neighbors</span> <span class="o">=</span> <span class="n">make_get_active_neighbors</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="n">ndenumerate</span><span class="p">(</span><span class="n">old</span><span class="p">))[</span><span class="mi">0</span><span class="p">]))</span>
+</td></tr></table><p>Hey, that's the same <code>exec()</code> we used
+to work around <code>conway-cubes.py</code> not being importable!
+(yup, I left that &quot;issue&quot; there for foreshadowing purposes)</p>
+<p>Unlike in the test file, we use an explicit globals dictionary,
+to avoid polluting the global namespace
+(everything that gets defined in the source code string is a <code>context</code> item).</p>
+<section class="admonition note">
+<div class="admonition-text">
+<p>TBD: no use exec with untrusted code</p>
+</div>
+</section>
+<p>You may also notice that we're embedding the representation of the directions list
+directly in the code, instead of calling <code>make_directions()</code>.</p>
+<p>Before we try it out, let's pull the dimension counting heuristic
+from <code>ndenumerate()</code> into a separate function:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">guess_dimensions</span><span class="p">(</span><span class="n">world</span><span class="p">):</span>
+    <span class="n">dimensions</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">while</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="n">dimensions</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">world</span> <span class="o">=</span> <span class="n">world</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">dimensions</span>
 
-    <span class="k">for</span> <span class="n">coords</span><span class="p">,</span> <span class="n">active</span> <span class="ow">in</span> <span class="n">ndenumerate</span><span class="p">(</span><span class="n">old</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">ndenumerate</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">dimensions</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">dimensions</span> <span class="o">=</span> <span class="n">dimensions</span> <span class="ow">or</span> <span class="n">guess_dimensions</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
+
+    <span class="c1"># ...</span>
+</code></pre></div>
+</td></tr></table><p>Using it leaves us with something that's slighly faster than our initial experiment:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>81
+82
+83
+84
+85
+86</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">simulate</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">new</span><span class="p">):</span>
+    <span class="n">dimensions</span> <span class="o">=</span> <span class="n">guess_dimensions</span><span class="p">(</span><span class="n">old</span><span class="p">)</span>
+    <span class="n">get_active_neighbors</span> <span class="o">=</span> <span class="n">make_get_active_neighbors</span><span class="p">(</span><span class="n">dimensions</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">coords</span><span class="p">,</span> <span class="n">active</span> <span class="ow">in</span> <span class="n">ndenumerate</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">dimensions</span><span class="p">):</span>
         <span class="c1"># ...</span>
 </code></pre></div>
 </td></tr></table><pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
      4096    0.090    0.000    0.090    0.000 &lt;string&gt;:3(get_active_neighbors)
 33946/8196    0.010    0.000    0.010    0.000 conway-cubes.py:62(ndenumerate)
 </code></pre>
-<p>This leaves with 90ms, which is even faster than our initial 95ms experiment.</p>
-<section class="admonition note">
-<div class="admonition-text">
-<p>TBD: no use exec with untrusted code</p>
-</div>
-</section>
-<h2 id="real-deal">real deal<span class="headerlink"> <a href="#real-deal" title="permalink">#</a></span></h2>
-<p>So, with out profiling <code>8 4 1</code>, we got a 91% improvement (11x) in get_active_neighbors run time.</p>
+<h2 id="the-real-world">The real world<span class="headerlink"> <a href="#the-real-world" title="permalink">#</a></span></h2>
+<p>So, with our profiling <code>test 8 4 1</code>,
+we got a 91% (~11x) improvement in <code>get_active_neighbors()</code> run time.</p>
 <p>Does this reflect in the real-world performance?</p>
-<pre class="code code-container"><code>$ python conway-cubes.py real 20 4 6
-after cycle #0 (0.01s): ...
-after cycle #1 (3.39s): ...
-after cycle #2 (3.43s): ...
-after cycle #3 (3.34s): ...
-after cycle #4 (3.34s): ...
-after cycle #5 (3.34s): ...
-after cycle #6 (3.35s): ...
-the result is 2276 (20.21s)
-
-</code></pre>
-<p>that's still an 86% improvement (7x).</p>
-<h2 id="bonus-pypy">bonus: pypy<span class="headerlink"> <a href="#bonus-pypy" title="permalink">#</a></span></h2>
-<p>4.2x with pypy on unoptimized script</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> pypy3 conway-cubes-deleteme.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> python conway-cubes.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
+<span class="go">after cycle #0 (0.01s): ...</span>
+<span class="go">after cycle #1 (3.39s): ...</span>
+<span class="go">after cycle #2 (3.43s): ...</span>
+<span class="go">after cycle #3 (3.34s): ...</span>
+<span class="go">after cycle #4 (3.34s): ...</span>
+<span class="go">after cycle #5 (3.34s): ...</span>
+<span class="go">after cycle #6 (3.35s): ...</span>
+<span class="go">the result is 2276 (20.21s)</span>
+</code></pre></div>
+<p>That's still an 86% (~7x) improvement!</p>
+<h2 id="bonus-pypy">Bonus: PyPy<span class="headerlink"> <a href="#bonus-pypy" title="permalink">#</a></span></h2>
+<p><a href="https://www.pypy.org/">PyPy</a> is an alternative Python implementation that's
+often faster than CPython (the standard implementation)
+due to its use of <a href="https://en.wikipedia.org/wiki/Just-in-time_compilation">just-in-time compilation</a>.</p>
+<p>Currently, it works mostly out of the box for Python code up to version 3.7
+(with the exception of some CPython extensions).</p>
+<p>First, let's see how it performs on our on the unoptimized script:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> pypy3 conway-cubes-prep-work.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
 <span class="go">after cycle #0 (0.02s): ...</span>
 <span class="go">after cycle #1 (6.43s): ...</span>
 <span class="go">after cycle #2 (5.53s): ...</span>
@@ -850,7 +934,10 @@ the result is 2276 (20.21s)
 <span class="go">after cycle #6 (5.46s): ...</span>
 <span class="go">the result is 2276 (33.82s)</span>
 </code></pre></div>
-<p>was it all for nothing, could have we used pypy from the start?
+<p>4.2x; not bad, for essentially zero work!
+(Funnily enough, their website says that
+<em>&quot;on average, PyPy is 4.2 times faster than CPython&quot;</em>.)</p>
+<p>So, was it all for nothing, could have we just used PyPy from the start?
 Yes and no, but mostly no:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> pypy3 conway-cubes.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
 <span class="go">after cycle #0 (0.02s): ...</span>
@@ -862,7 +949,9 @@ Yes and no, but mostly no:</p>
 <span class="go">after cycle #6 (0.33s): ...</span>
 <span class="go">the result is 2276 (2.21s)</span>
 </code></pre></div>
-<p>that's a 65x improvement! :D</p>
+<p>That's a 10x improvement over the same script run with CPython,
+4.2x over the unoptimized script with PyPy,
+and 65x over the unoptimized script with CPython!</p>
 <h2 id="conclusions">conclusions<span class="headerlink"> <a href="#conclusions" title="permalink">#</a></span></h2>
 <ul>
 <li>local maxima</li>
