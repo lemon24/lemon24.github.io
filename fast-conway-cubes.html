@@ -109,8 +109,9 @@ in 4D,
 a world of size 20 doesn't take only 1.25 times longer than a size 16 world,
 but 2.4 times!</p>
 <p>To get a better picture of why this is happening,
-let's count how many cells and and neighbors we need to look at every cycle
-(as a reminder, neighbors are all the cells in a size 3 &quot;square&quot; centered on the cell, except the cell itself):</p>
+let's count how many cells and and neighbors we need to look at every cycle;
+(as a reminder, neighbors are all the cells in a size 3 &quot;square&quot;
+centered on the cell, except the cell itself):</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">size</span> <span class="o">=</span> <span class="mi">16</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">dims</span> <span class="o">=</span> <span class="mi">2</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">size</span> <span class="o">**</span> <span class="n">dims</span><span class="p">,</span> <span class="n">size</span> <span class="o">**</span> <span class="n">dims</span> <span class="o">*</span> <span class="p">(</span><span class="mi">3</span> <span class="o">**</span> <span class="n">dims</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
@@ -140,10 +141,10 @@ since it is both easier to do (at least initially),
 and easier to translate to other Python problems.</p>
 <p>(If we were after speed at any cost,
 we'd probably both use better algorithms,
-and switch to a faster language).</p>
+and switch to a faster language.)</p>
 <h2 id="intro-to-profiling">Intro to profiling<span class="headerlink"> <a href="#intro-to-profiling" title="permalink">#</a></span></h2>
 <p>The Python standard library provides a <a href="https://docs.python.org/3/library/profile.html">profiler</a>
-which allow getting statistics for how often and how long
+which allows getting statistics for how often and how long
 various functions get executed.</p>
 <p>For us, the easiest way to use it is to pass a whole script, like this:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code>python3 -m cProfile <span class="o">[</span>scriptfile<span class="o">]</span> <span class="o">[</span>arg<span class="o">]</span> ...
@@ -305,10 +306,10 @@ which is consistent with our initial calculation.</p>
 and the rest in subfunctions:</p>
 <ul>
 <li>.4s in the <code>any(coord &lt; 0 ...)</code> check, .2s of which in the generator expression</li>
-<li>.15s in the <code>neighbor_coords</code> list comprehension at line 32</li>
+<li>.15s in the <code>neighbor_coords</code> list comprehension</li>
 <li>.06s in <code>make_directions()</code>, almost all of it in the list comprehension</li>
 </ul>
-<p>(Comprehension and generator expressions are treated as functions as well.)</p>
+<p>(Comprehensions and generator expressions are treated as functions as well.)</p>
 <h2 id="make-directions">make_directions()<span class="headerlink"> <a href="#make-directions" title="permalink">#</a></span></h2>
 <p>Let's start small.</p>
 <p><code>make_directions()</code> only takes 6% of the total time,
@@ -372,10 +373,7 @@ in 4D, we're doing it 80 times!</p>
 </td></tr></table><p>Which gives us a 57% improvement!</p>
 <pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
      4096    0.265    0.000    0.406    0.000 conway_cubes.py:30(get_active_neighbors)
-   327680    0.135    0.000    0.135    0.000 conway_cubes.py:38(&lt;listcomp&gt;)
-33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:57(ndenumerate)
-        1    0.001    0.001    0.006    0.006 {built-in method builtins.sum}
-     4097    0.001    0.000    0.006    0.000 conway_cubes.py:139(&lt;genexpr&gt;)
+      ...
      4096    0.003    0.000    0.005    0.000 {built-in method builtins.any}
     17656    0.003    0.000    0.003    0.000 conway_cubes.py:31(&lt;genexpr&gt;)
 </code></pre>
@@ -401,7 +399,6 @@ let's see if it works:</p>
 </td></tr></table><p>It's not much better:</p>
 <pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
      4096    0.376    0.000    0.382    0.000 conway_cubes.py:30(get_active_neighbors)
-33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:54(ndenumerate)
 </code></pre>
 <p>What if instead of using sum, which is generic to any iterable,
 we used a function that's made specifically for 2 numbers?</p>
@@ -414,7 +411,6 @@ we used a function that's made specifically for 2 numbers?</p>
 </td></tr></table><p>This fares slighly better, with a 26% improvement:</p>
 <pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
      4096    0.296    0.000    0.301    0.000 conway_cubes.py:33(get_active_neighbors)
-33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:57(ndenumerate)
 </code></pre>
 <p>We've now exhausted all the obvious things to improve;
 most of the time is spent in <code>get_active_neighbors</code>,
@@ -449,7 +445,6 @@ but we may be reaching a point where it's not worth it anymore.</p>
 </td></tr></table><p>Which gives us a 49% improvement!</p>
 <pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
      4096    0.202    0.000    0.207    0.000 conway_cubes.py:30(get_active_neighbors)
-33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:59(ndenumerate)
 </code></pre>
 <p>What if make everything non-generic, and get rid of intermediary variables?</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>30
@@ -485,8 +480,8 @@ but we may be reaching a point where it's not worth it anymore.</p>
     <span class="k">return</span> <span class="n">active_neighbors</span>
 </code></pre></div>
 </td></tr></table><p>That yields a 76% improvement!</p>
-<pre class="code code-container"><code>     4096    0.095    0.000    0.095    0.000 conway_cubes.py:30(get_active_neighbors)
-33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:48(ndenumerate)
+<pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     4096    0.095    0.000    0.095    0.000 conway_cubes.py:30(get_active_neighbors)
 </code></pre>
 <h2 id="going-multidimensional-again">Going multidimensional, again<span class="headerlink"> <a href="#going-multidimensional-again" title="permalink">#</a></span></h2>
 <p>At this point, we could be OK with part of the code not being generic anymore,
@@ -564,8 +559,8 @@ If only there was a way to do the same thing for a function.</p>
 </code></pre></div>
 </td></tr></table><p>We build the string with the source code of a function,
 and then use <a href="https://docs.python.org/3/library/functions.html#exec">exec</a> to execute it in private global context.
-(We're using an exlicit context to avoid default module globals
-– everything that gets defined in the source code string is a <code>context</code> item).</p>
+We're using an explicit context to avoid polluting module globals
+– everything that gets defined in the source code string is a <code>context</code> item.</p>
 <p>You may notice that we're embedding the representation of the directions list
 directly in the code, instead of calling <code>make_directions()</code>;
 I'm not sure this brings a great speed-up, but it can't hurt.</p>
@@ -621,7 +616,6 @@ from <code>ndenumerate()</code> into a separate function:</p>
 </td></tr></table><p>... which leaves us with something slighly faster than our initial experiment:</p>
 <pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
      4096    0.091    0.000    0.091    0.000 &lt;string&gt;:3(get_active_neighbors)
-33938/8194    0.010    0.000    0.010    0.000 conway_cubes.py:68(ndenumerate)
 </code></pre>
 <p><a href="/_file/fast-conway-cubes/99-end/conway_cubes.py">The final version of the script.</a></p>
 <h2 id="the-real-world">The real world<span class="headerlink"> <a href="#the-real-world" title="permalink">#</a></span></h2>
