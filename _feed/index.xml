@@ -2,13 +2,654 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity</title>
-  <updated>2021-01-23T18:30:00+00:00</updated>
+  <updated>2021-02-08T16:20:00+00:00</updated>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/fast-conway-cubes">
+    <id>https://death.andgravity.com/fast-conway-cubes</id>
+    <title>Optimizing Advent of Code 2020 day 17</title>
+    <updated>2021-02-08T16:20:00+00:00</updated>
+    <content type="html">&lt;p&gt;... in which we optimize
+&lt;a href="/conway-cubes"&gt;our Advent of Code 2020 day 17 solution&lt;/a&gt;,
+a Python implementation of multidimensional &lt;a href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life"&gt;Game of Life&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;We will focus on profiling and optimizing the existing code, in a way
+that helps you translate those skills to your regular, non-puzzle coding.&lt;/p&gt;
+&lt;p&gt;We'll start from &lt;a href="/_file/fast-conway-cubes/00-begin/conway_cubes.py"&gt;the script&lt;/a&gt; as we left it in the initial article,
+and check we didn't break anything using &lt;a href="/_file/fast-conway-cubes/00-begin/test_conway_cubes.py"&gt;the tests&lt;/a&gt; we already wrote.&lt;/p&gt;
+&lt;details&gt;
+&lt;summary&gt;Contents&lt;/summary&gt;
+&lt;section class="toc"&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#why-is-it-slow"&gt;Why is it slow?&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#intro-to-profiling"&gt;Intro to profiling&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#worst-offenders"&gt;Worst offenders&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#make-directions"&gt;make_directions()&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#any-coord-0"&gt;any(coord &lt; 0 ...)&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#neighbor-coords"&gt;neighbor_coords&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#going-multidimensional-again"&gt;Going multidimensional, again&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#the-real-world"&gt;The real world&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#bonus-pypy"&gt;Bonus: PyPy&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#conclusions"&gt;Conclusions&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;/details&gt;
+&lt;h2 id="why-is-it-slow"&gt;Why is it slow?&lt;span class="headerlink"&gt; &lt;a href="#why-is-it-slow" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Our solution is pretty &lt;a href="conway-cubes#simulation"&gt;naive&lt;/a&gt;:
+for each cell, count how many of the cell's neighbors are active,
+and change the cell state based on that;
+see &lt;a href="conway-cubes#the-problem"&gt;this&lt;/a&gt;
+for a detailed explanation of the rules.&lt;/p&gt;
+&lt;p&gt;As we add more dimensions, the run time increases by orders or magnitude;
+for a world of size 16, I get:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;2D: .02 seconds&lt;/li&gt;
+&lt;li&gt;3D: 1 second&lt;/li&gt;
+&lt;li&gt;4D: 1 minute&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The same happens when we increase the world size:
+in 4D,
+a world of size 20 doesn't take only 1.25 times longer than a size 16 world,
+but 2.4 times!&lt;/p&gt;
+&lt;p&gt;To get a better picture of why this is happening,
+let's count how many cells and and neighbors we need to look at every cycle
+(as a reminder, neighbors are all the cells in a size 3 &amp;quot;square&amp;quot; centered on the cell, except the cell itself):&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;16&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;dims&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt; &lt;span class="n"&gt;dims&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt; &lt;span class="n"&gt;dims&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt; &lt;span class="n"&gt;dims&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;(256, 2048)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;dims&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;3&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt; &lt;span class="n"&gt;dims&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt; &lt;span class="n"&gt;dims&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt; &lt;span class="n"&gt;dims&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;(4096, 106496)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;dims&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;4&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt; &lt;span class="n"&gt;dims&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt; &lt;span class="n"&gt;dims&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt; &lt;span class="n"&gt;dims&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;(65536, 5242880)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;20&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt; &lt;span class="n"&gt;dims&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt; &lt;span class="n"&gt;dims&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt; &lt;span class="n"&gt;dims&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;(160000, 12800000)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;That is indeed &lt;a href="https://en.wikipedia.org/wiki/Exponential_growth"&gt;exponential growth&lt;/a&gt; (the number of dimensions being the exponent).&lt;/p&gt;
+&lt;p&gt;As I mentioned before, there are &lt;a href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life#Algorithms"&gt;many optimizations&lt;/a&gt; to simulating Life.
+They usually involve one or more of:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;reducing the number of cells to look at&lt;/li&gt;
+&lt;li&gt;making neighbors faster to count&lt;/li&gt;
+&lt;li&gt;detecting parts of the board that repeat either in space or time,
+and reusing the previous results&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;We won't change our naive algorithm;
+instead, we'll try to make our existing Python code faster,
+since it is both easier to do (at least initially),
+and easier to translate to other Python problems.&lt;/p&gt;
+&lt;p&gt;(If we were after speed at any cost,
+we'd probably both use better algorithms,
+and switch to a faster language).&lt;/p&gt;
+&lt;h2 id="intro-to-profiling"&gt;Intro to profiling&lt;span class="headerlink"&gt; &lt;a href="#intro-to-profiling" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;The Python standard library provides a &lt;a href="https://docs.python.org/3/library/profile.html"&gt;profiler&lt;/a&gt;
+which allow getting statistics for how often and how long
+various functions get executed.&lt;/p&gt;
+&lt;p&gt;For us, the easiest way to use it is to pass a whole script, like this:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;python3 -m cProfile &lt;span class="o"&gt;[&lt;/span&gt;scriptfile&lt;span class="o"&gt;]&lt;/span&gt; &lt;span class="o"&gt;[&lt;/span&gt;arg&lt;span class="o"&gt;]&lt;/span&gt; ...
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;section class="admonition note"&gt;
+&lt;div class="admonition-text"&gt;
+&lt;p&gt;You can also profile specific bits of code;
+ see &lt;a href="https://docs.python.org/3/library/profile.html#profile.Profile"&gt;this&lt;/a&gt;
+ for details.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/section&gt;
+&lt;p&gt;Before profiling, we get a baseline run time for the &amp;quot;real&amp;quot; workload:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$&lt;/span&gt; python3 conway_cubes.py real &lt;span class="m"&gt;20&lt;/span&gt; &lt;span class="m"&gt;4&lt;/span&gt; &lt;span class="m"&gt;6&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #0 (0.01s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #1 (24.15s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #2 (23.45s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #3 (23.79s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #4 (24.31s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #5 (24.15s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #6 (24.07s): ...&lt;/span&gt;
+&lt;span class="go"&gt;the result is 2276 (143.94s)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;While working on the script,
+we'll simulate a smaller world for just one cycle,
+so we can iterate quickly.
+We get a baseline for that as well:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$&lt;/span&gt; python3 conway_cubes.py &lt;span class="nb"&gt;test&lt;/span&gt; &lt;span class="m"&gt;8&lt;/span&gt; &lt;span class="m"&gt;4&lt;/span&gt; &lt;span class="m"&gt;1&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #0 (0.00s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #1 (0.65s): ...&lt;/span&gt;
+&lt;span class="go"&gt;the result is 29 (0.65s)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Let's run it through the profiler:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$&lt;/span&gt; python3 -m cProfile -s cumulative conway_cubes.py &lt;span class="nb"&gt;test&lt;/span&gt; &lt;span class="m"&gt;8&lt;/span&gt; &lt;span class="m"&gt;4&lt;/span&gt; &lt;span class="m"&gt;1&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #0 (0.00s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #1 (1.01s): ...&lt;/span&gt;
+&lt;span class="go"&gt;the result is 29 (1.01s)&lt;/span&gt;
+
+&lt;span class="go"&gt;         2268874 function calls (2241818 primitive calls) in 1.020 seconds&lt;/span&gt;
+
+&lt;span class="go"&gt;   Ordered by: cumulative time&lt;/span&gt;
+
+&lt;span class="go"&gt;   ncalls  tottime  percall  cumtime  percall filename:lineno(function)&lt;/span&gt;
+&lt;span class="go"&gt;        1    0.000    0.000    1.020    1.020 {built-in method builtins.exec}&lt;/span&gt;
+&lt;span class="go"&gt;        1    0.000    0.000    1.020    1.020 conway_cubes.py:1(&amp;lt;module&amp;gt;)&lt;/span&gt;
+&lt;span class="go"&gt;        1    0.000    0.000    1.020    1.020 conway_cubes.py:162(main)&lt;/span&gt;
+&lt;span class="go"&gt;        1    0.000    0.000    1.020    1.020 conway_cubes.py:120(run)&lt;/span&gt;
+&lt;span class="go"&gt;        3    0.000    0.000    1.013    0.338 conway_cubes.py:104(simulate_forever)&lt;/span&gt;
+&lt;span class="go"&gt;        1    0.005    0.005    1.013    1.013 conway_cubes.py:74(simulate)&lt;/span&gt;
+&lt;span class="go"&gt;     4096    0.391    0.000    1.001    0.000 conway_cubes.py:28(get_active_neighbors)&lt;/span&gt;
+&lt;span class="go"&gt;   327680    0.216    0.000    0.396    0.000 {built-in method builtins.any}&lt;/span&gt;
+&lt;span class="go"&gt;  1557736    0.188    0.000    0.188    0.000 conway_cubes.py:37(&amp;lt;genexpr&amp;gt;)&lt;/span&gt;
+&lt;span class="go"&gt;   327680    0.143    0.000    0.143    0.000 conway_cubes.py:32(&amp;lt;listcomp&amp;gt;)&lt;/span&gt;
+&lt;span class="go"&gt;     4096    0.005    0.000    0.063    0.000 conway_cubes.py:23(make_directions)&lt;/span&gt;
+&lt;span class="go"&gt;     4096    0.058    0.000    0.058    0.000 conway_cubes.py:25(&amp;lt;listcomp&amp;gt;)&lt;/span&gt;
+&lt;span class="go"&gt;33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:56(ndenumerate)&lt;/span&gt;
+&lt;span class="go"&gt;        1    0.001    0.001    0.006    0.006 {built-in method builtins.sum}&lt;/span&gt;
+&lt;span class="go"&gt;     4097    0.001    0.000    0.006    0.000 conway_cubes.py:138(&amp;lt;genexpr&amp;gt;)&lt;/span&gt;
+&lt;span class="go"&gt;   1170/2    0.001    0.000    0.001    0.000 conway_cubes.py:89(make_world)&lt;/span&gt;
+&lt;span class="go"&gt;    146/2    0.000    0.000    0.001    0.000 conway_cubes.py:93(&amp;lt;listcomp&amp;gt;)&lt;/span&gt;
+&lt;span class="go"&gt;     4100    0.001    0.000    0.001    0.000 {built-in method builtins.len}&lt;/span&gt;
+&lt;span class="go"&gt;        6    0.000    0.000    0.000    0.000 {built-in method builtins.print}&lt;/span&gt;
+&lt;span class="go"&gt;        1    0.000    0.000    0.000    0.000 conway_cubes.py:8(parse_input)&lt;/span&gt;
+&lt;span class="go"&gt;        1    0.000    0.000    0.000    0.000 conway_cubes.py:96(copy_centered_2d)&lt;/span&gt;
+&lt;span class="go"&gt;        1    0.000    0.000    0.000    0.000 conway_cubes.py:9(&amp;lt;listcomp&amp;gt;)&lt;/span&gt;
+&lt;span class="go"&gt;       10    0.000    0.000    0.000    0.000 {built-in method builtins.isinstance}&lt;/span&gt;
+&lt;span class="go"&gt;        5    0.000    0.000    0.000    0.000 {built-in method time.perf_counter}&lt;/span&gt;
+&lt;span class="go"&gt;        3    0.000    0.000    0.000    0.000 conway_cubes.py:10(&amp;lt;listcomp&amp;gt;)&lt;/span&gt;
+&lt;span class="go"&gt;        1    0.000    0.000    0.000    0.000 conway_cubes.py:6(&amp;lt;dictcomp&amp;gt;)&lt;/span&gt;
+&lt;span class="go"&gt;        1    0.000    0.000    0.000    0.000 {method &amp;#39;splitlines&amp;#39; of &amp;#39;str&amp;#39; objects}&lt;/span&gt;
+&lt;span class="go"&gt;        1    0.000    0.000    0.000    0.000 {method &amp;#39;disable&amp;#39; of &amp;#39;_lsprof.Profiler&amp;#39; objects}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;After the script finishes,
+the profiler prints a a table with the number of calls
+various run times for each function.
+We're interested in two columns:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;cumtime&lt;/code&gt;, &amp;quot;the cumulative time spent in this and all subfunctions&amp;quot;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;tottime&lt;/code&gt;, &amp;quot;the total time spent in the given function&amp;quot; (excluding sub-functions)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;By default, the results are sorted by function name, which isn't very useful;
+we use use the &lt;code&gt;-s&lt;/code&gt; option to sort by cumulative time.&lt;/p&gt;
+&lt;p&gt;Since the output is quite long, from now on
+I'll just show the relevant rows in the middle of the table.&lt;/p&gt;
+&lt;p&gt;You may notice the run time increased;
+that's because profiling adds some overhead.
+We are using the &lt;code&gt;cProfile&lt;/code&gt; module, a C implementation of the profiler;
+if you try the pure-Python version, &lt;code&gt;profile&lt;/code&gt;,
+it'll take even more, around 25x on my machine.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;div class="admonition-text"&gt;
+&lt;p&gt;If you're following along, you might find it useful
+ to re-run the command automatically every time you save the file.&lt;/p&gt;
+&lt;p&gt;I used &lt;a href="https://eradman.com/entrproject/"&gt;entr&lt;/a&gt; to do it:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nb"&gt;echo&lt;/span&gt; conway_cubes.py &lt;span class="p"&gt;|&lt;/span&gt; entr -rcs &lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;
+&lt;span class="s2"&gt;python3 -m cProfile -s cumulative conway_cubes.py test 8 4 1 \&lt;/span&gt;
+&lt;span class="s2"&gt;| grep -A20 ncalls&lt;/span&gt;
+&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/div&gt;
+&lt;/section&gt;
+&lt;h2 id="worst-offenders"&gt;Worst offenders&lt;span class="headerlink"&gt; &lt;a href="#worst-offenders" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Looking at the data, we see that almost the whole 1 second run time
+is spent in &lt;code&gt;get_active_neighbors()&lt;/code&gt; and subfunctions,
+which is consistent with our initial calculation.&lt;/p&gt;
+&lt;p&gt;Let's see it in full:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;get_active_neighbors&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;world&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;active&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;active_neighbors&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;
+    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;offsets&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;make_directions&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;)):&lt;/span&gt;
+
+        &lt;span class="n"&gt;neighbor_coords&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;
+            &lt;span class="n"&gt;coord&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="n"&gt;offset&lt;/span&gt;
+            &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;coord&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;offset&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="nb"&gt;zip&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;offsets&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="p"&gt;]&lt;/span&gt;
+
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;any&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;coord&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;coord&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;neighbor_coords&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+            &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;active&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+                &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;RuntimeError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;active on edge: &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+            &lt;span class="k"&gt;continue&lt;/span&gt;
+
+        &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="n"&gt;neighbor&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;world&lt;/span&gt;
+            &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;coord&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;neighbor_coords&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+                &lt;span class="n"&gt;neighbor&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;neighbor&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;coord&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+        &lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="ne"&gt;IndexError&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;active&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+                &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;RuntimeError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;active on edge: &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+            &lt;span class="k"&gt;continue&lt;/span&gt;
+
+        &lt;span class="n"&gt;active_neighbors&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="n"&gt;neighbor&lt;/span&gt;
+
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;active_neighbors&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;p&gt;Of the total time, about .4s are spent in the function itself (&lt;code&gt;tottime&lt;/code&gt;),
+and the rest in subfunctions:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;.4s in the &lt;code&gt;any(coord &amp;lt; 0 ...)&lt;/code&gt; check, .2s of which in the generator expression&lt;/li&gt;
+&lt;li&gt;.15s in the &lt;code&gt;neighbor_coords&lt;/code&gt; list comprehension at line 32&lt;/li&gt;
+&lt;li&gt;.06s in &lt;code&gt;make_directions()&lt;/code&gt;, almost all of it in the list comprehension&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;(Comprehension and generator expressions are treated as functions as well.)&lt;/p&gt;
+&lt;h2 id="make-directions"&gt;make_directions()&lt;span class="headerlink"&gt; &lt;a href="#make-directions" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Let's start small.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;make_directions()&lt;/code&gt; only takes 6% of the total time,
+but should be quite easy to speed up –
+it is a pure function (the result only depends on the arguments),
+and has a single argument with only a handful of values (2, 3, 4).&lt;/p&gt;
+&lt;p&gt;We could pre-compute the results for each dimension,
+save them in a global dict, and reuse them from there.&lt;/p&gt;
+&lt;p&gt;Thankfully, the &lt;a href="https://docs.python.org/3/library/functools.html"&gt;functools.lru_cache&lt;/a&gt; decorator from the standard library
+allows us to do just that in a transparent way:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;2&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;functools&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;lru_cache&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;24
+25
+26&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@lru_cache&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;make_directions&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;dimensions&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="c1"&gt;# ...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;p&gt;Now, &lt;code&gt;make_directions()&lt;/code&gt; will save the return value
+for a specific argument on the first call,
+and subsequent calls with the same argument
+will return the already computed value.&lt;/p&gt;
+&lt;p&gt;Here's the result:&lt;/p&gt;
+&lt;pre class="code code-container"&gt;&lt;code&gt;   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     4096    0.390    0.000    0.940    0.000 conway_cubes.py:30(get_active_neighbors)
+      ...
+        1    0.000    0.000    0.000    0.000 conway_cubes.py:24(make_directions)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Not bad, for this little work.&lt;/p&gt;
+&lt;h2 id="any-coord-0"&gt;any(coord &amp;lt; 0 ...)&lt;span class="headerlink"&gt; &lt;a href="#any-coord-0" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Emboldened by this momentous achievement,
+we'll go straight to the &lt;code&gt;any(coord &amp;lt; 0 ...)&lt;/code&gt; check.&lt;/p&gt;
+&lt;p&gt;There's more than one way to approach it,
+but before exploring any of them,
+let's look a bit harder at &lt;code&gt;get_active_neighbors()&lt;/code&gt;:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;for every neighbor, we're checking if any of its coordinates is &amp;lt; 0;&lt;/li&gt;
+&lt;li&gt;but by definition, the lowest a neighbor can be is -1 from the cell;&lt;/li&gt;
+&lt;li&gt;so that's equivalent to checking that the cell coordinate is &amp;lt; 1;&lt;/li&gt;
+&lt;li&gt;since the cell isn't moving, we can do it just once, outside the neighbor loop.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;It might not seem like a lot,
+but remember the neighbor count increases exponentially:
+in 2D, we're doing the check 8 times;
+in 4D, we're doing it 80 times!&lt;/p&gt;
+&lt;p&gt;So:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;30
+31
+32
+33
+34
+35
+36&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;get_active_neighbors&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;world&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;active&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;any&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;coord&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;coord&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;active&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;RuntimeError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;active on edge: &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="n"&gt;active_neighbors&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;
+    &lt;span class="c1"&gt;# ...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;p&gt;Which gives us a 57% improvement!&lt;/p&gt;
+&lt;pre class="code code-container"&gt;&lt;code&gt;   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     4096    0.265    0.000    0.406    0.000 conway_cubes.py:30(get_active_neighbors)
+   327680    0.135    0.000    0.135    0.000 conway_cubes.py:38(&amp;lt;listcomp&amp;gt;)
+33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:57(ndenumerate)
+        1    0.001    0.001    0.006    0.006 {built-in method builtins.sum}
+     4097    0.001    0.000    0.006    0.000 conway_cubes.py:139(&amp;lt;genexpr&amp;gt;)
+     4096    0.003    0.000    0.005    0.000 {built-in method builtins.any}
+    17656    0.003    0.000    0.003    0.000 conway_cubes.py:31(&amp;lt;genexpr&amp;gt;)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;There's a slight issue, though:
+in the original version, if the check failed, we'd skip that neighbor
+(assume it's not active); now we're not doing that anymore.&lt;/p&gt;
+&lt;p&gt;This means that for a cell on the top/left/... edge of the world (index 0),
+we will be getting the state for its neighbors at the far end (index -1).&lt;/p&gt;
+&lt;p&gt;As long as the neighbors on the far end are inactive, it will still work;
+thankfully, we are checking that as well –
+that's what the &lt;code&gt;if active&lt;/code&gt; in &lt;code&gt;except IndexError&lt;/code&gt; does.&lt;/p&gt;
+&lt;p&gt;But now we've made a bit of logic dependent on another that's quite far from it.
+Instead of just reasoning through it every time we change something,
+we rely on &lt;a href="conway-cubes#bonus-more-tests"&gt;the edge case tests&lt;/a&gt;
+to verify it for us (nothing to do, since we've already written them :).&lt;/p&gt;
+&lt;p&gt;&lt;a href="/_file/fast-conway-cubes/10-any-coord-0/conway_cubes.py"&gt;The script up to this point.&lt;/a&gt;&lt;/p&gt;
+&lt;h2 id="neighbor-coords"&gt;neighbor_coords&lt;span class="headerlink"&gt; &lt;a href="#neighbor-coords" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Next up is the &lt;code&gt;neighbor_coords&lt;/code&gt; list comprehension.&lt;/p&gt;
+&lt;p&gt;Using functions written in C may remove some of the comprehension overhead;
+let's see if it works:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;38&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;        &lt;span class="n"&gt;neighbor_coords&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;sum&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;zip&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;offsets&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;p&gt;It's not much better:&lt;/p&gt;
+&lt;pre class="code code-container"&gt;&lt;code&gt;   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     4096    0.376    0.000    0.382    0.000 conway_cubes.py:30(get_active_neighbors)
+33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:54(ndenumerate)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;What if instead of using sum, which is generic to any iterable,
+we used a function that's made specifically for 2 numbers?&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;30
+31&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;operator&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;add&lt;/span&gt;
+&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;itertools&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;starmap&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;41&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;        &lt;span class="n"&gt;neighbor_coords&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;starmap&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;add&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;zip&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;offsets&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;p&gt;This fares slighly better, with a 26% improvement:&lt;/p&gt;
+&lt;pre class="code code-container"&gt;&lt;code&gt;   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     4096    0.296    0.000    0.301    0.000 conway_cubes.py:33(get_active_neighbors)
+33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:57(ndenumerate)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;We've now exhausted all the obvious things to improve;
+most of the time is spent in &lt;code&gt;get_active_neighbors&lt;/code&gt;,
+not its subfunctions.&lt;/p&gt;
+&lt;p&gt;You may remember the &lt;code&gt;any()&lt;/code&gt; call spent almost as much time
+in the function itself (&lt;code&gt;tottime&lt;/code&gt;) as in the generator expression;
+indeed, calling &lt;em&gt;any&lt;/em&gt; function seems to have significant overhead:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$&lt;/span&gt; python3 -m timeit -s &lt;span class="s1"&gt;&amp;#39;from operator import add&amp;#39;&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;add(1, 2)&amp;#39;&lt;/span&gt;
+&lt;span class="go"&gt;5000000 loops, best of 5: 49.3 nsec per loop&lt;/span&gt;
+&lt;span class="gp"&gt;$&lt;/span&gt; python3 -m timeit &lt;span class="s1"&gt;&amp;#39;1 + 2&amp;#39;&lt;/span&gt;
+&lt;span class="go"&gt;50000000 loops, best of 5: 7.98 nsec per loop&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Let's try something different.&lt;/p&gt;
+&lt;p&gt;In the &lt;code&gt;for offsets ...&lt;/code&gt; loop, we're calling 3 functions to add 4 pairs of numbers.
+What if we didn't?
+Having more general code did help with testing,
+but we may be reaching a point where it's not worth it anymore.&lt;/p&gt;
+&lt;p&gt;We can validate it with a quick experiment
+(this will break non-4D temporarily):&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;38
+39
+40
+41
+42
+43&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;        &lt;span class="n"&gt;neighbor_coords&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;
+            &lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="n"&gt;offsets&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;
+            &lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="n"&gt;offsets&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;
+            &lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="n"&gt;offsets&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;
+            &lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="n"&gt;offsets&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;
+        &lt;span class="p"&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;p&gt;Which gives us a 49% improvement!&lt;/p&gt;
+&lt;pre class="code code-container"&gt;&lt;code&gt;   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     4096    0.202    0.000    0.207    0.000 conway_cubes.py:30(get_active_neighbors)
+33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:59(ndenumerate)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;What if make everything non-generic, and get rid of intermediary variables?&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;get_active_neighbors&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;world&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;active&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;c0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;c1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;c2&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;c3&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;coords&lt;/span&gt;
+
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;c0&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt; &lt;span class="ow"&gt;or&lt;/span&gt; &lt;span class="n"&gt;c1&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt; &lt;span class="ow"&gt;or&lt;/span&gt; &lt;span class="n"&gt;c2&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt; &lt;span class="ow"&gt;or&lt;/span&gt; &lt;span class="n"&gt;c3&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;active&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;RuntimeError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;active on edge: &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="n"&gt;active_neighbors&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;
+    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;o0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;o1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;o2&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;o3&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;make_directions&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;)):&lt;/span&gt;
+        &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="n"&gt;active_neighbors&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="n"&gt;world&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;o0&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="n"&gt;c0&lt;/span&gt;&lt;span class="p"&gt;][&lt;/span&gt;&lt;span class="n"&gt;o1&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="n"&gt;c1&lt;/span&gt;&lt;span class="p"&gt;][&lt;/span&gt;&lt;span class="n"&gt;o2&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="n"&gt;c2&lt;/span&gt;&lt;span class="p"&gt;][&lt;/span&gt;&lt;span class="n"&gt;o3&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="n"&gt;c3&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+        &lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="ne"&gt;IndexError&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;active&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+                &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;RuntimeError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;active on edge: &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;active_neighbors&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;p&gt;That yields a 76% improvement!&lt;/p&gt;
+&lt;pre class="code code-container"&gt;&lt;code&gt;     4096    0.095    0.000    0.095    0.000 conway_cubes.py:30(get_active_neighbors)
+33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:48(ndenumerate)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2 id="going-multidimensional-again"&gt;Going multidimensional, again&lt;span class="headerlink"&gt; &lt;a href="#going-multidimensional-again" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;At this point, we could be OK with part of the code not being generic anymore,
+implement one &lt;code&gt;get_active_neighbors()&lt;/code&gt; per dimension, and use them like this:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;GET_ACTIVE_NEIGHBORS&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;get_active_neighbors_2d&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;get_active_neighbors_3d&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="mi"&gt;4&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;get_active_neighbors_4d&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;get_active_neighbors&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;world&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;active&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;GET_ACTIVE_NEIGHBORS&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;)](&lt;/span&gt;&lt;span class="n"&gt;world&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;active&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;This reminds me of the pattern initially proposed for &lt;code&gt;make_directions()&lt;/code&gt;...
+If only there was a way to do the same thing for a function.&lt;/p&gt;
+&lt;p&gt;Well, this is Python, we &lt;em&gt;can&lt;/em&gt; generate code at runtime.
+&lt;em&gt;Let's do something stupid:&lt;/em&gt;&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;3&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;textwrap&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;dedent&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;make_get_active_neighbors_str&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;dimensions&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;ids&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;range&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;dimensions&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;dedent&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;
+
+&lt;span class="s2"&gt;        def get_active_neighbors(world, active, coords):&lt;/span&gt;
+&lt;span class="s2"&gt;            &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;, &amp;#39;&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;c&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;ids&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; = coords&lt;/span&gt;
+
+&lt;span class="s2"&gt;            if &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39; or &amp;#39;&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;c&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s1"&gt; &amp;lt; 1&amp;#39;&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;ids&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;:&lt;/span&gt;
+&lt;span class="s2"&gt;                if active:&lt;/span&gt;
+&lt;span class="s2"&gt;                    raise RuntimeError(f&amp;quot;active on edge: &lt;/span&gt;&lt;span class="se"&gt;{{&lt;/span&gt;&lt;span class="s2"&gt;coords&lt;/span&gt;&lt;span class="se"&gt;}}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;)&lt;/span&gt;
+
+&lt;span class="s2"&gt;            active_neighbors = 0&lt;/span&gt;
+&lt;span class="s2"&gt;            for &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;, &amp;#39;&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;o&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;ids&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; in &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;make_directions&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;dimensions&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;:&lt;/span&gt;
+&lt;span class="s2"&gt;                try:&lt;/span&gt;
+&lt;span class="s2"&gt;                    active_neighbors += world[&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;][&amp;#39;&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;o&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s1"&gt; + c&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;ids&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;]&lt;/span&gt;
+&lt;span class="s2"&gt;                except IndexError:&lt;/span&gt;
+&lt;span class="s2"&gt;                    if active:&lt;/span&gt;
+&lt;span class="s2"&gt;                        raise RuntimeError(f&amp;quot;active on edge: &lt;/span&gt;&lt;span class="se"&gt;{{&lt;/span&gt;&lt;span class="s2"&gt;coords&lt;/span&gt;&lt;span class="se"&gt;}}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;)&lt;/span&gt;
+
+&lt;span class="s2"&gt;            return active_neighbors&lt;/span&gt;
+
+&lt;span class="s2"&gt;    &amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="nd"&gt;@lru_cache&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;make_get_active_neighbors&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;dimensions&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;context&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{}&lt;/span&gt;
+    &lt;span class="n"&gt;exec&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;make_get_active_neighbors_str&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;dimensions&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;context&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;context&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;get_active_neighbors&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;p&gt;We build the string with the source code of a function,
+and then use &lt;a href="https://docs.python.org/3/library/functions.html#exec"&gt;exec&lt;/a&gt; to execute it in private global context.
+(We're using an exlicit context to avoid default module globals
+– everything that gets defined in the source code string is a &lt;code&gt;context&lt;/code&gt; item).&lt;/p&gt;
+&lt;p&gt;You may notice that we're embedding the representation of the directions list
+directly in the code, instead of calling &lt;code&gt;make_directions()&lt;/code&gt;;
+I'm not sure this brings a great speed-up, but it can't hurt.&lt;/p&gt;
+&lt;section class="admonition attention"&gt;
+&lt;div class="admonition-text"&gt;
+&lt;p&gt;Never use &lt;a href="https://docs.python.org/3/library/functions.html#exec"&gt;exec&lt;/a&gt;/eval with untrusted code,
+ unless you want to get hacked;
+ &lt;a href="https://nedbatchelder.com/blog/201206/eval_really_is_dangerous.html"&gt;details&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Security issues aside, it makes code way harder to understand,
+ and breaks a lot of conventions about where classes and functions come from;
+ &lt;a href="https://lucumr.pocoo.org/2011/2/1/exec-in-python/"&gt;more details&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;We're doing it here for ... didactic purposes.
+ And speed. Mostly speed.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/section&gt;
+&lt;p&gt;Before we try it out, we need to pull the dimension counting heuristic
+from &lt;code&gt;ndenumerate()&lt;/code&gt; into a separate function:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;guess_dimensions&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;world&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;dimensions&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;
+    &lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="nb"&gt;isinstance&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;world&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="n"&gt;dimensions&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;
+        &lt;span class="n"&gt;world&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;world&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;dimensions&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;ndenumerate&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;world&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;dimensions&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;dimensions&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;dimensions&lt;/span&gt; &lt;span class="ow"&gt;or&lt;/span&gt; &lt;span class="n"&gt;guess_dimensions&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;world&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="c1"&gt;# ...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;p&gt;... so we can also use it in &lt;code&gt;simulate()&lt;/code&gt;:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;81
+82
+83
+84
+85
+86&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;simulate&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;old&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;dimensions&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;guess_dimensions&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;old&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;get_active_neighbors&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;make_get_active_neighbors&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;dimensions&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;coords&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;active&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;ndenumerate&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;old&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;dimensions&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="c1"&gt;# ...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;p&gt;... which leaves us with something slighly faster than our initial experiment:&lt;/p&gt;
+&lt;pre class="code code-container"&gt;&lt;code&gt;   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     4096    0.091    0.000    0.091    0.000 &amp;lt;string&amp;gt;:3(get_active_neighbors)
+33938/8194    0.010    0.000    0.010    0.000 conway_cubes.py:68(ndenumerate)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;a href="/_file/fast-conway-cubes/99-end/conway_cubes.py"&gt;The final version of the script.&lt;/a&gt;&lt;/p&gt;
+&lt;h2 id="the-real-world"&gt;The real world&lt;span class="headerlink"&gt; &lt;a href="#the-real-world" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;So, with our &lt;code&gt;test 8 4 1&lt;/code&gt; profiling parameters,
+we got a 91% (~11x) improvement in &lt;code&gt;get_active_neighbors()&lt;/code&gt; cumulative time.&lt;/p&gt;
+&lt;p&gt;Does this reflect in the real-world performance?&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$&lt;/span&gt; python3 conway_cubes.py real &lt;span class="m"&gt;20&lt;/span&gt; &lt;span class="m"&gt;4&lt;/span&gt; &lt;span class="m"&gt;6&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #0 (0.01s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #1 (3.39s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #2 (3.43s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #3 (3.34s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #4 (3.34s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #5 (3.34s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #6 (3.35s): ...&lt;/span&gt;
+&lt;span class="go"&gt;the result is 2276 (20.21s)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Almost. That's still an 86% (~7x) improvement.&lt;/p&gt;
+&lt;h2 id="bonus-pypy"&gt;Bonus: PyPy&lt;span class="headerlink"&gt; &lt;a href="#bonus-pypy" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;a href="https://www.pypy.org/"&gt;PyPy&lt;/a&gt; is an alternative Python implementation that's
+often faster than CPython (the standard implementation)
+due to its use of &lt;a href="https://en.wikipedia.org/wiki/Just-in-time_compilation"&gt;just-in-time compilation&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Currently, it works mostly out of the box for Python code up to version 3.7
+(with the exception of some CPython extensions).&lt;/p&gt;
+&lt;p&gt;First, let's see how it performs on the unoptimized script:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$&lt;/span&gt; pypy3 conway_cubes.py real &lt;span class="m"&gt;20&lt;/span&gt; &lt;span class="m"&gt;4&lt;/span&gt; &lt;span class="m"&gt;6&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #0 (0.02s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #1 (6.43s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #2 (5.53s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #3 (5.47s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #4 (5.45s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #5 (5.47s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #6 (5.46s): ...&lt;/span&gt;
+&lt;span class="go"&gt;the result is 2276 (33.82s)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;4.2x; not bad, for essentially zero work!
+Funnily enough, their website says that
+&amp;quot;on average, PyPy is 4.2 times faster than CPython&amp;quot;.&lt;/p&gt;
+&lt;p&gt;So, was it all for nothing, could have we just used PyPy from the start?
+Yes and no, but mostly no:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$&lt;/span&gt; pypy3 conway_cubes.py real &lt;span class="m"&gt;20&lt;/span&gt; &lt;span class="m"&gt;4&lt;/span&gt; &lt;span class="m"&gt;6&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #0 (0.02s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #1 (0.52s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #2 (0.33s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #3 (0.33s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #4 (0.33s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #5 (0.34s): ...&lt;/span&gt;
+&lt;span class="go"&gt;after cycle #6 (0.33s): ...&lt;/span&gt;
+&lt;span class="go"&gt;the result is 2276 (2.21s)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;That is:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;a 10x improvement over the same script run with CPython,&lt;/li&gt;
+&lt;li&gt;4.2x over the unoptimized script with PyPy, and&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;65x&lt;/strong&gt; over the unoptimized script with CPython!&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="conclusions"&gt;Conclusions&lt;span class="headerlink"&gt; &lt;a href="#conclusions" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;strong&gt;&lt;a href="https://wiki.c2.com/?ProfileBeforeOptimizing"&gt;Profile before optimizing&lt;/a&gt;.&lt;/strong&gt;
+Most often, your intuition about where the code is slow is wrong.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Many small optimizations add up.&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Sometimes, a different algorithm is better than many small optimizations.&lt;/strong&gt;
+At some point, there will be no other small optimization left.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Optimizations have costs.&lt;/strong&gt;
+Usually, they make code harder to understand.
+More changes increases the likelihood of bugs.
+More changes on harder to understand code even more so.
+Tests help you know you're not breaking anything.
+Profiling helps minimize the amount of code you change.&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;div class="admonition-text"&gt;
+&lt;p&gt;&lt;a href="https://docs.python.org/3/faq/programming.html#my-program-is-too-slow-how-do-i-speed-it-up"&gt;My program is too slow. How do I speed it up?&lt;/a&gt;
+ from the Python Programming FAQ has more, better advice
+ on the points above.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/section&gt;
+&lt;p&gt;&lt;strong&gt;&lt;a href="https://www.pypy.org/"&gt;PyPy&lt;/a&gt; is amazing&lt;/strong&gt;, give it a try if you can.&lt;/p&gt;
+&lt;p&gt;Function calls are slow in Python;
+that only matters if you're calling them millions of times.&lt;/p&gt;
+&lt;p&gt;You can do cool stuff with Python code generation;
+most of the time, &lt;em&gt;it's not worth it&lt;/em&gt;.&lt;/p&gt;
+</content>
+    <link href="https://death.andgravity.com/fast-conway-cubes" rel="alternate"/>
+  </entry>
   <entry xml:base="https://death.andgravity.com/conway-cubes">
     <id>https://death.andgravity.com/conway-cubes</id>
     <title>Solving Advent of Code 2020 day 17 by not solving it</title>
-    <updated>2021-01-23T18:30:00+00:00</updated>
+    <updated>2021-02-08T16:00:00+00:00</updated>
     <content type="html">&lt;p&gt;... in which we take a look at &lt;a href="https://adventofcode.com/2020/day/17"&gt;the day 17 problem from
 Advent of Code 2020&lt;/a&gt;, Conway Cubes.
 We will end up solving it &lt;em&gt;eventually&lt;/em&gt;,
@@ -437,7 +1078,7 @@ we'll split the script into functions.&lt;/p&gt;
 &lt;p&gt;Throughout these changes, our test suite should keep passing.&lt;/p&gt;
 &lt;p&gt;While working on the script, I used &lt;a href="https://eradman.com/entrproject/"&gt;entr&lt;/a&gt; to re-run it
  automatically on every save:&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nb"&gt;echo&lt;/span&gt; conway_cubes.py &lt;span class="p"&gt;|&lt;/span&gt; entr -rc python conway_cubes.py
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nb"&gt;echo&lt;/span&gt; conway_cubes.py &lt;span class="p"&gt;|&lt;/span&gt; entr -rc python3 conway_cubes.py
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;Your editor may have have a &amp;quot;save and run&amp;quot; function;
  if it doesn't, &lt;em&gt;entr&lt;/em&gt; is a nifty editor-independent way
@@ -1131,7 +1772,7 @@ The 4D one takes a while; we use &lt;code&gt;-k&lt;/code&gt; to skip it:&lt;/p&g
 &lt;span class="go"&gt;3 passed, 1 deselected in 1.14s&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;The script is invoked like this:&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$&lt;/span&gt; python conway_cubes.py real &lt;span class="m"&gt;20&lt;/span&gt; &lt;span class="m"&gt;4&lt;/span&gt; &lt;span class="m"&gt;6&lt;/span&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$&lt;/span&gt; python3 conway_cubes.py real &lt;span class="m"&gt;20&lt;/span&gt; &lt;span class="m"&gt;4&lt;/span&gt; &lt;span class="m"&gt;6&lt;/span&gt;
 &lt;span class="go"&gt;after cycle #0 (0.01s): ...&lt;/span&gt;
 &lt;span class="go"&gt;after cycle #1 (24.15s): ...&lt;/span&gt;
 &lt;span class="go"&gt;after cycle #2 (23.45s): ...&lt;/span&gt;

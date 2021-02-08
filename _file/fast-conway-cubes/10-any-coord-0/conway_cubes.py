@@ -1,4 +1,5 @@
 from itertools import product
+from functools import lru_cache
 import time
 
 
@@ -19,21 +20,18 @@ def format_2d(plane):
         for line in plane
     )
 
-TEST_INPUT = """\
-.#.
-..#
-###
-"""
 
-assert format_2d(parse_input(TEST_INPUT)) == TEST_INPUT
-
-
+@lru_cache()
 def make_directions(dimensions):
     ts = product((-1, 0, 1), repeat=dimensions)
     return [t for t in ts if t != (0,) * dimensions]
 
 
 def get_active_neighbors(world, active, coords):
+    if any(coord < 1 for coord in coords):
+        if active:
+            raise RuntimeError(f"active on edge: {coords}")
+
     active_neighbors = 0
     for offsets in make_directions(len(coords)):
 
@@ -41,11 +39,6 @@ def get_active_neighbors(world, active, coords):
             coord + offset
             for coord, offset in zip(coords, offsets)
         ]
-
-        if any(coord < 0 for coord in neighbor_coords):
-            if active:
-                raise RuntimeError(f"active on edge: {coords}")
-            continue
 
         try:
             neighbor = world
@@ -125,12 +118,12 @@ def simulate_forever(shape, input):
         yield old
 
 
-def run(size, dimensions, input, format_world=None):
+def run(size, dimensions, input, format_world=None, cycles=6):
     worlds = simulate_forever((size,) * dimensions, input)
 
     total_time = 0
     start = time.perf_counter()
-    for cycle, world in zip(range(6 + 1), worlds):
+    for cycle, world in zip(range(cycles + 1), worlds):
         end = time.perf_counter()
 
         print(f"after cycle #{cycle} ({end - start :.2f}s): ", end='')
@@ -150,22 +143,11 @@ def run(size, dimensions, input, format_world=None):
     return world, active_cubes
 
 
-world, active_cubes = run(8, 2, parse_input(TEST_INPUT), format_world=format_2d)
-
-assert active_cubes == 5
-assert world == parse_input("""\
-........
-........
-........
-........
-.....#..
-...#.#..
-....##..
-........
-""")
-
-_, active_cubes = run(16, 3, parse_input(TEST_INPUT))
-assert active_cubes == 112
+TEST_INPUT = """\
+.#.
+..#
+###
+"""
 
 INPUT = """\
 .##...#.
@@ -178,9 +160,17 @@ INPUT = """\
 ..#####.
 """
 
-_, active_cubes = run(20, 3, parse_input(INPUT))
+def main(args):
+    input = {'test': TEST_INPUT, 'real': INPUT}[args[0]]
+    size, dimensions, cycles = map(int, args[1:4])
+    run(
+        size,
+        dimensions,
+        parse_input(input),
+        format_world=format_2d if dimensions == 2 else None,
+        cycles=cycles,
+    )
 
-_, active_cubes = run(16, 4, parse_input(TEST_INPUT))
-assert active_cubes == 848
-
-_, active_cubes = run(20, 4, parse_input(INPUT))
+if __name__ == '__main__':
+    import sys
+    main(sys.argv[1:])

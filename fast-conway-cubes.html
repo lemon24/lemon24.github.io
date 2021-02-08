@@ -12,7 +12,7 @@
 
 
 
-<title>conway-cubes-perf - death and gravity</title>
+<title>Optimizing Advent of Code 2020 day 17 - death and gravity</title>
 
 
 <script>
@@ -53,9 +53,10 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1>conway-cubes-perf</h1>
+<h1>Optimizing Advent of Code 2020 day 17</h1>
 
 <p class="text-gray"><small>
+2021-02-08
 
 
 </small></p>
@@ -66,19 +67,20 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>... in which we optimize <a href="/conway-cubes">our Advent of Code 2020 day 17 solution</a>,
-a multidimensional implementation of <a href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life">Game of Life</a>,
-using nothing but pure Python and the stdlib <a href="https://docs.python.org/3/library/profile.html">profile</a> module.</p>
-<p>TODO: mention optimizations aren't to the algorithm, but the Python code</p>
-<p>We'll start from the last version of the solution;
-you can download it <a href="/_file/conway-cubes-perf/conway-cubes-4d.py">here</a>.</p>
+<p>... in which we optimize
+<a href="/conway-cubes">our Advent of Code 2020 day 17 solution</a>,
+a Python implementation of multidimensional <a href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life">Game of Life</a>.</p>
+<p>We will focus on profiling and optimizing the existing code, in a way
+that helps you translate those skills to your regular, non-puzzle coding.</p>
+<p>We'll start from <a href="/_file/fast-conway-cubes/00-begin/conway_cubes.py">the script</a> as we left it in the initial article,
+and check we didn't break anything using <a href="/_file/fast-conway-cubes/00-begin/test_conway_cubes.py">the tests</a> we already wrote.</p>
 <details>
 <summary>Contents</summary>
 <section class="toc">
 <ul>
 <li><a href="#why-is-it-slow">Why is it slow?</a></li>
 <li><a href="#intro-to-profiling">Intro to profiling</a></li>
-<li><a href="#offenders">Offenders</a></li>
+<li><a href="#worst-offenders">Worst offenders</a></li>
 <li><a href="#make-directions">make_directions()</a></li>
 <li><a href="#any-coord-0">any(coord < 0 ...)</a></li>
 <li><a href="#neighbor-coords">neighbor_coords</a></li>
@@ -86,23 +88,28 @@ you can download it <a href="/_file/conway-cubes-perf/conway-cubes-4d.py">here</
 <li><a href="#the-real-world">The real world</a></li>
 <li><a href="#bonus-pypy">Bonus: PyPy</a></li>
 <li><a href="#conclusions">Conclusions</a></li>
-<li><a href="#bonus-other-things-i-tried">Bonus: other things I tried</a></li>
 </ul>
 </section>
 </details>
 <h2 id="why-is-it-slow">Why is it slow?<span class="headerlink"> <a href="#why-is-it-slow" title="permalink">#</a></span></h2>
-<p>Our solution is pretty naive:
-for every cell in a multidimensional array of cells,
-it counts how many of the cell's neighbors are active,
-and changes the cell state according based on that.</p>
-<p>As we add more dimensions, the run time increases by orders or magnitude:
-for a world of size 16, I get .02 seconds for 2D,
-1 second fo 3D, and 1 minute for 4D.
-Likewise, the run time is not increasing linearly with the world size either:
-for 4D, a world of size 20 is not taking only 1.25 times longer,
-but ~2.4 times!</p>
+<p>Our solution is pretty <a href="conway-cubes#simulation">naive</a>:
+for each cell, count how many of the cell's neighbors are active,
+and change the cell state based on that;
+see <a href="conway-cubes#the-problem">this</a>
+for a detailed explanation of the rules.</p>
+<p>As we add more dimensions, the run time increases by orders or magnitude;
+for a world of size 16, I get:</p>
+<ul>
+<li>2D: .02 seconds</li>
+<li>3D: 1 second</li>
+<li>4D: 1 minute</li>
+</ul>
+<p>The same happens when we increase the world size:
+in 4D,
+a world of size 20 doesn't take only 1.25 times longer than a size 16 world,
+but 2.4 times!</p>
 <p>To get a better picture of why this is happening,
-let's count the number of cells and and neighbors we need to look at every cycle
+let's count how many cells and and neighbors we need to look at every cycle
 (as a reminder, neighbors are all the cells in a size 3 &quot;square&quot; centered on the cell, except the cell itself):</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">size</span> <span class="o">=</span> <span class="mi">16</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">dims</span> <span class="o">=</span> <span class="mi">2</span>
@@ -118,38 +125,38 @@ let's count the number of cells and and neighbors we need to look at every cycle
 <span class="gp">&gt;&gt;&gt; </span><span class="n">size</span> <span class="o">**</span> <span class="n">dims</span><span class="p">,</span> <span class="n">size</span> <span class="o">**</span> <span class="n">dims</span> <span class="o">*</span> <span class="p">(</span><span class="mi">3</span> <span class="o">**</span> <span class="n">dims</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
 <span class="go">(160000, 12800000)</span>
 </code></pre></div>
-<p>That is indeed <a href="https://en.wikipedia.org/wiki/Exponential_growth">exponential growth</a> (the number of dimensions is the exponent).</p>
-<p>As mentioned previously, there are <a href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life#Algorithms">many optimizations</a> to simulating Life.
-They involve reducing the number of cells to look at
-(e.g. a cell that didn't change last cycle, and whose neighbors didn't change,
-won't change this cycle either), making neighbors faster to count,
-or detecting parts of the board that repeat either in space or time.</p>
-<p>Instead of using a different algorithm, or a different, faster language,
-let's ignore all of that and try to make our existing Python code faster,
-since that's something both easier to do, and easier to translate to
-problems that don't have extensive Wikipedia pages on them.</p>
+<p>That is indeed <a href="https://en.wikipedia.org/wiki/Exponential_growth">exponential growth</a> (the number of dimensions being the exponent).</p>
+<p>As I mentioned before, there are <a href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life#Algorithms">many optimizations</a> to simulating Life.
+They usually involve one or more of:</p>
+<ul>
+<li>reducing the number of cells to look at</li>
+<li>making neighbors faster to count</li>
+<li>detecting parts of the board that repeat either in space or time,
+and reusing the previous results</li>
+</ul>
+<p>We won't change our naive algorithm;
+instead, we'll try to make our existing Python code faster,
+since it is both easier to do (at least initially),
+and easier to translate to other Python problems.</p>
+<p>(If we were after speed at any cost,
+we'd probably both use better algorithms,
+and switch to a faster language).</p>
 <h2 id="intro-to-profiling">Intro to profiling<span class="headerlink"> <a href="#intro-to-profiling" title="permalink">#</a></span></h2>
 <p>The Python standard library provides a <a href="https://docs.python.org/3/library/profile.html">profiler</a>
 which allow getting statistics for how often and how long
 various functions get executed.</p>
 <p>For us, the easiest way to use it is to pass a whole script, like this:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code>python -m cProfile <span class="o">[</span>scriptfile<span class="o">]</span> <span class="o">[</span>arg<span class="o">]</span> ...
+<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code>python3 -m cProfile <span class="o">[</span>scriptfile<span class="o">]</span> <span class="o">[</span>arg<span class="o">]</span> ...
 </code></pre></div>
 <section class="admonition note">
 <div class="admonition-text">
-<p>You can also use it to profile specific bits of code;
+<p>You can also profile specific bits of code;
  see <a href="https://docs.python.org/3/library/profile.html#profile.Profile">this</a>
- for details on that.</p>
+ for details.</p>
 </div>
 </section>
-<p>Before profiling, let's run the script as is, to get a baseline run time;
-I've picked a small enough world size to get almost instant feedback:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> python conway-cubes.py <span class="nb">test</span> <span class="m">8</span> <span class="m">4</span> <span class="m">1</span>
-<span class="go">after cycle #0 (0.00s): ...</span>
-<span class="go">after cycle #1 (0.65s): ...</span>
-<span class="go">the result is 29 (0.65s)</span>
-</code></pre></div>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> python conway-cubes.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
+<p>Before profiling, we get a baseline run time for the &quot;real&quot; workload:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> python3 conway_cubes.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
 <span class="go">after cycle #0 (0.01s): ...</span>
 <span class="go">after cycle #1 (24.15s): ...</span>
 <span class="go">after cycle #2 (23.45s): ...</span>
@@ -159,71 +166,87 @@ I've picked a small enough world size to get almost instant feedback:</p>
 <span class="go">after cycle #6 (24.07s): ...</span>
 <span class="go">the result is 2276 (143.94s)</span>
 </code></pre></div>
-<p>After the profiler finishes running the script,
-it prints a table with the number of calls and run time for each function.
-By default, they're sorted by function name, which isn't very useful;
-instead, we'll use the <code>-s</code> option to sort by
-&quot;the cumulative time spent in this and all subfunctions&quot;.</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> python -m cProfile -s cumulative conway-cubes.py <span class="nb">test</span> <span class="m">8</span> <span class="m">4</span> <span class="m">1</span>
+<p>While working on the script,
+we'll simulate a smaller world for just one cycle,
+so we can iterate quickly.
+We get a baseline for that as well:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> python3 conway_cubes.py <span class="nb">test</span> <span class="m">8</span> <span class="m">4</span> <span class="m">1</span>
 <span class="go">after cycle #0 (0.00s): ...</span>
-<span class="go">after cycle #1 (1.04s): ...</span>
-<span class="go">the result is 29 (1.04s)</span>
+<span class="go">after cycle #1 (0.65s): ...</span>
+<span class="go">the result is 29 (0.65s)</span>
+</code></pre></div>
+<p>Let's run it through the profiler:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> python3 -m cProfile -s cumulative conway_cubes.py <span class="nb">test</span> <span class="m">8</span> <span class="m">4</span> <span class="m">1</span>
+<span class="go">after cycle #0 (0.00s): ...</span>
+<span class="go">after cycle #1 (1.01s): ...</span>
+<span class="go">the result is 29 (1.01s)</span>
 
-<span class="go">         2268873 function calls (2241817 primitive calls) in 1.044 seconds</span>
+<span class="go">         2268874 function calls (2241818 primitive calls) in 1.020 seconds</span>
 
 <span class="go">   Ordered by: cumulative time</span>
 
 <span class="go">   ncalls  tottime  percall  cumtime  percall filename:lineno(function)</span>
-<span class="go">        1    0.000    0.000    1.044    1.044 {built-in method builtins.exec}</span>
-<span class="go">        1    0.000    0.000    1.044    1.044 conway-cubes.py:1(&lt;module&gt;)</span>
-<span class="go">        1    0.000    0.000    1.044    1.044 conway-cubes.py:120(run)</span>
-<span class="go">        3    0.000    0.000    1.037    0.346 conway-cubes.py:104(simulate_forever)</span>
-<span class="go">        1    0.005    0.005    1.036    1.036 conway-cubes.py:74(simulate)</span>
-<span class="go">     4096    0.396    0.000    1.024    0.000 conway-cubes.py:28(get_active_neighbors)</span>
-<span class="go">   327680    0.224    0.000    0.408    0.000 {built-in method builtins.any}</span>
-<span class="go">  1557736    0.192    0.000    0.192    0.000 conway-cubes.py:37(&lt;genexpr&gt;)</span>
-<span class="go">   327680    0.147    0.000    0.147    0.000 conway-cubes.py:32(&lt;listcomp&gt;)</span>
-<span class="go">     4096    0.005    0.000    0.064    0.000 conway-cubes.py:23(make_directions)</span>
-<span class="go">     4096    0.059    0.000    0.059    0.000 conway-cubes.py:25(&lt;listcomp&gt;)</span>
-<span class="go">33938/8194    0.012    0.000    0.012    0.000 conway-cubes.py:56(ndenumerate)</span>
-<span class="go">        1    0.001    0.001    0.007    0.007 {built-in method builtins.sum}</span>
-<span class="go">     4097    0.001    0.000    0.006    0.000 conway-cubes.py:138(&lt;genexpr&gt;)</span>
-<span class="go">   1170/2    0.001    0.000    0.001    0.001 conway-cubes.py:89(make_world)</span>
-<span class="go">    146/2    0.000    0.000    0.001    0.001 conway-cubes.py:93(&lt;listcomp&gt;)</span>
+<span class="go">        1    0.000    0.000    1.020    1.020 {built-in method builtins.exec}</span>
+<span class="go">        1    0.000    0.000    1.020    1.020 conway_cubes.py:1(&lt;module&gt;)</span>
+<span class="go">        1    0.000    0.000    1.020    1.020 conway_cubes.py:162(main)</span>
+<span class="go">        1    0.000    0.000    1.020    1.020 conway_cubes.py:120(run)</span>
+<span class="go">        3    0.000    0.000    1.013    0.338 conway_cubes.py:104(simulate_forever)</span>
+<span class="go">        1    0.005    0.005    1.013    1.013 conway_cubes.py:74(simulate)</span>
+<span class="go">     4096    0.391    0.000    1.001    0.000 conway_cubes.py:28(get_active_neighbors)</span>
+<span class="go">   327680    0.216    0.000    0.396    0.000 {built-in method builtins.any}</span>
+<span class="go">  1557736    0.188    0.000    0.188    0.000 conway_cubes.py:37(&lt;genexpr&gt;)</span>
+<span class="go">   327680    0.143    0.000    0.143    0.000 conway_cubes.py:32(&lt;listcomp&gt;)</span>
+<span class="go">     4096    0.005    0.000    0.063    0.000 conway_cubes.py:23(make_directions)</span>
+<span class="go">     4096    0.058    0.000    0.058    0.000 conway_cubes.py:25(&lt;listcomp&gt;)</span>
+<span class="go">33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:56(ndenumerate)</span>
+<span class="go">        1    0.001    0.001    0.006    0.006 {built-in method builtins.sum}</span>
+<span class="go">     4097    0.001    0.000    0.006    0.000 conway_cubes.py:138(&lt;genexpr&gt;)</span>
+<span class="go">   1170/2    0.001    0.000    0.001    0.000 conway_cubes.py:89(make_world)</span>
+<span class="go">    146/2    0.000    0.000    0.001    0.000 conway_cubes.py:93(&lt;listcomp&gt;)</span>
 <span class="go">     4100    0.001    0.000    0.001    0.000 {built-in method builtins.len}</span>
 <span class="go">        6    0.000    0.000    0.000    0.000 {built-in method builtins.print}</span>
-<span class="go">        1    0.000    0.000    0.000    0.000 conway-cubes.py:96(copy_centered_2d)</span>
-<span class="go">        1    0.000    0.000    0.000    0.000 conway-cubes.py:8(parse_input)</span>
+<span class="go">        1    0.000    0.000    0.000    0.000 conway_cubes.py:8(parse_input)</span>
+<span class="go">        1    0.000    0.000    0.000    0.000 conway_cubes.py:96(copy_centered_2d)</span>
+<span class="go">        1    0.000    0.000    0.000    0.000 conway_cubes.py:9(&lt;listcomp&gt;)</span>
 <span class="go">       10    0.000    0.000    0.000    0.000 {built-in method builtins.isinstance}</span>
-<span class="go">        1    0.000    0.000    0.000    0.000 conway-cubes.py:9(&lt;listcomp&gt;)</span>
 <span class="go">        5    0.000    0.000    0.000    0.000 {built-in method time.perf_counter}</span>
-<span class="go">        3    0.000    0.000    0.000    0.000 conway-cubes.py:10(&lt;listcomp&gt;)</span>
-<span class="go">        1    0.000    0.000    0.000    0.000 conway-cubes.py:6(&lt;dictcomp&gt;)</span>
+<span class="go">        3    0.000    0.000    0.000    0.000 conway_cubes.py:10(&lt;listcomp&gt;)</span>
+<span class="go">        1    0.000    0.000    0.000    0.000 conway_cubes.py:6(&lt;dictcomp&gt;)</span>
 <span class="go">        1    0.000    0.000    0.000    0.000 {method &#39;splitlines&#39; of &#39;str&#39; objects}</span>
 <span class="go">        1    0.000    0.000    0.000    0.000 {method &#39;disable&#39; of &#39;_lsprof.Profiler&#39; objects}</span>
 </code></pre></div>
-<p>Since the output is quite long,
-I'll just show the relevant rows in the middle of the table from now on.</p>
+<p>After the script finishes,
+the profiler prints a a table with the number of calls
+various run times for each function.
+We're interested in two columns:</p>
+<ul>
+<li><code>cumtime</code>, &quot;the cumulative time spent in this and all subfunctions&quot;</li>
+<li><code>tottime</code>, &quot;the total time spent in the given function&quot; (excluding sub-functions)</li>
+</ul>
+<p>By default, the results are sorted by function name, which isn't very useful;
+we use use the <code>-s</code> option to sort by cumulative time.</p>
+<p>Since the output is quite long, from now on
+I'll just show the relevant rows in the middle of the table.</p>
 <p>You may notice the run time increased;
 that's because profiling adds some overhead.
-We are using the <code>cProfile</code> modle, a C implementation of the profiler;
+We are using the <code>cProfile</code> module, a C implementation of the profiler;
 if you try the pure-Python version, <code>profile</code>,
 it'll take even more, around 25x on my machine.</p>
 <section class="admonition tip">
 <div class="admonition-text">
-<p>If you're following along, you might find it useful to use <a href="https://eradman.com/entrproject/">entr</a>
- to re-run the command every time you save the file.
- I used something like this:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="nb">echo</span> conway-cubes.py <span class="p">|</span> entr -rcs <span class="s2">&quot;</span>
-<span class="s2">python -m cProfile -s cumulative conway-cubes.py test 8 4 1 \</span>
+<p>If you're following along, you might find it useful
+ to re-run the command automatically every time you save the file.</p>
+<p>I used <a href="https://eradman.com/entrproject/">entr</a> to do it:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="nb">echo</span> conway_cubes.py <span class="p">|</span> entr -rcs <span class="s2">&quot;</span>
+<span class="s2">python3 -m cProfile -s cumulative conway_cubes.py test 8 4 1 \</span>
 <span class="s2">| grep -A20 ncalls</span>
 <span class="s2">&quot;</span>
 </code></pre></div>
 </div>
 </section>
-<h2 id="offenders">Offenders<span class="headerlink"> <a href="#offenders" title="permalink">#</a></span></h2>
-<p>Looking at the data, we see that almost the entire 1 second run time
-is spent in <code>get_active_neighbors()</code>,
+<h2 id="worst-offenders">Worst offenders<span class="headerlink"> <a href="#worst-offenders" title="permalink">#</a></span></h2>
+<p>Looking at the data, we see that almost the whole 1 second run time
+is spent in <code>get_active_neighbors()</code> and subfunctions,
 which is consistent with our initial calculation.</p>
 <p>Let's see it in full:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>28
@@ -278,22 +301,23 @@ which is consistent with our initial calculation.</p>
 
     <span class="k">return</span> <span class="n">active_neighbors</span>
 </code></pre></div>
-</td></tr></table><p>Of this, about .4s are spent in the function itself (<code>tottime</code>),
-and the rest in subfunctions
-(list comprehension etc. seem to be treated as functions as well):</p>
+</td></tr></table><p>Of the total time, about .4s are spent in the function itself (<code>tottime</code>),
+and the rest in subfunctions:</p>
 <ul>
 <li>.4s in the <code>any(coord &lt; 0 ...)</code> check, .2s of which in the generator expression</li>
 <li>.15s in the <code>neighbor_coords</code> list comprehension at line 32</li>
-<li>.06s in <code>make_directions()</code>, almost all of it in the list comprehension at line 25</li>
+<li>.06s in <code>make_directions()</code>, almost all of it in the list comprehension</li>
 </ul>
+<p>(Comprehension and generator expressions are treated as functions as well.)</p>
 <h2 id="make-directions">make_directions()<span class="headerlink"> <a href="#make-directions" title="permalink">#</a></span></h2>
-<p>Let's start small: <code>make_directions()</code> only takes 6% of the total time,
+<p>Let's start small.</p>
+<p><code>make_directions()</code> only takes 6% of the total time,
 but should be quite easy to speed up –
 it is a pure function (the result only depends on the arguments),
 and has a single argument with only a handful of values (2, 3, 4).</p>
 <p>We could pre-compute the results for each dimension,
-save them in a global dict, and reuse them from there.
-Thankfully, the <a href="https://docs.python.org/3/library/functools.html">functools.lru_cache</a> decorator from the standard library
+save them in a global dict, and reuse them from there.</p>
+<p>Thankfully, the <a href="https://docs.python.org/3/library/functools.html">functools.lru_cache</a> decorator from the standard library
 allows us to do just that in a transparent way:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>2</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">lru_cache</span>
 </code></pre></div>
@@ -304,19 +328,20 @@ allows us to do just that in a transparent way:</p>
     <span class="c1"># ...</span>
 </code></pre></div>
 </td></tr></table><p>Now, <code>make_directions()</code> will save the return value
-for a specific argument on the first call, and
-subsequent calls with the same argument will return the saved value.</p>
+for a specific argument on the first call,
+and subsequent calls with the same argument
+will return the already computed value.</p>
 <p>Here's the result:</p>
 <pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-     4096    0.390    0.000    0.951    0.000 conway-cubes.py:30(get_active_neighbors)
+     4096    0.390    0.000    0.940    0.000 conway_cubes.py:30(get_active_neighbors)
       ...
-        1    0.000    0.000    0.000    0.000 conway-cubes.py:24(make_directions)
+        1    0.000    0.000    0.000    0.000 conway_cubes.py:24(make_directions)
 </code></pre>
-<p>A ~6% improvement for this little work is more than decent.</p>
+<p>Not bad, for this little work.</p>
 <h2 id="any-coord-0">any(coord &lt; 0 ...)<span class="headerlink"> <a href="#any-coord-0" title="permalink">#</a></span></h2>
-<p>Emboldened by this, we'll see if we can do anything about the
-<code>any(coord &lt; 0 ...)</code> check.</p>
-<p>There's more than one way to try and fix it,
+<p>Emboldened by this momentous achievement,
+we'll go straight to the <code>any(coord &lt; 0 ...)</code> check.</p>
+<p>There's more than one way to approach it,
 but before exploring any of them,
 let's look a bit harder at <code>get_active_neighbors()</code>:</p>
 <ul>
@@ -325,8 +350,8 @@ let's look a bit harder at <code>get_active_neighbors()</code>:</p>
 <li>so that's equivalent to checking that the cell coordinate is &lt; 1;</li>
 <li>since the cell isn't moving, we can do it just once, outside the neighbor loop.</li>
 </ul>
-<p>It might not seem like a lot, but remember the number of neighbors
-increases exponentially:
+<p>It might not seem like a lot,
+but remember the neighbor count increases exponentially:
 in 2D, we're doing the check 8 times;
 in 4D, we're doing it 80 times!</p>
 <p>So:</p>
@@ -336,29 +361,24 @@ in 4D, we're doing it 80 times!</p>
 33
 34
 35
-36
-37
-38</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">get_active_neighbors</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">active</span><span class="p">,</span> <span class="n">coords</span><span class="p">):</span>
+36</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">get_active_neighbors</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">active</span><span class="p">,</span> <span class="n">coords</span><span class="p">):</span>
     <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">coord</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">coord</span> <span class="ow">in</span> <span class="n">coords</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">active</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;active on edge: </span><span class="si">{</span><span class="n">coords</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
     <span class="n">active_neighbors</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="k">for</span> <span class="n">offsets</span> <span class="ow">in</span> <span class="n">make_directions</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)):</span>
-        <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="c1"># ...</span>
+    <span class="c1"># ...</span>
 </code></pre></div>
 </td></tr></table><p>Which gives us a 57% improvement!</p>
 <pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-     4096    0.265    0.000    0.407    0.000 conway-cubes.py:30(get_active_neighbors)
-   327680    0.136    0.000    0.136    0.000 conway-cubes.py:37(&lt;listcomp&gt;)
-33938/8194    0.010    0.000    0.010    0.000 conway-cubes.py:56(ndenumerate)
+     4096    0.265    0.000    0.406    0.000 conway_cubes.py:30(get_active_neighbors)
+   327680    0.135    0.000    0.135    0.000 conway_cubes.py:38(&lt;listcomp&gt;)
+33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:57(ndenumerate)
         1    0.001    0.001    0.006    0.006 {built-in method builtins.sum}
-     4097    0.001    0.000    0.006    0.000 conway-cubes.py:138(&lt;genexpr&gt;)
+     4097    0.001    0.000    0.006    0.000 conway_cubes.py:139(&lt;genexpr&gt;)
      4096    0.003    0.000    0.005    0.000 {built-in method builtins.any}
-    17656    0.003    0.000    0.003    0.000 conway-cubes.py:31(&lt;genexpr&gt;)
+    17656    0.003    0.000    0.003    0.000 conway_cubes.py:31(&lt;genexpr&gt;)
 </code></pre>
-<p><a href="#" title="link to conway-cubes#simulation">//</a> # (TODO reintegrate this)</p>
 <p>There's a slight issue, though:
 in the original version, if the check failed, we'd skip that neighbor
 (assume it's not active); now we're not doing that anymore.</p>
@@ -366,21 +386,22 @@ in the original version, if the check failed, we'd skip that neighbor
 we will be getting the state for its neighbors at the far end (index -1).</p>
 <p>As long as the neighbors on the far end are inactive, it will still work;
 thankfully, we are checking that as well –
-that's what the <code>try ... except IndexError</code> does.</p>
+that's what the <code>if active</code> in <code>except IndexError</code> does.</p>
 <p>But now we've made a bit of logic dependent on another that's quite far from it.
-Instead of just reasoning through it, let's verify with some additional tests.</p>
+Instead of just reasoning through it every time we change something,
+we rely on <a href="conway-cubes#bonus-more-tests">the edge case tests</a>
+to verify it for us (nothing to do, since we've already written them :).</p>
+<p><a href="/_file/fast-conway-cubes/10-any-coord-0/conway_cubes.py">The script up to this point.</a></p>
 <h2 id="neighbor-coords">neighbor_coords<span class="headerlink"> <a href="#neighbor-coords" title="permalink">#</a></span></h2>
 <p>Next up is the <code>neighbor_coords</code> list comprehension.</p>
 <p>Using functions written in C may remove some of the comprehension overhead;
-let's if it works:</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>36
-37</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">for</span> <span class="n">offsets</span> <span class="ow">in</span> <span class="n">make_directions</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)):</span>
-        <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">sum</span><span class="p">,</span> <span class="nb">zip</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">offsets</span><span class="p">))</span>
+let's see if it works:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>38</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">sum</span><span class="p">,</span> <span class="nb">zip</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">offsets</span><span class="p">))</span>
 </code></pre></div>
 </td></tr></table><p>It's not much better:</p>
 <pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-     4096    0.391    0.000    0.397    0.000 conway-cubes.py:30(get_active_neighbors)
-33938/8194    0.011    0.000    0.011    0.000 conway-cubes.py:53(ndenumerate)
+     4096    0.376    0.000    0.382    0.000 conway_cubes.py:30(get_active_neighbors)
+33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:54(ndenumerate)
 </code></pre>
 <p>What if instead of using sum, which is generic to any iterable,
 we used a function that's made specifically for 2 numbers?</p>
@@ -388,52 +409,49 @@ we used a function that's made specifically for 2 numbers?</p>
 31</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">add</span>
 <span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">starmap</span>
 </code></pre></div>
-</td></tr></table><table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>39
-40</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">for</span> <span class="n">offsets</span> <span class="ow">in</span> <span class="n">make_directions</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)):</span>
-        <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="n">starmap</span><span class="p">(</span><span class="n">add</span><span class="p">,</span> <span class="nb">zip</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">offsets</span><span class="p">))</span>
+</td></tr></table><table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>41</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="n">starmap</span><span class="p">(</span><span class="n">add</span><span class="p">,</span> <span class="nb">zip</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">offsets</span><span class="p">))</span>
 </code></pre></div>
-</td></tr></table><p>This is working slighly better, with a 25% improvement:</p>
+</td></tr></table><p>This fares slighly better, with a 26% improvement:</p>
 <pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-     4096    0.301    0.000    0.306    0.000 conway-cubes.py:33(get_active_neighbors)
-33938/8194    0.011    0.000    0.011    0.000 conway-cubes.py:56(ndenumerate)
+     4096    0.296    0.000    0.301    0.000 conway_cubes.py:33(get_active_neighbors)
+33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:57(ndenumerate)
 </code></pre>
 <p>We've now exhausted all the obvious things to improve;
-most of the time is spent in <code>get_active_neighbors</code>, not its subfunctions.</p>
+most of the time is spent in <code>get_active_neighbors</code>,
+not its subfunctions.</p>
 <p>You may remember the <code>any()</code> call spent almost as much time
 in the function itself (<code>tottime</code>) as in the generator expression;
 indeed, calling <em>any</em> function seems to have significant overhead:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> python -m timeit -s <span class="s1">&#39;from operator import add&#39;</span> <span class="s1">&#39;add(1, 2)&#39;</span>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> python3 -m timeit -s <span class="s1">&#39;from operator import add&#39;</span> <span class="s1">&#39;add(1, 2)&#39;</span>
 <span class="go">5000000 loops, best of 5: 49.3 nsec per loop</span>
-<span class="gp">$</span> python -m timeit <span class="s1">&#39;1 + 2&#39;</span>
+<span class="gp">$</span> python3 -m timeit <span class="s1">&#39;1 + 2&#39;</span>
 <span class="go">50000000 loops, best of 5: 7.98 nsec per loop</span>
 </code></pre></div>
 <p>Let's try something different.</p>
-<p>In the top level loop, we're calling 3 functions to add 4 pairs of numbers.
+<p>In the <code>for offsets ...</code> loop, we're calling 3 functions to add 4 pairs of numbers.
 What if we didn't?
 Having more general code did help with testing,
 but we may be reaching a point where it's not worth it anymore.</p>
-<p>Let's undo the <code>starmap</code> thing and validate it with a quick experiment
-(this will obviously break non-4D, temporarily):</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>36
-37
-38
+<p>We can validate it with a quick experiment
+(this will break non-4D temporarily):</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>38
 39
 40
 41
-42</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">for</span> <span class="n">offsets</span> <span class="ow">in</span> <span class="n">make_directions</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)):</span>
-        <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="p">[</span>
+42
+43</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">offsets</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
             <span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">offsets</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
             <span class="n">coords</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="n">offsets</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
             <span class="n">coords</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">+</span> <span class="n">offsets</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
         <span class="p">]</span>
 </code></pre></div>
-</td></tr></table><p>Which gives us a 50% improvement!</p>
+</td></tr></table><p>Which gives us a 49% improvement!</p>
 <pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-     4096    0.203    0.000    0.208    0.000 conway-cubes.py:30(get_active_neighbors)
-33938/8194    0.011    0.000    0.011    0.000 conway-cubes.py:58(ndenumerate)
+     4096    0.202    0.000    0.207    0.000 conway_cubes.py:30(get_active_neighbors)
+33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:59(ndenumerate)
 </code></pre>
-<p>Let's make everything non-generic, and get rid of needless intermediary variables:</p>
+<p>What if make everything non-generic, and get rid of intermediary variables?</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>30
 31
 32
@@ -466,9 +484,9 @@ but we may be reaching a point where it's not worth it anymore.</p>
 
     <span class="k">return</span> <span class="n">active_neighbors</span>
 </code></pre></div>
-</td></tr></table><p>That yields a 75% improvement!</p>
-<pre class="code code-container"><code>     4096    0.095    0.000    0.095    0.000 conway-cubes.py:30(get_active_neighbors)
-33938/8194    0.011    0.000    0.011    0.000 conway-cubes.py:49(ndenumerate)
+</td></tr></table><p>That yields a 76% improvement!</p>
+<pre class="code code-container"><code>     4096    0.095    0.000    0.095    0.000 conway_cubes.py:30(get_active_neighbors)
+33938/8194    0.011    0.000    0.011    0.000 conway_cubes.py:48(ndenumerate)
 </code></pre>
 <h2 id="going-multidimensional-again">Going multidimensional, again<span class="headerlink"> <a href="#going-multidimensional-again" title="permalink">#</a></span></h2>
 <p>At this point, we could be OK with part of the code not being generic anymore,
@@ -484,8 +502,8 @@ implement one <code>get_active_neighbors()</code> per dimension, and use them li
 </code></pre></div>
 <p>This reminds me of the pattern initially proposed for <code>make_directions()</code>...
 If only there was a way to do the same thing for a function.</p>
-<p>Well, this is Python, we <em>can</em> generate code at runtime;
-let's do something <em>stupid</em>:</p>
+<p>Well, this is Python, we <em>can</em> generate code at runtime.
+<em>Let's do something stupid:</em></p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>3</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">textwrap</span> <span class="kn">import</span> <span class="n">dedent</span>
 </code></pre></div>
 </td></tr></table><table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>31
@@ -544,13 +562,11 @@ let's do something <em>stupid</em>:</p>
     <span class="n">exec</span><span class="p">(</span><span class="n">make_get_active_neighbors_str</span><span class="p">(</span><span class="n">dimensions</span><span class="p">),</span> <span class="n">context</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;get_active_neighbors&#39;</span><span class="p">]</span>
 </code></pre></div>
-</td></tr></table><p>Hey, that's the same <a href="https://docs.python.org/3/library/functions.html#exec">exec</a> we used
-to work around <code>conway-cubes.py</code> not being importable!
-(yup, I left that &quot;issue&quot; there for foreshadowing purposes)</p>
-<p>Unlike in the test file, we use an explicit globals dictionary,
-to avoid polluting the global namespace
-(everything that gets defined in the source code string is a <code>context</code> item).</p>
-<p>You may also notice that we're embedding the representation of the directions list
+</td></tr></table><p>We build the string with the source code of a function,
+and then use <a href="https://docs.python.org/3/library/functions.html#exec">exec</a> to execute it in private global context.
+(We're using an exlicit context to avoid default module globals
+– everything that gets defined in the source code string is a <code>context</code> item).</p>
+<p>You may notice that we're embedding the representation of the directions list
 directly in the code, instead of calling <code>make_directions()</code>;
 I'm not sure this brings a great speed-up, but it can't hurt.</p>
 <section class="admonition attention">
@@ -565,7 +581,7 @@ I'm not sure this brings a great speed-up, but it can't hurt.</p>
  And speed. Mostly speed.</p>
 </div>
 </section>
-<p>Before we try it out, let's pull the dimension counting heuristic
+<p>Before we try it out, we need to pull the dimension counting heuristic
 from <code>ndenumerate()</code> into a separate function:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>61
 62
@@ -589,7 +605,7 @@ from <code>ndenumerate()</code> into a separate function:</p>
 
     <span class="c1"># ...</span>
 </code></pre></div>
-</td></tr></table><p>Using it leaves us with something that's slighly faster than our initial experiment:</p>
+</td></tr></table><p>... so we can also use it in <code>simulate()</code>:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>81
 82
 83
@@ -602,25 +618,17 @@ from <code>ndenumerate()</code> into a separate function:</p>
     <span class="k">for</span> <span class="n">coords</span><span class="p">,</span> <span class="n">active</span> <span class="ow">in</span> <span class="n">ndenumerate</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">dimensions</span><span class="p">):</span>
         <span class="c1"># ...</span>
 </code></pre></div>
-</td></tr></table><pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-     4096    0.090    0.000    0.090    0.000 &lt;string&gt;:3(get_active_neighbors)
-33946/8196    0.010    0.000    0.010    0.000 conway-cubes.py:62(ndenumerate)
+</td></tr></table><p>... which leaves us with something slighly faster than our initial experiment:</p>
+<pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     4096    0.091    0.000    0.091    0.000 &lt;string&gt;:3(get_active_neighbors)
+33938/8194    0.010    0.000    0.010    0.000 conway_cubes.py:68(ndenumerate)
 </code></pre>
-<p>Since we now have slightly different implementations,
-let's parametrize the edge error test so that we check all the dimensions:</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code>33
-34
-35
-36</code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s1">&#39;dimensions&#39;</span><span class="p">,</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
-<span class="k">def</span> <span class="nf">test_edge_errors</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">dimensions</span><span class="p">):</span>
-    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
-        <span class="n">run</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dimensions</span><span class="p">,</span> <span class="n">parse_input</span><span class="p">(</span><span class="n">dedent</span><span class="p">(</span><span class="nb">input</span><span class="p">)),</span> <span class="n">cycles</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-</code></pre></div>
-</td></tr></table><h2 id="the-real-world">The real world<span class="headerlink"> <a href="#the-real-world" title="permalink">#</a></span></h2>
-<p>So, with our profiling <code>test 8 4 1</code>,
-we got a 91% (~11x) improvement in <code>get_active_neighbors()</code> run time.</p>
+<p><a href="/_file/fast-conway-cubes/99-end/conway_cubes.py">The final version of the script.</a></p>
+<h2 id="the-real-world">The real world<span class="headerlink"> <a href="#the-real-world" title="permalink">#</a></span></h2>
+<p>So, with our <code>test 8 4 1</code> profiling parameters,
+we got a 91% (~11x) improvement in <code>get_active_neighbors()</code> cumulative time.</p>
 <p>Does this reflect in the real-world performance?</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> python conway-cubes.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> python3 conway_cubes.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
 <span class="go">after cycle #0 (0.01s): ...</span>
 <span class="go">after cycle #1 (3.39s): ...</span>
 <span class="go">after cycle #2 (3.43s): ...</span>
@@ -630,15 +638,15 @@ we got a 91% (~11x) improvement in <code>get_active_neighbors()</code> run time.
 <span class="go">after cycle #6 (3.35s): ...</span>
 <span class="go">the result is 2276 (20.21s)</span>
 </code></pre></div>
-<p>Almost; that's still an 86% (~7x) improvement.</p>
+<p>Almost. That's still an 86% (~7x) improvement.</p>
 <h2 id="bonus-pypy">Bonus: PyPy<span class="headerlink"> <a href="#bonus-pypy" title="permalink">#</a></span></h2>
 <p><a href="https://www.pypy.org/">PyPy</a> is an alternative Python implementation that's
 often faster than CPython (the standard implementation)
 due to its use of <a href="https://en.wikipedia.org/wiki/Just-in-time_compilation">just-in-time compilation</a>.</p>
 <p>Currently, it works mostly out of the box for Python code up to version 3.7
 (with the exception of some CPython extensions).</p>
-<p>First, let's see how it performs on our on the unoptimized script:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> pypy3 conway-cubes-prep-work.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
+<p>First, let's see how it performs on the unoptimized script:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> pypy3 conway_cubes.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
 <span class="go">after cycle #0 (0.02s): ...</span>
 <span class="go">after cycle #1 (6.43s): ...</span>
 <span class="go">after cycle #2 (5.53s): ...</span>
@@ -650,10 +658,10 @@ due to its use of <a href="https://en.wikipedia.org/wiki/Just-in-time_compilatio
 </code></pre></div>
 <p>4.2x; not bad, for essentially zero work!
 Funnily enough, their website says that
-<em>&quot;on average, PyPy is 4.2 times faster than CPython&quot;</em>.</p>
+&quot;on average, PyPy is 4.2 times faster than CPython&quot;.</p>
 <p>So, was it all for nothing, could have we just used PyPy from the start?
 Yes and no, but mostly no:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> pypy3 conway-cubes.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> pypy3 conway_cubes.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
 <span class="go">after cycle #0 (0.02s): ...</span>
 <span class="go">after cycle #1 (0.52s): ...</span>
 <span class="go">after cycle #2 (0.33s): ...</span>
@@ -663,61 +671,91 @@ Yes and no, but mostly no:</p>
 <span class="go">after cycle #6 (0.33s): ...</span>
 <span class="go">the result is 2276 (2.21s)</span>
 </code></pre></div>
-<p>That's a 10x improvement over the same script run with CPython,
-4.2x over the unoptimized script with PyPy,
-and 65x over the unoptimized script with CPython!</p>
+<p>That is:</p>
+<ul>
+<li>a 10x improvement over the same script run with CPython,</li>
+<li>4.2x over the unoptimized script with PyPy, and</li>
+<li><strong>65x</strong> over the unoptimized script with CPython!</li>
+</ul>
 <h2 id="conclusions">Conclusions<span class="headerlink"> <a href="#conclusions" title="permalink">#</a></span></h2>
-<p><a href="https://wiki.c2.com/?ProfileBeforeOptimizing">Profile before optimizing</a>.
+<p><strong><a href="https://wiki.c2.com/?ProfileBeforeOptimizing">Profile before optimizing</a>.</strong>
 Most often, your intuition about where the code is slow is wrong.</p>
-<p>Many small optimizations add up.
-It's easy to get stuck where there are no other small optimization left;
-sometimes, a different algorithm is better than many small optimizations.</p>
-<p><a href="https://docs.python.org/3/faq/programming.html#my-program-is-too-slow-how-do-i-speed-it-up">My program is too slow. How do I speed it up?</a> has more better advice.</p>
-<p>Optimizations come with costs.
-Usually, optimizations make code harder to understand.
+<p><strong>Many small optimizations add up.</strong></p>
+<p><strong>Sometimes, a different algorithm is better than many small optimizations.</strong>
+At some point, there will be no other small optimization left.</p>
+<p><strong>Optimizations have costs.</strong>
+Usually, they make code harder to understand.
 More changes increases the likelihood of bugs.
 More changes on harder to understand code even more so.
 Tests help you know you're not breaking anything.
 Profiling helps minimize the amount of code you change.</p>
-<p>PyPy is amazing, give it a try sometime.</p>
+<section class="admonition note">
+<div class="admonition-text">
+<p><a href="https://docs.python.org/3/faq/programming.html#my-program-is-too-slow-how-do-i-speed-it-up">My program is too slow. How do I speed it up?</a>
+ from the Python Programming FAQ has more, better advice
+ on the points above.</p>
+</div>
+</section>
+<p><strong><a href="https://www.pypy.org/">PyPy</a> is amazing</strong>, give it a try if you can.</p>
 <p>Function calls are slow in Python;
 that only matters if you're calling them millions of times.</p>
-<p>Python has code generation, and you can do cool stuff with it.
-Most of the time, <em>it's not worth it</em>.</p>
-<h2 id="bonus-other-things-i-tried">Bonus: other things I tried<span class="headerlink"> <a href="#bonus-other-things-i-tried" title="permalink">#</a></span></h2>
-<p>making the world bigger by 2, and never passing the edges to get_active_neighbors (which didn't do any check); even without the checks, <code>20 4 6</code> was only 1 second faster; it might be better for bigger things.</p>
-<pre class="code code-container"><code>try:
-    for {', '.join(f'o{i}' for i in ids)} in {make_directions(dimensions)}:
-        active_neighbors += world[{']['.join(f'o{i} + c{i}' for i in ids)}]
-except IndexError:
-    if active:
-        raise RuntimeError(f&quot;active on edge: {{coords}}&quot;)
-</code></pre>
-<p>Didn't do anything on pypy! needed more tests</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$</span> pypy3 conway-cubes.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
-<span class="go">after cycle #0 (0.02s): ...</span>
-<span class="go">after cycle #1 (0.56s): ...</span>
-<span class="go">after cycle #2 (0.35s): ...</span>
-<span class="go">after cycle #3 (0.34s): ...</span>
-<span class="go">after cycle #4 (0.35s): ...</span>
-<span class="go">after cycle #5 (0.35s): ...</span>
-<span class="go">after cycle #6 (0.34s): ...</span>
-<span class="go">the result is 2228 (2.32s)</span>
-
-<span class="gp">$</span> python conway-cubes.py real <span class="m">20</span> <span class="m">4</span> <span class="m">6</span>
-<span class="go">after cycle #0 (0.02s): ...</span>
-<span class="go">after cycle #1 (2.98s): ...</span>
-<span class="go">after cycle #2 (3.49s): ...</span>
-<span class="go">after cycle #3 (3.05s): ...</span>
-<span class="go">after cycle #4 (3.06s): ...</span>
-<span class="go">after cycle #5 (3.12s): ...</span>
-<span class="go">after cycle #6 (3.05s): ...</span>
-<span class="go">the result is 2228 (18.77s)</span>
-</code></pre></div>
+<p>You can do cool stuff with Python code generation;
+most of the time, <em>it's not worth it</em>.</p>
 
 
 
 
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661"
+    method="post"
+    id="mc-embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 
 
 
