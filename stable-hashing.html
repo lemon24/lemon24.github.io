@@ -1,0 +1,334 @@
+<!doctype html>
+
+<meta name="viewport" content="width=device-width" />
+
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+
+
+
+
+
+<title>untitled - death and gravity</title>
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1>untitled</h1>
+
+<p class="text-gray"><small>
+
+</small></p>
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<ul>
+<li>in which we see how to calculate a deterministic hash for Python data objects<ul>
+<li>stable across interpreter implementations and versions</li>
+</ul>
+</li>
+</ul>
+<details>
+<summary>Contents</summary>
+<section class="toc">
+<ul>
+<li><a href="#the-real-world-problem">The real-world problem</a></li>
+<li><a href="#requirements">Requirements</a></li>
+<li><a href="#problem-we-need-a-deterministic-hash-function">Problem: we need a deterministic hash function</a>
+<ul>
+<li><a href="#hash">hash()</a></li>
+<li><a href="#hashlib">hashlib</a></li>
+</ul>
+</li>
+<li><a href="#problem-we-need-a-deterministic-way-of-serializing-objects">Problem: we need a deterministic way of serializing objects</a>
+<ul>
+<li><a href="#pickle">pickle</a></li>
+<li><a href="#bad-solution-str-and-repr">bad solution: str() and repr()</a></li>
+<li><a href="#better-solution-json">better solution: json</a></li>
+</ul>
+</li>
+<li><a href="#problem-ignore-empty-value">problem: ignore empty value</a></li>
+<li><a href="#problem-skip-fields">problem: skip fields</a></li>
+<li><a href="#conclusion">conclusion</a></li>
+</ul>
+</section>
+</details>
+<h2 id="the-real-world-problem">The real-world problem<span class="headerlink"> <a href="#the-real-world-problem" title="permalink">#</a></span></h2>
+<p>Let's say you have a <a href="https://github.com/lemon24/reader">feed reader library</a>;
+one of its main features is to retrieve and store <a href="https://en.wikipedia.org/wiki/Web_feed">web feeds</a>
+(Atom, RSS, and so on).</p>
+<p>Entries (articles) usually have an <em>updated</em> date,
+indicating the last time the entry was modified in a significant way.
+An entry is updated only if its <em>updated</em> date in the feed
+is newer than the one we have stored for it.</p>
+<p>However, you notice the content of some entries changes
+without <em>updated</em> changing,
+so you decide to update entries whenever the content changes,
+regardless of <em>updated</em>.</p>
+<p>After the feed is retrieved,
+entries are converted to data objects like these
+(the real ones have <a href="https://github.com/lemon24/reader/blob/d2aaf418f8c4d45a97cabaa7eb76498239d0503b/src/reader/_types.py#L97-L114">more attributes</a>, though):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Content</span><span class="p">:</span>
+    <span class="n">value</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">language</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Entry</span><span class="p">:</span>
+    <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">updated</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">datetime</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">content</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Content</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+</code></pre></div>
+<p>A naive approach is to getting the stored entry data
+and compare it with the feed version,
+but that's pretty inefficient.</p>
+<p>The better solution is to use a hash function
+– a way to map data of arbitrary size (the message)
+to a fixed-size chunk of data (the hash value),
+such that:</p>
+<ul>
+<li>it is quick to compute the hash value for any given message</li>
+<li>the same message always results in the same hash</li>
+<li>it is extremely unlikely two slightly different messages have the same hash</li>
+</ul>
+<p>Then, instead of getting the full entry data,
+we just get its (previously computed) hash,
+and compare it with the hash of the feed version.</p>
+<section class="admonition note">
+<div class="admonition-text">
+<p><a href="https://en.wikipedia.org/wiki/Cryptographic_hash_function">Cryptographic hash functions</a> have more properties,
+ but we don't need them.</p>
+</div>
+</section>
+<h2 id="requirements">Requirements<span class="headerlink"> <a href="#requirements" title="permalink">#</a></span></h2>
+<p>Looking at out use case, we need a hash function that:</p>
+<ol>
+<li>supports (almost) arbitrary data objects;
+ in our case, the various built-in types, datetimes,
+ and dataclass instances should be enough</li>
+<li>is safe; passing an unsupported object should be an error</li>
+<li>is stable across interpreter versions and implementations,
+ operating systems, and host machines</li>
+<li>ignores &quot;empty&quot; values, to allow adding new fields without the hash changing</li>
+<li>can skip some of the fields (I actually realized this is needed much later)</li>
+</ol>
+<h2 id="problem-we-need-a-deterministic-hash-function">Problem: we need a deterministic hash function<span class="headerlink"> <a href="#problem-we-need-a-deterministic-hash-function" title="permalink">#</a></span></h2>
+<h3 id="hash">hash()<span class="headerlink"> <a href="#hash" title="permalink">#</a></span></h3>
+<p>An easy solution seems to be the built-in <a href="https://docs.python.org/3/library/functions.html#hash">hash()</a> function,
+which returns the integer hash of an object.
+However, it has a couple of issues:</p>
+<p>By default, the hashes of str and bytes objects are randomized,
+so they're not predictable between Python processes (<a href="https://docs.python.org/3/reference/datamodel.html#object.__hash__">details</a>):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python3 -c <span class="s1">&#39;print(hash(&quot;abc&quot;))&#39;</span>
+<span class="go">-4743820898567001518</span>
+<span class="gp">$ </span>python3 -c <span class="s1">&#39;print(hash(&quot;abc&quot;))&#39;</span>
+<span class="go">-6699381079787346150</span>
+</code></pre></div>
+<p>Also, hash() only supports <a href="https://docs.python.org/3/glossary.html#term-hashable">hashable</a> objects;
+this means no lists, dicts, or non-<a href="https://docs.python.org/3/library/dataclasses.html#frozen-instances">frozen</a> dataclasses.
+For my specific use case, this wasn't actually a problem, but
+it already puts huge constraints on how arbitrary the data objects can be.</p>
+<h3 id="hashlib">hashlib<span class="headerlink"> <a href="#hashlib" title="permalink">#</a></span></h3>
+<p><a href="https://docs.python.org/3/library/hashlib.html">hashlib</a> contains many different secure hash algorithms,
+which are by definition deterministic.</p>
+<p>But it has one big problem – it only takes bytes:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">hashlib</span><span class="o">.</span><span class="n">md5</span><span class="p">(</span><span class="sa">b</span><span class="s1">&#39;abc&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+<span class="go">&#39;900150983cd24fb0d6963f7d28e17f72&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">hashlib</span><span class="o">.</span><span class="n">md5</span><span class="p">(</span><span class="s1">&#39;abc&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+<span class="gt">Traceback (most recent call last):</span>
+  File <span class="nb">&quot;&lt;stdin&gt;&quot;</span>, line <span class="m">1</span>, in <span class="n">&lt;module&gt;</span>
+<span class="gr">TypeError</span>: <span class="n">Unicode-objects must be encoded before hashing</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">hashlib</span><span class="o">.</span><span class="n">md5</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+<span class="gt">Traceback (most recent call last):</span>
+  File <span class="nb">&quot;&lt;stdin&gt;&quot;</span>, line <span class="m">1</span>, in <span class="n">&lt;module&gt;</span>
+<span class="gr">TypeError</span>: <span class="n">object supporting the buffer API required</span>
+</code></pre></div>
+<p>This is something we can work with, though: it changes our problem
+from &quot;we need a deterministic hash function&quot;
+to &quot;we need a deterministic way of serializing objects to bytes&quot;.</p>
+<h2 id="problem-we-need-a-deterministic-way-of-serializing-objects">Problem: we need a deterministic way of serializing objects<span class="headerlink"> <a href="#problem-we-need-a-deterministic-way-of-serializing-objects" title="permalink">#</a></span></h2>
+<h3 id="pickle">pickle<span class="headerlink"> <a href="#pickle" title="permalink">#</a></span></h3>
+<p><a href="https://docs.python.org/3/library/pickle.html">pickle</a> can turn most Python objects into bytes.</p>
+<p>It does have multiple protocols,
+and the default one can change with the Python version,
+but we can select one and stick with it;
+version 4 was added in Python 3.4, and seems good enough.</p>
+<p>Again, the easy solution is deceiving, since it seems to work:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="k">function</span> pickle <span class="o">{</span>
+<span class="gp">$</span><span class="m">1</span> &lt;&lt;EOD
+<span class="go">import pickle</span>
+<span class="go">from datetime import datetime</span>
+<span class="go">print(pickle.dumps($3, protocol=$2))</span>
+<span class="go">EOD</span>
+<span class="go">}</span>
+<span class="gp">$ </span>pickle python3.6 <span class="m">4</span> <span class="s1">&#39;[1, &quot;abc&quot;]&#39;</span> <span class="p">|</span> md5sum
+<span class="go">02fa88b9fea0912efe731ed56906b251  -</span>
+<span class="gp">$ </span>pickle python3.7 <span class="m">4</span> <span class="s1">&#39;[1, &quot;abc&quot;]&#39;</span> <span class="p">|</span> md5sum
+<span class="go">02fa88b9fea0912efe731ed56906b251  -</span>
+<span class="gp">$ </span>pickle python3.8 <span class="m">4</span> <span class="s1">&#39;[1, &quot;abc&quot;]&#39;</span> <span class="p">|</span> md5sum
+<span class="go">02fa88b9fea0912efe731ed56906b251  -</span>
+<span class="gp">$ </span>pickle pypy3.6 <span class="m">4</span> <span class="s1">&#39;[1, &quot;abc&quot;]&#39;</span> <span class="p">|</span> md5sum
+<span class="go">02fa88b9fea0912efe731ed56906b251  -</span>
+</code></pre></div>
+<p>... until it doesn't:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pickle python3.6 <span class="m">4</span> <span class="s1">&#39;datetime(1, 1, 1)&#39;</span> <span class="p">|</span> md5sum
+<span class="go">9c4423b791578d865d8fbeb070a1b934  -</span>
+<span class="gp">$ </span>pickle pypy3.6 <span class="m">4</span> <span class="s1">&#39;datetime(1, 1, 1)&#39;</span> <span class="p">|</span> md5sum
+<span class="go">3c7c834cb2f1cf4aba8be5c326bb9ddd  -</span>
+</code></pre></div>
+<p>Version 0 isn't stable either, but in a different way:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pickle python3.6 <span class="m">0</span> <span class="s1">&#39;datetime(1, 1, 1)&#39;</span> <span class="p">|</span> md5sum
+<span class="go">01acd91b95556a09f5ff9b7495e120da  -</span>
+<span class="gp">$ </span>pickle pypy3.6 <span class="m">0</span> <span class="s1">&#39;datetime(1, 1, 1)&#39;</span> <span class="p">|</span> md5sum
+<span class="go">01acd91b95556a09f5ff9b7495e120da  -</span>
+<span class="gp">$ </span>pickle python3.7 <span class="m">0</span> <span class="s1">&#39;datetime(1, 1, 1)&#39;</span> <span class="p">|</span> md5sum
+<span class="go">a6c815eca494dbf716cd4a7e5556d779  -</span>
+</code></pre></div>
+<p>Version 3 does <em>seem</em> to work fine across all of the above,
+on both macOS and Linux (I also tested it with more complicated data).
+But what's to say it'll remain that way?</p>
+<p>In fairness, <em>this is not an issue with pickle</em> –
+it guarantees you'll get the same object back after unpickling,
+not that you'll get the same binary stream after pickling.</p>
+<p>And it's easy to explain why: pickles are actually <em>programs</em>.
+Some relevant comments from <a href="https://github.com/python/cpython/blob/3.9/Lib/pickletools.py">pickletools</a>:</p>
+<blockquote>
+<p>&quot;A pickle&quot; is a program for a virtual pickle machine (PM, but more accurately
+called an unpickling machine). It's a sequence of opcodes, interpreted by the
+PM, building an arbitrarily complex Python object.</p>
+</blockquote>
+<blockquote>
+<p>Historically, many enhancements
+have been made to the pickle protocol in order to do a better (faster,
+and/or more compact) job on those
+[builtin scalar and container types, like ints and tuples].</p>
+</blockquote>
+<blockquote>
+<p>As explained below [for compatibility],
+pickle opcodes never go away, not even when better ways to do a thing
+get invented. The repertoire of the PM just keeps growing over time.</p>
+</blockquote>
+<p>This means there can be multiple pickles
+that unpickle to the same object<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
+even within the bounds of a specific protocol.</p>
+<h3 id="bad-solution-str-and-repr">bad solution: str() and repr()<span class="headerlink"> <a href="#bad-solution-str-and-repr" title="permalink">#</a></span></h3>
+<ul>
+<li>unsafe – everything has a str() or repr(), they are not always good</li>
+<li>not guaranteed to have all of the content</li>
+<li>in reality, I skipped directly to pickle</li>
+</ul>
+<h3 id="better-solution-json">better solution: json<span class="headerlink"> <a href="#better-solution-json" title="permalink">#</a></span></h3>
+<ul>
+<li>problem: by default it only supports dicts, lists, etc.; no datetime, no user-defined classes</li>
+<li>solution: json.dumps(deafult=...), dataclasses.asdict()</li>
+</ul>
+<p>example code, interactive session</p>
+<p>safety:</p>
+<ul>
+<li>supports dataclasses (which already declare &quot;these are the data attribetus); we coudl use <code>__dict__</code>, but it might pick up other stuff</li>
+<li>supports datetime</li>
+<li>supports nothing else</li>
+</ul>
+<p>for better safety, we could also include the type, but good enough for now</p>
+<p>for better safety, we could limit the dataclass types it knows about, YAGNI</p>
+<h2 id="problem-ignore-empty-value">problem: ignore empty value<span class="headerlink"> <a href="#problem-ignore-empty-value" title="permalink">#</a></span></h2>
+<p>explain why this is needed, with code example: Class vs NewClass</p>
+<p>solution: dataclasses.asdict(dict_factory=...)</p>
+<p>code example, get_hash(class) == get_hash(newclass)</p>
+<h2 id="problem-skip-fields">problem: skip fields<span class="headerlink"> <a href="#problem-skip-fields" title="permalink">#</a></span></h2>
+<p>could do it in json_default</p>
+<p>problem: would be ok for our use case, but would not work for nested dataclasses; if possible, the code should be as generic as possible</p>
+<p>solution: have classes tell us if they want something skipped</p>
+<p>can't do it with asdict():  recursive and we need to intercept and check
+the <code>_hash_exclude_</code> of nested dataclasses; we implement a non-recursive version of asdict();
+this way, json.dumps() does the recursion instead of asdict()</p>
+<p>code example</p>
+<h2 id="conclusion">conclusion<span class="headerlink"> <a href="#conclusion" title="permalink">#</a></span></h2>
+<p>link to the real deal</p>
+<p>decent tradeoff between generality and safety</p>
+<p>something else?</p>
+<p>maybe mention future proofing with version</p>
+<!--
+
+https://stackoverflow.com/questions/5583907/is-the-builtin-hash-method-of-python2-6-stable-across-architectures
+https://stackoverflow.com/questions/27522626/hash-function-in-python-3-3-returns-different-results-between-sessions
+https://stackoverflow.com/questions/46768213/how-to-hash-a-class-or-function-definition
+https://stackoverflow.com/questions/6550660/python-are-hash-values-for-built-in-numeric-types-strings-standardised
+https://stackoverflow.com/questions/45015180/deterministic-recursive-hashing-in-python
+https://stackoverflow.com/questions/5884066/hashing-a-dictionary/8714242#8714242
+https://softwareengineering.stackexchange.com/questions/405243/how-to-perform-consistent-hashing-on-any-python-object-that-works-with-hash
+https://github.com/cloudpipe/cloudpickle/issues/120 Making cloudpickle produce "consistent/deterministic" results.
+
+-->
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>TODO: thanks stackoverflow and the internet <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
+
+
+
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+</footer>
+
+
+</div>
