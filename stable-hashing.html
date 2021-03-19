@@ -29,15 +29,6 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
-<!-- Global site tag (gtag.js) - Google Analytics -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', "G-4RY2QR580X");
-</script>
 
 
 
@@ -58,7 +49,7 @@ window.addEventListener('resize', set_vh);
 <h1>untitled</h1>
 
 <p class="text-gray"><small>
-
+<span>2021-03-19</span>
 </small></p>
 
 </header>
@@ -67,12 +58,11 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<ul>
-<li>in which we see how to calculate a deterministic hash for Python data objects<ul>
-<li>stable across interpreter implementations and versions</li>
-</ul>
-</li>
-</ul>
+<p>... in which we calculate a deterministic hashes for Python data objects,
+stable across interpreter versions and implementations,
+operating systems, and host machines.</p>
+<p>If you're in a hurry,
+you can find the final version of the code <a href="#conclusion">at the end</a>.</p>
 <details>
 <summary>Contents</summary>
 <section class="toc">
@@ -93,8 +83,8 @@ window.addEventListener('resize', set_vh);
 </ul>
 </li>
 <li><a href="#problem-we-need-to-ignore-empty-values">Problem: we need to ignore empty values</a></li>
-<li><a href="#problem-skip-fields">problem: skip fields</a></li>
-<li><a href="#conclusion">conclusion</a></li>
+<li><a href="#problem-we-need-to-skip-some-fields">Problem: we need to skip some fields</a></li>
+<li><a href="#conclusion">Conclusion</a></li>
 </ul>
 </section>
 </details>
@@ -124,7 +114,7 @@ entries are converted to data objects like these
     <span class="n">updated</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">datetime</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">content</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Content</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
 </code></pre></div>
-<p>A naive approach is to getting the stored entry data
+<p>A naive approach is to get the stored entry data
 and compare it with the feed version,
 but that's pretty inefficient.</p>
 <p>The better solution is to use a hash function
@@ -298,10 +288,10 @@ which converts dataclass instances to a dict,
 recursing into other dataclasses, dicts, lists and tuples:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">json_default</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">asdict</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
         <span class="k">pass</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="n">datetime</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">thing</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(</span><span class="n">timespec</span><span class="o">=</span><span class="s1">&#39;microseconds&#39;</span><span class="p">)</span>
     <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;object of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> not serializable&quot;</span><span class="p">)</span>
 </code></pre></div>
@@ -312,7 +302,7 @@ recursing into other dataclasses, dicts, lists and tuples:</p>
 which for our use case is actually fine:
 dataclasses <code>One(value=1)</code> and <code>Two(value=1)</code> will both get converted
 to the dict <code>{'value': 1}</code>, resulting in the same hash.
-If wanted them to be different, we could include the type name:</p>
+If we wanted them to be different, we could include the type name:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="p">{</span><span class="s1">&#39;__type&#39;</span><span class="p">:</span> <span class="nb">type</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="o">**</span><span class="n">asdict</span><span class="p">(</span><span class="n">thing</span><span class="p">)}</span>
 <span class="p">{</span><span class="s1">&#39;__type&#39;</span><span class="p">:</span> <span class="s1">&#39;Content&#39;</span><span class="p">,</span> <span class="s1">&#39;value&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;language&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">}</span>
 </code></pre></div>
@@ -379,7 +369,7 @@ it turns out any function that takes a key-value pair iterable works:</p>
 
 <span class="k">def</span> <span class="nf">json_default</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">asdict</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="n">dict_factory</span><span class="o">=</span><span class="n">dict_drop_empty</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="n">dict_factory</span><span class="o">=</span><span class="n">dict_drop_empty</span><span class="p">)</span>
     <span class="c1"># ...</span>
 </code></pre></div>
 <p>We now get the same hash as for the first version of the object:</p>
@@ -389,8 +379,7 @@ it turns out any function that takes a key-value pair iterable works:</p>
 <span class="go">&#39;5d872de403edb944a7b10450eda2f46a&#39;</span>
 </code></pre></div>
 <p>Note that we are specific about the <em>falsy</em> values we ignore:
-an empty string, list, or dict are empty, but <code>0</code> or <code>False</code> are not
-(this may vary by use case, though).</p>
+an empty string, list, or dict are empty, but <code>0</code> or <code>False</code> are not.</p>
 <section class="admonition tip">
 <div class="admonition-text">
 <p><a href="https://docs.python.org/3/library/collections.abc.html">collections.abc</a> provides abstract base classes
@@ -402,31 +391,196 @@ an empty string, list, or dict are empty, but <code>0</code> or <code>False</cod
  (e.g. set, collections.deque, or even numpy.ndarray).</p>
 </div>
 </section>
-<h2 id="problem-skip-fields">problem: skip fields<span class="headerlink"> <a href="#problem-skip-fields" title="permalink">#</a></span></h2>
-<p>could do it in json_default</p>
-<p>problem: would be ok for our use case, but would not work for nested dataclasses; if possible, the code should be as generic as possible</p>
-<p>solution: have classes tell us if they want something skipped</p>
-<p>can't do it with asdict():  recursive and we need to intercept and check
-the <code>_hash_exclude_</code> of nested dataclasses; we implement a non-recursive version of asdict();
-this way, json.dumps() does the recursion instead of asdict()</p>
-<p>code example</p>
-<h2 id="conclusion">conclusion<span class="headerlink"> <a href="#conclusion" title="permalink">#</a></span></h2>
-<p>link to the real deal</p>
-<p>decent tradeoff between generality and safety</p>
-<p>something else?</p>
-<p>maybe mention future proofing with version</p>
-<!--
+<h2 id="problem-we-need-to-skip-some-fields">Problem: we need to skip some fields<span class="headerlink"> <a href="#problem-we-need-to-skip-some-fields" title="permalink">#</a></span></h2>
+<p>Let's look at a more advanced version of our Entry class:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Entry</span><span class="p">:</span>
+    <span class="n">feed_url</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">updated</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">datetime</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">content</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Content</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+</code></pre></div>
+<p>It the <a href="https://reader.readthedocs.io/en/latest/guide.html#changing-feed-urls">feed URL changes</a>, does the data of the entry change?</p>
+<p>In the context of our problem, both feed_url and id are metadata;
+changing them should not change the hash,
+since the actual data does not change.</p>
+<p>We could deal with this by changing json_default()
+to remove specific keys from the asdict() result.</p>
+<p>However, this moves class-specific logic away from the class and into json_default()
+and forces us to change it whenever we add a new class or
+the list metadata attributes changes;
+passing the list of metadata attributes as an argument to get_hash()
+just moves the problem elsewhere.</p>
+<p>A better way is to allow classes to tell json_default()
+what attributes to remove via a well-known class attribute.</p>
+<p>Neither of these approaches work with asdict() and nested dataclasses,
+since asdict() is recursive, and we only get to look at the top-level class.
+We cannot do anything in dict_factory either,
+since we don't know which class the attribute pairs belong to.</p>
+<p>To work around it, we'll implement a non-recursive version of asdict(),
+and rely on json.dumps() for recursion.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">dataclass_dict</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="nb">type</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;got dataclass type, expected instance&quot;</span><span class="p">)</span>
 
-https://stackoverflow.com/questions/5583907/is-the-builtin-hash-method-of-python2-6-stable-across-architectures
-https://stackoverflow.com/questions/27522626/hash-function-in-python-3-3-returns-different-results-between-sessions
-https://stackoverflow.com/questions/46768213/how-to-hash-a-class-or-function-definition
-https://stackoverflow.com/questions/6550660/python-are-hash-values-for-built-in-numeric-types-strings-standardised
-https://stackoverflow.com/questions/45015180/deterministic-recursive-hashing-in-python
-https://stackoverflow.com/questions/5884066/hashing-a-dictionary/8714242#8714242
-https://softwareengineering.stackexchange.com/questions/405243/how-to-perform-consistent-hashing-on-any-python-object-that-works-with-hash
-https://github.com/cloudpipe/cloudpickle/issues/120 Making cloudpickle produce "consistent/deterministic" results.
+    <span class="n">exclude</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="s1">&#39;_hash_exclude_&#39;</span><span class="p">,</span> <span class="p">())</span>
 
--->
+    <span class="n">rv</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span> <span class="ow">in</span> <span class="n">exclude</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">value</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Collection</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="n">rv</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="k">return</span> <span class="n">rv</span>
+
+<span class="k">def</span> <span class="nf">json_default</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">dataclass_dict</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span>
+    <span class="c1"># ...</span>
+</code></pre></div>
+<section class="admonition note">
+<div class="admonition-text">
+<p>We're using <code>_hash_exclude_</code> (with an underscore at the end) to mimic
+ the <code>__double_underscore__</code> convention Python uses for magic methods;
+ we are <em>not</em> using double underscores because <a href="https://docs.python.org/3/reference/lexical_analysis.html#reserved-classes-of-identifiers">they are reserved</a>.</p>
+</div>
+</section>
+<p>To use it, we just need to set the <code>_hash_exclude_</code> class attribute
+to a tuple of the attributes to exclude from the hash:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Entry</span><span class="p">:</span>
+    <span class="n">feed_url</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">updated</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">datetime</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">content</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Content</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">_hash_exclude_</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;feed_url&#39;</span><span class="p">,</span> <span class="s1">&#39;id&#39;</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">get_hash</span><span class="p">(</span><span class="n">Entry</span><span class="p">(</span><span class="s1">&#39;feed one&#39;</span><span class="p">,</span> <span class="s1">&#39;id&#39;</span><span class="p">,</span> <span class="n">datetime</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)))</span><span class="o">.</span><span class="n">hex</span><span class="p">()</span>
+<span class="go">&#39;4f97b1e8e99d3304f50cd3c4428f224e&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">get_hash</span><span class="p">(</span><span class="n">Entry</span><span class="p">(</span><span class="s1">&#39;feed two&#39;</span><span class="p">,</span> <span class="s1">&#39;id&#39;</span><span class="p">,</span> <span class="n">datetime</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)))</span><span class="o">.</span><span class="n">hex</span><span class="p">()</span>
+<span class="go">&#39;4f97b1e8e99d3304f50cd3c4428f224e&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">get_hash</span><span class="p">(</span><span class="n">Entry</span><span class="p">(</span><span class="s1">&#39;feed one&#39;</span><span class="p">,</span> <span class="s1">&#39;id&#39;</span><span class="p">,</span> <span class="n">datetime</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span><span class="o">.</span><span class="n">hex</span><span class="p">()</span>
+<span class="go">&#39;0c739e158792c5a91ec1632804d905c1&#39;</span>
+</code></pre></div>
+<h2 id="conclusion">Conclusion<span class="headerlink"> <a href="#conclusion" title="permalink">#</a></span></h2>
+<p>By leveraging <a href="https://docs.python.org/3/library/dataclasses.html">dataclasses</a> and the <a href="https://docs.python.org/3/library/json.html">json</a> module,
+we've managed to get stable hashes
+for (almost) arbitrary Python data objects,
+with a decent trade-off between generality and safety,
+and two extra features.</p>
+<details>
+<summary>... all in under 50 lines of code!</summary>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 1</span>
+<span class="normal"> 2</span>
+<span class="normal"> 3</span>
+<span class="normal"> 4</span>
+<span class="normal"> 5</span>
+<span class="normal"> 6</span>
+<span class="normal"> 7</span>
+<span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span>
+<span class="normal">39</span>
+<span class="normal">40</span>
+<span class="normal">41</span>
+<span class="normal">42</span>
+<span class="normal">43</span>
+<span class="normal">44</span>
+<span class="normal">45</span>
+<span class="normal">46</span>
+<span class="normal">47</span>
+<span class="normal">48</span>
+<span class="normal">49</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">hashlib</span>
+<span class="kn">import</span> <span class="nn">dataclasses</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Collection</span>
+
+
+<span class="k">def</span> <span class="nf">get_hash</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">md5</span><span class="p">(</span><span class="n">json_dumps</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">digest</span><span class="p">()</span>
+
+
+<span class="k">def</span> <span class="nf">json_dumps</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
+        <span class="n">thing</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">json_default</span><span class="p">,</span>
+        <span class="n">ensure_ascii</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">sort_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">indent</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">separators</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">,</span> <span class="s1">&#39;:&#39;</span><span class="p">),</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">json_default</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">dataclass_dict</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="n">datetime</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">thing</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(</span><span class="n">timespec</span><span class="o">=</span><span class="s1">&#39;microseconds&#39;</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;object of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> not serializable&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">dataclass_dict</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="nb">type</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;got dataclass type, expected instance&quot;</span><span class="p">)</span>
+
+    <span class="n">exclude</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="s1">&#39;_hash_exclude_&#39;</span><span class="p">,</span> <span class="p">())</span>
+
+    <span class="n">rv</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span> <span class="ow">in</span> <span class="n">exclude</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">value</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Collection</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="n">rv</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="k">return</span> <span class="n">rv</span>
+</code></pre></div>
+</td></tr></table></details>
+<p>If you're interested in using this, also have a look at:</p>
+<ul>
+<li>the <a href="https://github.com/lemon24/reader/blob/1efcd38c78f70dcc4e0d279e0fa2a0276749111e/src/reader/_hash_utils.py">commented, type-annotated version</a>, and</li>
+<li>the <a href="https://github.com/lemon24/reader/blob/1efcd38c78f70dcc4e0d279e0fa2a0276749111e/tests/test_hash_utils.py">test suite</a>.</li>
+</ul>
+<p>As always,
+if you found it useful and would like to see more,
+<a href="about#contact">drop me a line</a> :)</p>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>I found this idea somewhere on Stack Overflow,
@@ -437,6 +591,57 @@ but I can't seem to find that specific post again. <a href="#fnref-1" class="foo
 
 
 
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661"
+    method="post"
+    id="mc-embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 
 
 
