@@ -79,14 +79,14 @@ you can find the final version of the code <a href="#conclusion">at the end</a>.
 <li><a href="#requirements">Requirements</a></li>
 <li><a href="#problem-we-need-a-stable-hash-function">Problem: we need a stable hash function</a>
 <ul>
-<li><a href="#hash">hash()</a></li>
-<li><a href="#hashlib">hashlib</a></li>
+<li><a href="#hash-not-stable-too-restrictive">hash(): not stable, too restrictive</a></li>
+<li><a href="#hashlib-still-restrictive">hashlib: still restrictive</a></li>
 </ul>
 </li>
 <li><a href="#problem-we-need-a-deterministic-way-of-serializing-objects">Problem: we need a deterministic way of serializing objects</a>
 <ul>
-<li><a href="#pickle">pickle</a></li>
-<li><a href="#str-and-repr">str() and repr()</a></li>
+<li><a href="#pickle-not-stable">pickle: not stable</a></li>
+<li><a href="#str-and-repr-not-stable-not-safe">str() and repr(): not stable, not safe</a></li>
 <li><a href="#json">json</a></li>
 </ul>
 </li>
@@ -100,14 +100,14 @@ you can find the final version of the code <a href="#conclusion">at the end</a>.
 <p>Let's say you have a <a href="https://github.com/lemon24/reader">feed reader library</a>;
 one of its main features is retrieving and storing <a href="https://en.wikipedia.org/wiki/Web_feed">web feeds</a>
 (Atom, RSS, and so on).</p>
-<p>Entries (articles) usually have an <em>updated</em> date,
+<p>Entries (articles) usually have an <code>updated</code> date,
 indicating the last time the entry was modified in a significant way.
-An entry is updated only if its <em>updated</em> date in the feed
+An entry is updated only if its <code>updated</code> in the feed
 is newer than the one we have stored for it.</p>
 <p>However, you notice the content of some entries changes
-without <em>updated</em> changing,
-so you decide to update entries whenever the content changes,
-regardless of <em>updated</em>.</p>
+without <code>updated</code> changing,
+so you decide to update entries whenever they change,
+regardless of <code>updated</code>.</p>
 <p>After the feed is retrieved,
 entries are converted to data objects like these
 (the real ones have <a href="https://github.com/lemon24/reader/blob/d2aaf418f8c4d45a97cabaa7eb76498239d0503b/src/reader/_types.py#L97-L114">more attributes</a>, though):</p>
@@ -125,7 +125,7 @@ entries are converted to data objects like these
 <p>A naive approach is to get the stored entry data
 and compare it with the feed version,
 but that's pretty inefficient.</p>
-<p>The better solution is to use a hash function
+<p>A better solution is to use a hash function
 – a way to map data of arbitrary size (the message)
 to a fixed-size chunk of data (the hash value),
 such that:</p>
@@ -134,13 +134,13 @@ such that:</p>
 <li>the same message always results in the same hash</li>
 <li>it is extremely unlikely two slightly different messages have the same hash</li>
 </ul>
-<p>Then, instead of getting the full entry data,
+<p>Then, instead of getting the full entry data from storage,
 we just get its (previously computed) hash,
-and compare it with the hash of the feed version.</p>
+and compare it with the hash of the one we just retrieved.</p>
 <section class="admonition note">
 <div class="admonition-text">
 <p><a href="https://en.wikipedia.org/wiki/Cryptographic_hash_function">Cryptographic hash functions</a> have more properties,
- but we don't need them.</p>
+ but the three listed above are everything we need.</p>
 </div>
 </section>
 <h2 id="requirements">Requirements<span class="headerlink"> <a href="#requirements" title="permalink">#</a></span></h2>
@@ -155,8 +155,15 @@ and compare it with the hash of the feed version.</p>
 <li>ignores &quot;empty&quot; values, to allow adding new fields without the hash changing</li>
 <li>can skip some of the fields (I actually realized this is needed much later)</li>
 </ol>
+<p>Because I'm using it in an existing library, I have some additional requirements:</p>
+<ol start="6">
+<li>it should not have other dependencies outside the standard library,
+ since any extra dependency gets passed down to the users</li>
+<li>it should be minimally invasive to existing code</li>
+<li>it should work with static typing</li>
+</ol>
 <h2 id="problem-we-need-a-stable-hash-function">Problem: we need a stable hash function<span class="headerlink"> <a href="#problem-we-need-a-stable-hash-function" title="permalink">#</a></span></h2>
-<h3 id="hash">hash()<span class="headerlink"> <a href="#hash" title="permalink">#</a></span></h3>
+<h3 id="hash-not-stable-too-restrictive">hash(): not stable, too restrictive<span class="headerlink"> <a href="#hash-not-stable-too-restrictive" title="permalink">#</a></span></h3>
 <p>An easy solution seems to be the built-in <a href="https://docs.python.org/3/library/functions.html#hash">hash()</a> function,
 which returns the integer hash of an object.
 However, it has a couple of issues.</p>
@@ -171,8 +178,8 @@ so they're not predictable between Python processes:</p>
 <p>Also, hash() only supports <a href="https://docs.python.org/3/glossary.html#term-hashable">hashable</a> objects;
 this means no lists, dicts, or non-<a href="https://docs.python.org/3/library/dataclasses.html#frozen-instances">frozen</a> dataclasses.
 For my specific use case, this wasn't actually a problem, but
-it already puts huge constraints on how arbitrary the data objects can be.</p>
-<h3 id="hashlib">hashlib<span class="headerlink"> <a href="#hashlib" title="permalink">#</a></span></h3>
+it already puts huge constraints on how arbitrary the input can be.</p>
+<h3 id="hashlib-still-restrictive">hashlib: still restrictive<span class="headerlink"> <a href="#hashlib-still-restrictive" title="permalink">#</a></span></h3>
 <p><a href="https://docs.python.org/3/library/hashlib.html">hashlib</a> contains many different secure hash algorithms,
 which are by definition deterministic.</p>
 <p>But it has one big problem – it only takes bytes:</p>
@@ -188,15 +195,15 @@ which are by definition deterministic.</p>
 <span class="gr">TypeError</span>: <span class="n">object supporting the buffer API required</span>
 </code></pre></div>
 <p>This is something we can work with, though: it changes our problem
-from &quot;we need a stable hash function&quot;
-to &quot;we need a deterministic way of serializing objects to bytes&quot;.</p>
+from <em>we need a stable hash function</em>
+to <em>we need a deterministic way of serializing objects to bytes</em>.</p>
 <h2 id="problem-we-need-a-deterministic-way-of-serializing-objects">Problem: we need a deterministic way of serializing objects<span class="headerlink"> <a href="#problem-we-need-a-deterministic-way-of-serializing-objects" title="permalink">#</a></span></h2>
-<h3 id="pickle">pickle<span class="headerlink"> <a href="#pickle" title="permalink">#</a></span></h3>
+<h3 id="pickle-not-stable">pickle: not stable<span class="headerlink"> <a href="#pickle-not-stable" title="permalink">#</a></span></h3>
 <p><a href="https://docs.python.org/3/library/pickle.html">pickle</a> can turn most Python objects into bytes.</p>
 <p>It does have multiple protocols,
 and the default one can change with the Python version;
 but we can select one and stick with it –
-version 4 was added in Python 3.4, and seems good enough.</p>
+we'll use version 4, added in Python 3.4.</p>
 <p>Again, the easy solution is deceiving, since it seems to work:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="k">function</span> pickle <span class="o">{</span>
 <span class="gp">$</span><span class="m">1</span> &lt;&lt;EOD
@@ -235,7 +242,7 @@ But what's to say it'll remain that way?</p>
 it guarantees you'll get the same object back after unpickling,
 not that you'll get the same binary stream after pickling.</p>
 <p>And it's easy to explain why: pickles are actually <em>programs</em>.
-Some relevant comments from <a href="https://github.com/python/cpython/blob/3.9/Lib/pickletools.py">pickletools</a>:</p>
+Some relevant and quite interesting comments from <a href="https://github.com/python/cpython/blob/3.9/Lib/pickletools.py">pickletools</a>:</p>
 <blockquote>
 <p>&quot;A pickle&quot; is a program for a virtual pickle machine (PM, but more accurately
 called an unpickling machine). It's a sequence of opcodes, interpreted by the
@@ -254,8 +261,8 @@ get invented. The repertoire of the PM just keeps growing over time.</p>
 </blockquote>
 <p>This means there can be multiple pickles
 that unpickle to the same object<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
-even within the bounds of a specific protocol.</p>
-<h3 id="str-and-repr">str() and repr()<span class="headerlink"> <a href="#str-and-repr" title="permalink">#</a></span></h3>
+even within the bounds of a specific protocol version.</p>
+<h3 id="str-and-repr-not-stable-not-safe">str() and repr(): not stable, not safe<span class="headerlink"> <a href="#str-and-repr-not-stable-not-safe" title="permalink">#</a></span></h3>
 <p><a href="https://docs.python.org/3/library/functions.html#func-str">str()</a> and <a href="https://docs.python.org/3/library/functions.html#repr">repr()</a> might seem like valid solutions,
 but neither of them are.</p>
 <p>First, they're not stable, and not guaranteed
@@ -274,15 +281,16 @@ even some that we would not want to serialize at all:</p>
 <span class="go">Content(value=&lt;function &lt;lambda&gt; at 0x7f993e96ec10&gt;, language=None)</span>
 </code></pre></div>
 <h3 id="json">json<span class="headerlink"> <a href="#json" title="permalink">#</a></span></h3>
-<p><a href="https://docs.python.org/3/library/json.html">json</a> might be what we need;
-even the pickle documentation seems to recommend it,
+<p><a href="https://docs.python.org/3/library/json.html">json</a> might be just what we need;
+even the pickle documentation recommends it,
 although for <a href="https://docs.python.org/3/library/pickle.html#comparison-with-json">different reasons</a>.</p>
 <p>Compared to the previous solutions, json has the opposite problem:
 it <a href="https://docs.python.org/3/library/json.html#json.JSONEncoder">only supports</a> dicts (with string/number keys only),
-lists, strings, and a few others.</p>
-<p>But we can turn this to our advantage
-by converting <em>only</em> the stuff we want to support to a JSON-encodable form,
-and the json module makes this really easy; let's start with datetimes:</p>
+lists, strings, and a few other basic types.</p>
+<p>But that's not that big of an issue as you may think,
+since the json module makes it really easy to support other types:
+we just have to convert them to something it already understands.</p>
+<p>Let's start with datetimes:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">json_default</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="n">datetime</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">thing</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(</span><span class="n">timespec</span><span class="o">=</span><span class="s1">&#39;microseconds&#39;</span><span class="p">)</span>
@@ -291,9 +299,9 @@ and the json module makes this really easy; let's start with datetimes:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">datetime</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="n">json_default</span><span class="p">)</span>
 <span class="go">&#39;&quot;0001-01-01T00:00:00.000000&quot;&#39;</span>
 </code></pre></div>
-<p>Dataclasses aren't much harder to add, thanks to <a href="https://docs.python.org/3/library/dataclasses.html#dataclasses.asdict">asdict()</a>,
-which converts dataclass instances to a dict,
-recursing into other dataclasses, dicts, lists and tuples:</p>
+<p>Dataclasses aren't much harder to add either, thanks to <a href="https://docs.python.org/3/library/dataclasses.html#dataclasses.asdict">asdict()</a>,
+which converts them to dicts and recurses into any nested dataclasses,
+dicts, lists and tuples along the way:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">json_default</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span>
@@ -310,13 +318,13 @@ recursing into other dataclasses, dicts, lists and tuples:</p>
 which for our use case is actually fine:
 dataclasses <code>One(value=1)</code> and <code>Two(value=1)</code> will both get converted
 to the dict <code>{'value': 1}</code>, resulting in the same hash.
-If we wanted them to be different, we could include the type name:</p>
+To make them different, we can include the type name:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="p">{</span><span class="s1">&#39;__type&#39;</span><span class="p">:</span> <span class="nb">type</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="o">**</span><span class="n">asdict</span><span class="p">(</span><span class="n">thing</span><span class="p">)}</span>
 <span class="p">{</span><span class="s1">&#39;__type&#39;</span><span class="p">:</span> <span class="s1">&#39;Content&#39;</span><span class="p">,</span> <span class="s1">&#39;value&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;language&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">}</span>
 </code></pre></div>
 <p>To ensure the output remains stable across Python versions,
 we'll force all of the <a href="https://docs.python.org/3/library/json.html#json.dumps">dumps()</a> default arguments to known values,
-and require it to sort the keys in dicts:</p>
+and require it to sort dict keys:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">json_dumps</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
         <span class="n">thing</span><span class="p">,</span>
@@ -360,7 +368,7 @@ Likewise, there's not much of a difference
 in actual information between <code>None</code> and <code>[]</code>
 (for our use case, at least).</p>
 <p>We can ignore &quot;empty&quot; values quite easily
-by using the asdict() dict_factory argument.
+by using the asdict() <code>dict_factory</code> argument.
 I overlooked it initially, thinking it has to be a mapping class;
 it turns out any function that takes a key-value pair iterable works:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Collection</span>
@@ -391,12 +399,13 @@ an empty string, list, or dict are empty, but <code>0</code> or <code>False</cod
 <section class="admonition tip">
 <div class="admonition-text">
 <p><a href="https://docs.python.org/3/library/collections.abc.html">collections.abc</a> provides abstract base classes
- that can be used to test whether a class provides a particular interface.</p>
-<p><code>isinstance(v, (str, tuple, list, dict))</code>
- might cover all our needs in the code above, but
- <code>isinstance(v, Collection)</code> checks for other collections
- we may failed to think about that don't inherit from them
- (e.g. set, collections.deque, or even numpy.ndarray).</p>
+ that can be used to test whether a class provides a particular interface,
+ without requiring it to subclass anything.</p>
+<p><code>isinstance(v, (str, tuple, list, dict))</code> works in our example,
+ but <code>isinstance(v, Collection)</code> checks for other collections
+ we may have failed to think about that don't inherit from them;
+ for example: <a href="https://docs.python.org/3/library/stdtypes.html#set-types-set-frozenset">sets</a>, <a href="https://docs.python.org/3/library/collections.html#collections.deque">deques</a>, <a href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html">numpy arrays</a>,
+ and even ones that don't exist yet.</p>
 </div>
 </section>
 <h2 id="problem-we-need-to-skip-some-fields">Problem: we need to skip some fields<span class="headerlink"> <a href="#problem-we-need-to-skip-some-fields" title="permalink">#</a></span></h2>
@@ -408,25 +417,26 @@ an empty string, list, or dict are empty, but <code>0</code> or <code>False</cod
     <span class="n">updated</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">datetime</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">content</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Content</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
 </code></pre></div>
-<p>It the <a href="https://reader.readthedocs.io/en/latest/guide.html#changing-feed-urls">feed URL changes</a>, does the data of the entry change?</p>
-<p>In the context of our problem, both feed_url and id are metadata;
+<p>It the <a href="https://reader.readthedocs.io/en/latest/guide.html#changing-feed-urls">feed URL changes</a>, does the data of the entry change?
+That is, would we want to update the entry next time we retrieve it?</p>
+<p>No, in our context, both <code>feed_url</code> and <code>id</code> are <em>metadata;</em>
 changing them should not change the hash,
 since the actual data does not change.</p>
-<p>We could deal with this by changing json_default()
+<p>We could deal with it by changing json_default()
 to remove specific keys from the asdict() result.</p>
-<p>However, this moves class-specific logic away from the class and into json_default()
-and forces us to change it whenever we add a new class or
-the list metadata attributes changes;
-passing the list of metadata attributes as an argument to get_hash()
-just moves the problem elsewhere.</p>
+<p>However, this moves class-specific logic away from the class,
+and into json_default(),
+which forces us to change it whenever we add a new class, or
+the list of metadata attributes changes.
+Passing the list as an argument to get_hash() just moves the problem elsewhere.</p>
 <p>A better way is to allow classes to tell json_default()
 what attributes to remove via a well-known class attribute.</p>
 <p>Neither of these approaches work with asdict() and nested dataclasses,
 since asdict() is recursive, and we only get to look at the top-level class.
-We cannot do anything in dict_factory either,
+We cannot do anything in <code>dict_factory</code> either,
 since we don't know which class the attribute pairs belong to.</p>
 <p>To work around it, we'll implement a non-recursive version of asdict(),
-and rely on json.dumps() for recursion.</p>
+and rely on json.dumps() for recursion (it's cool like that):</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">dataclass_dict</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
     <span class="n">fields</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="nb">type</span><span class="p">):</span>
@@ -454,11 +464,11 @@ and rely on json.dumps() for recursion.</p>
 <div class="admonition-text">
 <p>We're using <code>_hash_exclude_</code> (with an underscore at the end) to mimic
  the <code>__double_underscore__</code> convention Python uses for magic methods;
- we are <em>not</em> using double underscores because <a href="https://docs.python.org/3/reference/lexical_analysis.html#reserved-classes-of-identifiers">they are reserved</a>.</p>
+ we are <em>not</em> using double underscores because <a href="https://docs.python.org/3/reference/lexical_analysis.html#reserved-classes-of-identifiers">they are reserved</a> by Python.</p>
 </div>
 </section>
-<p>To use it, we just need to set the <code>_hash_exclude_</code> class attribute
-to a tuple of the attributes to exclude from the hash:</p>
+<p>To exclude some fields from the hash,
+we just need to set <code>_hash_exclude_</code> to a tuple containing their names:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">Entry</span><span class="p">:</span>
     <span class="n">feed_url</span><span class="p">:</span> <span class="nb">str</span>
@@ -476,18 +486,20 @@ to a tuple of the attributes to exclude from the hash:</p>
 </code></pre></div>
 <h2 id="conclusion">Conclusion<span class="headerlink"> <a href="#conclusion" title="permalink">#</a></span></h2>
 <p>By leveraging <a href="https://docs.python.org/3/library/dataclasses.html">dataclasses</a> and the <a href="https://docs.python.org/3/library/json.html">json</a> module,
-we've managed to get stable hashes
+we've managed to get stable, deterministic hashes
 for (almost) arbitrary Python data objects,
 with a decent trade-off between generality and safety,
-and two extra features,
-all in under 50 lines of code!</p>
-<p>If you're interested in using this, also have a look at:</p>
+and two additional features,
+<em>all in under 50 lines of code!</em></p>
+<p>It's true that the solution is pretty specific to my use case,
+but with this little code, it should be trivial to adapt to something else.</p>
+<p>If you're interested in using it, have a look at:</p>
 <ul>
-<li>the <a href="https://github.com/lemon24/reader/blob/1efcd38c78f70dcc4e0d279e0fa2a0276749111e/src/reader/_hash_utils.py">commented, type-annotated version</a>, and</li>
+<li>the <a href="https://github.com/lemon24/reader/blob/1efcd38c78f70dcc4e0d279e0fa2a0276749111e/src/reader/_hash_utils.py">commented, type-annotated code</a>, and</li>
 <li>the <a href="https://github.com/lemon24/reader/blob/1efcd38c78f70dcc4e0d279e0fa2a0276749111e/tests/test_hash_utils.py">test suite</a>.</li>
 </ul>
 <p>As always,
-if you found it useful and would like to see more,
+if you found this useful and would like to see more,
 <a href="about#contact">drop me a line</a> :)</p>
 <section class="footnotes">
 <ol>
