@@ -77,7 +77,7 @@ window.addEventListener('resize', set_vh);
 <summary>Contents</summary>
 <section class="toc">
 <ul>
-<li><a href="#the-real-world-problem">The real-world problem</a></li>
+<li><a href="#why-is-this-useful">Why is this useful?</a></li>
 <li><a href="#requirements">Requirements</a></li>
 <li><a href="#problem-we-need-a-stable-hash-function">Problem: we need a stable hash function</a>
 <ul>
@@ -92,13 +92,13 @@ window.addEventListener('resize', set_vh);
 <li><a href="#json">json</a></li>
 </ul>
 </li>
-<li><a href="#problem-ignore-empty-value">problem: ignore empty value</a></li>
+<li><a href="#problem-we-need-to-ignore-empty-values">Problem: we need to ignore empty values</a></li>
 <li><a href="#problem-skip-fields">problem: skip fields</a></li>
 <li><a href="#conclusion">conclusion</a></li>
 </ul>
 </section>
 </details>
-<h2 id="the-real-world-problem">The real-world problem<span class="headerlink"> <a href="#the-real-world-problem" title="permalink">#</a></span></h2>
+<h2 id="why-is-this-useful">Why is this useful?<span class="headerlink"> <a href="#why-is-this-useful" title="permalink">#</a></span></h2>
 <p>Let's say you have a <a href="https://github.com/lemon24/reader">feed reader library</a>;
 one of its main features is to retrieve and store <a href="https://en.wikipedia.org/wiki/Web_feed">web feeds</a>
 (Atom, RSS, and so on).</p>
@@ -336,10 +336,73 @@ and require it to sort the keys in dicts:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">get_hash</span><span class="p">(</span><span class="n">Entry</span><span class="p">(</span><span class="s1">&#39;id&#39;</span><span class="p">,</span> <span class="n">datetime</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">content</span><span class="o">=</span><span class="p">[</span><span class="n">Content</span><span class="p">(</span><span class="s1">&#39;value&#39;</span><span class="p">)]))</span><span class="o">.</span><span class="n">hex</span><span class="p">()</span>
 <span class="go">&#39;78b4b8120af5f832b7ecfc34db1fe02b&#39;</span>
 </code></pre></div>
-<h2 id="problem-ignore-empty-value">problem: ignore empty value<span class="headerlink"> <a href="#problem-ignore-empty-value" title="permalink">#</a></span></h2>
-<p>explain why this is needed, with code example: Class vs NewClass</p>
-<p>solution: dataclasses.asdict(dict_factory=...)</p>
-<p>code example, get_hash(class) == get_hash(newclass)</p>
+<h2 id="problem-we-need-to-ignore-empty-values">Problem: we need to ignore empty values<span class="headerlink"> <a href="#problem-we-need-to-ignore-empty-values" title="permalink">#</a></span></h2>
+<p>Say we have a dataclass like the following:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nd">@dataclass</span>
+<span class="gp">... </span><span class="k">class</span> <span class="nc">Data</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">value</span><span class="p">:</span> <span class="nb">int</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">get_hash</span><span class="p">(</span><span class="n">Data</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span><span class="o">.</span><span class="n">hex</span><span class="p">()</span>
+<span class="go">&#39;5d872de403edb944a7b10450eda2f46a&#39;</span>
+</code></pre></div>
+<p>Which in time evolves to get another attribute:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nd">@dataclass</span>
+<span class="gp">... </span><span class="k">class</span> <span class="nc">Data</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">value</span><span class="p">:</span> <span class="nb">int</span>
+<span class="gp">... </span>    <span class="n">another</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">get_hash</span><span class="p">(</span><span class="n">Data</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span><span class="o">.</span><span class="n">hex</span><span class="p">()</span>
+<span class="go">&#39;e54ad2c961239bd70da9a603cd078e18&#39;</span>
+</code></pre></div>
+<p>The old and new versions result in different dicts,
+so they have different hashes.</p>
+<p>But should they?
+The only &quot;real&quot; data <code>Data(2)</code> contains is <code>value=2</code>.
+Likewise, there's not much of a difference
+in actual information between <code>None</code> and <code>[]</code>
+(for our use case, at least).</p>
+<p>We can ignore &quot;empty&quot; values quite easily
+by using the asdict() dict_factory argument.
+I overlooked it initially, thinking it has to be a mapping class;
+it turns out any function that takes a key-value pair iterable works:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Collection</span>
+
+<span class="k">def</span> <span class="nf">dict_drop_empty</span><span class="p">(</span><span class="n">pairs</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+        <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">pairs</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span>
+            <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">or</span> <span class="ow">not</span> <span class="n">v</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">Collection</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">json_default</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">asdict</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="n">dict_factory</span><span class="o">=</span><span class="n">dict_drop_empty</span><span class="p">)</span>
+    <span class="c1"># ...</span>
+</code></pre></div>
+<p>We now get the same hash as for the first version of the object:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">Data</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="go">Data(value=2, another=None)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">get_hash</span><span class="p">(</span><span class="n">Data</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span><span class="o">.</span><span class="n">hex</span><span class="p">()</span>
+<span class="go">&#39;5d872de403edb944a7b10450eda2f46a&#39;</span>
+</code></pre></div>
+<p>Note that we are specific about the <em>falsy</em> values we ignore:
+an empty string, list, or dict are empty, but <code>0</code> or <code>False</code> are not
+(this may vary by use case, though).</p>
+<section class="admonition tip">
+<div class="admonition-text">
+<p><a href="https://docs.python.org/3/library/collections.abc.html">collections.abc</a> provides abstract base classes
+ that can be used to test whether a class provides a particular interface,
+ without requiring it to inherit from a specific base class.</p>
+<p><code>isinstance(v, (str, tuple, list, dict))</code>
+ might cover all our needs in the code above, but
+ <code>isinstance(v, Collection)</code> checks for other collections
+ we may failed to think about and that don't inherit from them
+ (e.g. set, collections.deque, or even numpy.ndarray).</p>
+</div>
+</section>
 <h2 id="problem-skip-fields">problem: skip fields<span class="headerlink"> <a href="#problem-skip-fields" title="permalink">#</a></span></h2>
 <p>could do it in json_default</p>
 <p>problem: would be ok for our use case, but would not work for nested dataclasses; if possible, the code should be as generic as possible</p>
