@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 <ul>
 <li><a href="#the-real-world-problem">The real-world problem</a></li>
 <li><a href="#requirements">Requirements</a></li>
-<li><a href="#problem-we-need-a-deterministic-hash-function">Problem: we need a deterministic hash function</a>
+<li><a href="#problem-we-need-a-stable-hash-function">Problem: we need a stable hash function</a>
 <ul>
 <li><a href="#hash">hash()</a></li>
 <li><a href="#hashlib">hashlib</a></li>
@@ -88,8 +88,8 @@ window.addEventListener('resize', set_vh);
 <li><a href="#problem-we-need-a-deterministic-way-of-serializing-objects">Problem: we need a deterministic way of serializing objects</a>
 <ul>
 <li><a href="#pickle">pickle</a></li>
-<li><a href="#bad-solution-str-and-repr">bad solution: str() and repr()</a></li>
-<li><a href="#better-solution-json">better solution: json</a></li>
+<li><a href="#str-and-repr">str() and repr()</a></li>
+<li><a href="#json">json</a></li>
 </ul>
 </li>
 <li><a href="#problem-ignore-empty-value">problem: ignore empty value</a></li>
@@ -157,13 +157,14 @@ and compare it with the hash of the feed version.</p>
 <li>ignores &quot;empty&quot; values, to allow adding new fields without the hash changing</li>
 <li>can skip some of the fields (I actually realized this is needed much later)</li>
 </ol>
-<h2 id="problem-we-need-a-deterministic-hash-function">Problem: we need a deterministic hash function<span class="headerlink"> <a href="#problem-we-need-a-deterministic-hash-function" title="permalink">#</a></span></h2>
+<h2 id="problem-we-need-a-stable-hash-function">Problem: we need a stable hash function<span class="headerlink"> <a href="#problem-we-need-a-stable-hash-function" title="permalink">#</a></span></h2>
 <h3 id="hash">hash()<span class="headerlink"> <a href="#hash" title="permalink">#</a></span></h3>
 <p>An easy solution seems to be the built-in <a href="https://docs.python.org/3/library/functions.html#hash">hash()</a> function,
 which returns the integer hash of an object.
 However, it has a couple of issues:</p>
-<p>By default, the hashes of str and bytes objects are randomized,
-so they're not predictable between Python processes (<a href="https://docs.python.org/3/reference/datamodel.html#object.__hash__">details</a>):</p>
+<p>By default, the hashes of str and bytes objects
+are randomized for security reasons (<a href="https://docs.python.org/3/reference/datamodel.html#object.__hash__">details</a>, second note),
+so they're not predictable between Python processes:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python3 -c <span class="s1">&#39;print(hash(&quot;abc&quot;))&#39;</span>
 <span class="go">-4743820898567001518</span>
 <span class="gp">$ </span>python3 -c <span class="s1">&#39;print(hash(&quot;abc&quot;))&#39;</span>
@@ -189,14 +190,14 @@ which are by definition deterministic.</p>
 <span class="gr">TypeError</span>: <span class="n">object supporting the buffer API required</span>
 </code></pre></div>
 <p>This is something we can work with, though: it changes our problem
-from &quot;we need a deterministic hash function&quot;
+from &quot;we need a stable hash function&quot;
 to &quot;we need a deterministic way of serializing objects to bytes&quot;.</p>
 <h2 id="problem-we-need-a-deterministic-way-of-serializing-objects">Problem: we need a deterministic way of serializing objects<span class="headerlink"> <a href="#problem-we-need-a-deterministic-way-of-serializing-objects" title="permalink">#</a></span></h2>
 <h3 id="pickle">pickle<span class="headerlink"> <a href="#pickle" title="permalink">#</a></span></h3>
 <p><a href="https://docs.python.org/3/library/pickle.html">pickle</a> can turn most Python objects into bytes.</p>
 <p>It does have multiple protocols,
-and the default one can change with the Python version,
-but we can select one and stick with it;
+and the default one can change with the Python version;
+but we can select one and stick with it –
 version 4 was added in Python 3.4, and seems good enough.</p>
 <p>Again, the easy solution is deceiving, since it seems to work:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="k">function</span> pickle <span class="o">{</span>
@@ -245,7 +246,7 @@ PM, building an arbitrarily complex Python object.</p>
 <blockquote>
 <p>Historically, many enhancements
 have been made to the pickle protocol in order to do a better (faster,
-and/or more compact) job on those
+and/or more compact) job on
 [builtin scalar and container types, like ints and tuples].</p>
 </blockquote>
 <blockquote>
@@ -256,26 +257,85 @@ get invented. The repertoire of the PM just keeps growing over time.</p>
 <p>This means there can be multiple pickles
 that unpickle to the same object<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
 even within the bounds of a specific protocol.</p>
-<h3 id="bad-solution-str-and-repr">bad solution: str() and repr()<span class="headerlink"> <a href="#bad-solution-str-and-repr" title="permalink">#</a></span></h3>
-<ul>
-<li>unsafe – everything has a str() or repr(), they are not always good</li>
-<li>not guaranteed to have all of the content</li>
-<li>in reality, I skipped directly to pickle</li>
-</ul>
-<h3 id="better-solution-json">better solution: json<span class="headerlink"> <a href="#better-solution-json" title="permalink">#</a></span></h3>
-<ul>
-<li>problem: by default it only supports dicts, lists, etc.; no datetime, no user-defined classes</li>
-<li>solution: json.dumps(deafult=...), dataclasses.asdict()</li>
-</ul>
-<p>example code, interactive session</p>
-<p>safety:</p>
-<ul>
-<li>supports dataclasses (which already declare &quot;these are the data attribetus); we coudl use <code>__dict__</code>, but it might pick up other stuff</li>
-<li>supports datetime</li>
-<li>supports nothing else</li>
-</ul>
-<p>for better safety, we could also include the type, but good enough for now</p>
-<p>for better safety, we could limit the dataclass types it knows about, YAGNI</p>
+<h3 id="str-and-repr">str() and repr()<span class="headerlink"> <a href="#str-and-repr" title="permalink">#</a></span></h3>
+<p><a href="https://docs.python.org/3/library/functions.html#func-str">str()</a> and <a href="https://docs.python.org/3/library/functions.html#repr">repr()</a> might seem like valid solutions,
+but neither of them are.</p>
+<p>First, they're not stable, and not guaranteed
+to have all the information we may care about:</p>
+<blockquote>
+<p><code>str(object)</code> returns <code>object.__str__()</code>, which is the &quot;informal&quot; or nicely printable string representation of object. [...] If object does not have a <code>__str__()</code> method, then <code>str()</code> falls back to returning <code>repr(object)</code>.</p>
+</blockquote>
+<blockquote>
+<p>For many types, [<code>repr()</code>] makes an attempt to return a string that would yield an object with the same value when passed to <code>eval()</code>, otherwise the representation is a string enclosed in angle brackets that contains the name of the type of the object together with additional information often including the name and address of the object.</p>
+</blockquote>
+<p>More importantly, they're not safe – <em>all</em> Python objects have them,
+even some that we would not want to serialize at all:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">Content</span><span class="p">(</span><span class="nb">object</span><span class="p">())</span>
+<span class="go">Content(value=&lt;object object at 0x7f993cd5ff40&gt;, language=None)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Content</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="mi">1</span><span class="p">)</span>
+<span class="go">Content(value=&lt;function &lt;lambda&gt; at 0x7f993e96ec10&gt;, language=None)</span>
+</code></pre></div>
+<h3 id="json">json<span class="headerlink"> <a href="#json" title="permalink">#</a></span></h3>
+<p><a href="https://docs.python.org/3/library/json.html">json</a> might be what we need;
+even the pickle documentation seems to recommend it,
+although for <a href="https://docs.python.org/3/library/pickle.html#comparison-with-json">different reasons</a>.</p>
+<p>Compared to the previous solutions, json has the opposite problem:
+it <a href="https://docs.python.org/3/library/json.html#json.JSONEncoder">only supports</a> dicts (with string/number keys only),
+lists, strings, and a few others.</p>
+<p>But we can turn this to our advantage
+by converting <em>only</em> the stuff we want to support to a JSON-encodable form,
+and the json module makes this really easy; let's start with datetimes:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">json_default</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="n">datetime</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">thing</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(</span><span class="n">timespec</span><span class="o">=</span><span class="s1">&#39;microseconds&#39;</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;object of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> not serializable&quot;</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">datetime</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="n">json_default</span><span class="p">)</span>
+<span class="go">&#39;&quot;0001-01-01T00:00:00.000000&quot;&#39;</span>
+</code></pre></div>
+<p>Dataclasses aren't much harder to add, thanks to <a href="https://docs.python.org/3/library/dataclasses.html#dataclasses.asdict">asdict()</a>,
+which converts dataclass instances to a dict,
+recursing into other dataclasses, dicts, lists and tuples:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">json_default</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">asdict</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="n">datetime</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">thing</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(</span><span class="n">timespec</span><span class="o">=</span><span class="s1">&#39;microseconds&#39;</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;object of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> not serializable&quot;</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">Entry</span><span class="p">(</span><span class="s1">&#39;id&#39;</span><span class="p">,</span> <span class="n">datetime</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">content</span><span class="o">=</span><span class="p">[</span><span class="n">Content</span><span class="p">(</span><span class="s1">&#39;value&#39;</span><span class="p">)]),</span> <span class="n">default</span><span class="o">=</span><span class="n">json_default</span><span class="p">)</span>
+<span class="go">&#39;{&quot;id&quot;: &quot;id&quot;, &quot;updated&quot;: &quot;0001-01-01T00:00:00.000000&quot;, &quot;content&quot;: [{&quot;value&quot;: &quot;value&quot;, &quot;language&quot;: null}]}&#39;</span>
+</code></pre></div>
+<p>You may notice the dataclass type does not appear in the result,
+which for our use case is actually fine:
+dataclasses <code>One(value=1)</code> and <code>Two(value=1)</code> will both get converted
+to the dict <code>{'value': 1}</code>, resulting in the same hash.
+If wanted them to be different, we could include the type name:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="p">{</span><span class="s1">&#39;__type&#39;</span><span class="p">:</span> <span class="nb">type</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="o">**</span><span class="n">asdict</span><span class="p">(</span><span class="n">thing</span><span class="p">)}</span>
+<span class="p">{</span><span class="s1">&#39;__type&#39;</span><span class="p">:</span> <span class="s1">&#39;Content&#39;</span><span class="p">,</span> <span class="s1">&#39;value&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;language&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">}</span>
+</code></pre></div>
+<p>To ensure the output remains stable across Python versions,
+we'll force all of the <a href="https://docs.python.org/3/library/json.html#json.dumps">dumps()</a> default arguments to known values,
+and require it to sort the keys in dicts:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">json_dumps</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
+        <span class="n">thing</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">json_default</span><span class="p">,</span>
+        <span class="n">ensure_ascii</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">sort_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">indent</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">separators</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">,</span> <span class="s1">&#39;:&#39;</span><span class="p">),</span>
+    <span class="p">)</span>
+</code></pre></div>
+<p>One more wrapper to hash the serialized value, and we're done:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">get_hash</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">md5</span><span class="p">(</span><span class="n">json_dumps</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">digest</span><span class="p">()</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">get_hash</span><span class="p">(</span><span class="n">Entry</span><span class="p">(</span><span class="s1">&#39;id&#39;</span><span class="p">,</span> <span class="n">datetime</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">content</span><span class="o">=</span><span class="p">[</span><span class="n">Content</span><span class="p">(</span><span class="s1">&#39;value&#39;</span><span class="p">)]))</span><span class="o">.</span><span class="n">hex</span><span class="p">()</span>
+<span class="go">&#39;78b4b8120af5f832b7ecfc34db1fe02b&#39;</span>
+</code></pre></div>
 <h2 id="problem-ignore-empty-value">problem: ignore empty value<span class="headerlink"> <a href="#problem-ignore-empty-value" title="permalink">#</a></span></h2>
 <p>explain why this is needed, with code example: Class vs NewClass</p>
 <p>solution: dataclasses.asdict(dict_factory=...)</p>
@@ -307,7 +367,8 @@ https://github.com/cloudpipe/cloudpickle/issues/120 Making cloudpickle produce "
 -->
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>TODO: thanks stackoverflow and the internet <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-1"><p>I found this idea somewhere on Stack Overflow,
+but I can't seem to find that specific post again. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
