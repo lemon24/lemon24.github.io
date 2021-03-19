@@ -14,7 +14,7 @@
 
 
 
-<title>untitled - death and gravity</title>
+<title>Deterministic hashing of Python data objects - death and gravity</title>
 
 
 <script>
@@ -29,6 +29,15 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
 
 
 
@@ -46,7 +55,7 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1>untitled</h1>
+<h1>Deterministic hashing of Python data objects</h1>
 
 <p class="text-gray"><small>
 <span>2021-03-19</span>
@@ -58,9 +67,8 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>... in which we calculate a deterministic hashes for Python data objects,
-stable across interpreter versions and implementations,
-operating systems, and host machines.</p>
+<p>... in which we calculate deterministic hashes for Python data objects,
+stable across interpreter versions and implementations.</p>
 <p>If you're in a hurry,
 you can find the final version of the code <a href="#conclusion">at the end</a>.</p>
 <details>
@@ -90,7 +98,7 @@ you can find the final version of the code <a href="#conclusion">at the end</a>.
 </details>
 <h2 id="why-is-this-useful">Why is this useful?<span class="headerlink"> <a href="#why-is-this-useful" title="permalink">#</a></span></h2>
 <p>Let's say you have a <a href="https://github.com/lemon24/reader">feed reader library</a>;
-one of its main features is to retrieve and store <a href="https://en.wikipedia.org/wiki/Web_feed">web feeds</a>
+one of its main features is retrieving and storing <a href="https://en.wikipedia.org/wiki/Web_feed">web feeds</a>
 (Atom, RSS, and so on).</p>
 <p>Entries (articles) usually have an <em>updated</em> date,
 indicating the last time the entry was modified in a significant way.
@@ -136,7 +144,7 @@ and compare it with the hash of the feed version.</p>
 </div>
 </section>
 <h2 id="requirements">Requirements<span class="headerlink"> <a href="#requirements" title="permalink">#</a></span></h2>
-<p>Looking at out use case, we need a hash function that:</p>
+<p>Looking at our use case, we need a hash function that:</p>
 <ol>
 <li>supports (almost) arbitrary data objects;
  in our case, the various built-in types, datetimes,
@@ -151,7 +159,7 @@ and compare it with the hash of the feed version.</p>
 <h3 id="hash">hash()<span class="headerlink"> <a href="#hash" title="permalink">#</a></span></h3>
 <p>An easy solution seems to be the built-in <a href="https://docs.python.org/3/library/functions.html#hash">hash()</a> function,
 which returns the integer hash of an object.
-However, it has a couple of issues:</p>
+However, it has a couple of issues.</p>
 <p>By default, the hashes of str and bytes objects
 are randomized for security reasons (<a href="https://docs.python.org/3/reference/datamodel.html#object.__hash__">details</a>, second note),
 so they're not predictable between Python processes:</p>
@@ -471,108 +479,8 @@ to a tuple of the attributes to exclude from the hash:</p>
 we've managed to get stable hashes
 for (almost) arbitrary Python data objects,
 with a decent trade-off between generality and safety,
-and two extra features.</p>
-<details>
-<summary>... all in under 50 lines of code!</summary>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 1</span>
-<span class="normal"> 2</span>
-<span class="normal"> 3</span>
-<span class="normal"> 4</span>
-<span class="normal"> 5</span>
-<span class="normal"> 6</span>
-<span class="normal"> 7</span>
-<span class="normal"> 8</span>
-<span class="normal"> 9</span>
-<span class="normal">10</span>
-<span class="normal">11</span>
-<span class="normal">12</span>
-<span class="normal">13</span>
-<span class="normal">14</span>
-<span class="normal">15</span>
-<span class="normal">16</span>
-<span class="normal">17</span>
-<span class="normal">18</span>
-<span class="normal">19</span>
-<span class="normal">20</span>
-<span class="normal">21</span>
-<span class="normal">22</span>
-<span class="normal">23</span>
-<span class="normal">24</span>
-<span class="normal">25</span>
-<span class="normal">26</span>
-<span class="normal">27</span>
-<span class="normal">28</span>
-<span class="normal">29</span>
-<span class="normal">30</span>
-<span class="normal">31</span>
-<span class="normal">32</span>
-<span class="normal">33</span>
-<span class="normal">34</span>
-<span class="normal">35</span>
-<span class="normal">36</span>
-<span class="normal">37</span>
-<span class="normal">38</span>
-<span class="normal">39</span>
-<span class="normal">40</span>
-<span class="normal">41</span>
-<span class="normal">42</span>
-<span class="normal">43</span>
-<span class="normal">44</span>
-<span class="normal">45</span>
-<span class="normal">46</span>
-<span class="normal">47</span>
-<span class="normal">48</span>
-<span class="normal">49</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">json</span>
-<span class="kn">import</span> <span class="nn">hashlib</span>
-<span class="kn">import</span> <span class="nn">dataclasses</span>
-<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
-<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Collection</span>
-
-
-<span class="k">def</span> <span class="nf">get_hash</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">md5</span><span class="p">(</span><span class="n">json_dumps</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">digest</span><span class="p">()</span>
-
-
-<span class="k">def</span> <span class="nf">json_dumps</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
-        <span class="n">thing</span><span class="p">,</span>
-        <span class="n">default</span><span class="o">=</span><span class="n">json_default</span><span class="p">,</span>
-        <span class="n">ensure_ascii</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">sort_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">indent</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">separators</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">,</span> <span class="s1">&#39;:&#39;</span><span class="p">),</span>
-    <span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">json_default</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">dataclass_dict</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
-        <span class="k">pass</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="n">datetime</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">thing</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(</span><span class="n">timespec</span><span class="o">=</span><span class="s1">&#39;microseconds&#39;</span><span class="p">)</span>
-    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;object of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> not serializable&quot;</span><span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">dataclass_dict</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
-    <span class="n">fields</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="nb">type</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;got dataclass type, expected instance&quot;</span><span class="p">)</span>
-
-    <span class="n">exclude</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="s1">&#39;_hash_exclude_&#39;</span><span class="p">,</span> <span class="p">())</span>
-
-    <span class="n">rv</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span> <span class="ow">in</span> <span class="n">exclude</span><span class="p">:</span>
-            <span class="k">continue</span>
-        <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">value</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Collection</span><span class="p">):</span>
-            <span class="k">continue</span>
-        <span class="n">rv</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
-
-    <span class="k">return</span> <span class="n">rv</span>
-</code></pre></div>
-</td></tr></table></details>
+and two extra features,
+all in under 50 lines of code!</p>
 <p>If you're interested in using this, also have a look at:</p>
 <ul>
 <li>the <a href="https://github.com/lemon24/reader/blob/1efcd38c78f70dcc4e0d279e0fa2a0276749111e/src/reader/_hash_utils.py">commented, type-annotated version</a>, and</li>

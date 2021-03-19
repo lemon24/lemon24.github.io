@@ -2,13 +2,449 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #python</title>
-  <updated>2021-03-10T12:00:00+00:00</updated>
+  <updated>2021-03-19T17:25:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
   </author>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index/_tags/python.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/stable-hashing">
+    <id>https://death.andgravity.com/stable-hashing</id>
+    <title>Deterministic hashing of Python data objects</title>
+    <updated>2021-03-19T17:25:00+00:00</updated>
+    <content type="html">&lt;p&gt;... in which we calculate deterministic hashes for Python data objects,
+stable across interpreter versions and implementations.&lt;/p&gt;
+&lt;p&gt;If you're in a hurry,
+you can find the final version of the code &lt;a href="#conclusion"&gt;at the end&lt;/a&gt;.&lt;/p&gt;
+&lt;details&gt;
+&lt;summary&gt;Contents&lt;/summary&gt;
+&lt;section class="toc"&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#why-is-this-useful"&gt;Why is this useful?&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#requirements"&gt;Requirements&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#problem-we-need-a-stable-hash-function"&gt;Problem: we need a stable hash function&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#hash"&gt;hash()&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#hashlib"&gt;hashlib&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#problem-we-need-a-deterministic-way-of-serializing-objects"&gt;Problem: we need a deterministic way of serializing objects&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#pickle"&gt;pickle&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#str-and-repr"&gt;str() and repr()&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#json"&gt;json&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#problem-we-need-to-ignore-empty-values"&gt;Problem: we need to ignore empty values&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#problem-we-need-to-skip-some-fields"&gt;Problem: we need to skip some fields&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#conclusion"&gt;Conclusion&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;/details&gt;
+&lt;h2 id="why-is-this-useful"&gt;Why is this useful?&lt;span class="headerlink"&gt; &lt;a href="#why-is-this-useful" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Let's say you have a &lt;a href="https://github.com/lemon24/reader"&gt;feed reader library&lt;/a&gt;;
+one of its main features is retrieving and storing &lt;a href="https://en.wikipedia.org/wiki/Web_feed"&gt;web feeds&lt;/a&gt;
+(Atom, RSS, and so on).&lt;/p&gt;
+&lt;p&gt;Entries (articles) usually have an &lt;em&gt;updated&lt;/em&gt; date,
+indicating the last time the entry was modified in a significant way.
+An entry is updated only if its &lt;em&gt;updated&lt;/em&gt; date in the feed
+is newer than the one we have stored for it.&lt;/p&gt;
+&lt;p&gt;However, you notice the content of some entries changes
+without &lt;em&gt;updated&lt;/em&gt; changing,
+so you decide to update entries whenever the content changes,
+regardless of &lt;em&gt;updated&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;After the feed is retrieved,
+entries are converted to data objects like these
+(the real ones have &lt;a href="https://github.com/lemon24/reader/blob/d2aaf418f8c4d45a97cabaa7eb76498239d0503b/src/reader/_types.py#L97-L114"&gt;more attributes&lt;/a&gt;, though):&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Content&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;
+    &lt;span class="n"&gt;language&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Optional&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+
+&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Entry&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="nb"&gt;id&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;
+    &lt;span class="n"&gt;updated&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Optional&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;datetime&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+    &lt;span class="n"&gt;content&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Sequence&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;Content&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;A naive approach is to get the stored entry data
+and compare it with the feed version,
+but that's pretty inefficient.&lt;/p&gt;
+&lt;p&gt;The better solution is to use a hash function
+– a way to map data of arbitrary size (the message)
+to a fixed-size chunk of data (the hash value),
+such that:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;it is quick to compute the hash value for any given message&lt;/li&gt;
+&lt;li&gt;the same message always results in the same hash&lt;/li&gt;
+&lt;li&gt;it is extremely unlikely two slightly different messages have the same hash&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Then, instead of getting the full entry data,
+we just get its (previously computed) hash,
+and compare it with the hash of the feed version.&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;div class="admonition-text"&gt;
+&lt;p&gt;&lt;a href="https://en.wikipedia.org/wiki/Cryptographic_hash_function"&gt;Cryptographic hash functions&lt;/a&gt; have more properties,
+ but we don't need them.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/section&gt;
+&lt;h2 id="requirements"&gt;Requirements&lt;span class="headerlink"&gt; &lt;a href="#requirements" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Looking at our use case, we need a hash function that:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;supports (almost) arbitrary data objects;
+ in our case, the various built-in types, datetimes,
+ and dataclass instances should be enough&lt;/li&gt;
+&lt;li&gt;is safe; passing an unsupported object should be an error&lt;/li&gt;
+&lt;li&gt;is stable across interpreter versions and implementations,
+ operating systems, and host machines&lt;/li&gt;
+&lt;li&gt;ignores &amp;quot;empty&amp;quot; values, to allow adding new fields without the hash changing&lt;/li&gt;
+&lt;li&gt;can skip some of the fields (I actually realized this is needed much later)&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id="problem-we-need-a-stable-hash-function"&gt;Problem: we need a stable hash function&lt;span class="headerlink"&gt; &lt;a href="#problem-we-need-a-stable-hash-function" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;h3 id="hash"&gt;hash()&lt;span class="headerlink"&gt; &lt;a href="#hash" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;An easy solution seems to be the built-in &lt;a href="https://docs.python.org/3/library/functions.html#hash"&gt;hash()&lt;/a&gt; function,
+which returns the integer hash of an object.
+However, it has a couple of issues.&lt;/p&gt;
+&lt;p&gt;By default, the hashes of str and bytes objects
+are randomized for security reasons (&lt;a href="https://docs.python.org/3/reference/datamodel.html#object.__hash__"&gt;details&lt;/a&gt;, second note),
+so they're not predictable between Python processes:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;python3 -c &lt;span class="s1"&gt;&amp;#39;print(hash(&amp;quot;abc&amp;quot;))&amp;#39;&lt;/span&gt;
+&lt;span class="go"&gt;-4743820898567001518&lt;/span&gt;
+&lt;span class="gp"&gt;$ &lt;/span&gt;python3 -c &lt;span class="s1"&gt;&amp;#39;print(hash(&amp;quot;abc&amp;quot;))&amp;#39;&lt;/span&gt;
+&lt;span class="go"&gt;-6699381079787346150&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Also, hash() only supports &lt;a href="https://docs.python.org/3/glossary.html#term-hashable"&gt;hashable&lt;/a&gt; objects;
+this means no lists, dicts, or non-&lt;a href="https://docs.python.org/3/library/dataclasses.html#frozen-instances"&gt;frozen&lt;/a&gt; dataclasses.
+For my specific use case, this wasn't actually a problem, but
+it already puts huge constraints on how arbitrary the data objects can be.&lt;/p&gt;
+&lt;h3 id="hashlib"&gt;hashlib&lt;span class="headerlink"&gt; &lt;a href="#hashlib" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;&lt;a href="https://docs.python.org/3/library/hashlib.html"&gt;hashlib&lt;/a&gt; contains many different secure hash algorithms,
+which are by definition deterministic.&lt;/p&gt;
+&lt;p&gt;But it has one big problem – it only takes bytes:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;hashlib&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;md5&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;b&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;abc&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hexdigest&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;900150983cd24fb0d6963f7d28e17f72&amp;#39;&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;hashlib&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;md5&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;abc&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hexdigest&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+  File &lt;span class="nb"&gt;&amp;quot;&amp;lt;stdin&amp;gt;&amp;quot;&lt;/span&gt;, line &lt;span class="m"&gt;1&lt;/span&gt;, in &lt;span class="n"&gt;&amp;lt;module&amp;gt;&lt;/span&gt;
+&lt;span class="gr"&gt;TypeError&lt;/span&gt;: &lt;span class="n"&gt;Unicode-objects must be encoded before hashing&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;hashlib&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;md5&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hexdigest&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+  File &lt;span class="nb"&gt;&amp;quot;&amp;lt;stdin&amp;gt;&amp;quot;&lt;/span&gt;, line &lt;span class="m"&gt;1&lt;/span&gt;, in &lt;span class="n"&gt;&amp;lt;module&amp;gt;&lt;/span&gt;
+&lt;span class="gr"&gt;TypeError&lt;/span&gt;: &lt;span class="n"&gt;object supporting the buffer API required&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;This is something we can work with, though: it changes our problem
+from &amp;quot;we need a stable hash function&amp;quot;
+to &amp;quot;we need a deterministic way of serializing objects to bytes&amp;quot;.&lt;/p&gt;
+&lt;h2 id="problem-we-need-a-deterministic-way-of-serializing-objects"&gt;Problem: we need a deterministic way of serializing objects&lt;span class="headerlink"&gt; &lt;a href="#problem-we-need-a-deterministic-way-of-serializing-objects" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;h3 id="pickle"&gt;pickle&lt;span class="headerlink"&gt; &lt;a href="#pickle" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;&lt;a href="https://docs.python.org/3/library/pickle.html"&gt;pickle&lt;/a&gt; can turn most Python objects into bytes.&lt;/p&gt;
+&lt;p&gt;It does have multiple protocols,
+and the default one can change with the Python version;
+but we can select one and stick with it –
+version 4 was added in Python 3.4, and seems good enough.&lt;/p&gt;
+&lt;p&gt;Again, the easy solution is deceiving, since it seems to work:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;&lt;span class="k"&gt;function&lt;/span&gt; pickle &lt;span class="o"&gt;{&lt;/span&gt;
+&lt;span class="gp"&gt;$&lt;/span&gt;&lt;span class="m"&gt;1&lt;/span&gt; &amp;lt;&amp;lt;EOD
+&lt;span class="go"&gt;import pickle&lt;/span&gt;
+&lt;span class="go"&gt;from datetime import datetime&lt;/span&gt;
+&lt;span class="go"&gt;print(pickle.dumps($3, protocol=$2))&lt;/span&gt;
+&lt;span class="go"&gt;EOD&lt;/span&gt;
+&lt;span class="go"&gt;}&lt;/span&gt;
+&lt;span class="gp"&gt;$ &lt;/span&gt;pickle python3.6 &lt;span class="m"&gt;4&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;[1, &amp;quot;abc&amp;quot;]&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;|&lt;/span&gt; md5sum
+&lt;span class="go"&gt;02fa88b9fea0912efe731ed56906b251  -&lt;/span&gt;
+&lt;span class="gp"&gt;$ &lt;/span&gt;pickle python3.7 &lt;span class="m"&gt;4&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;[1, &amp;quot;abc&amp;quot;]&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;|&lt;/span&gt; md5sum
+&lt;span class="go"&gt;02fa88b9fea0912efe731ed56906b251  -&lt;/span&gt;
+&lt;span class="gp"&gt;$ &lt;/span&gt;pickle python3.8 &lt;span class="m"&gt;4&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;[1, &amp;quot;abc&amp;quot;]&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;|&lt;/span&gt; md5sum
+&lt;span class="go"&gt;02fa88b9fea0912efe731ed56906b251  -&lt;/span&gt;
+&lt;span class="gp"&gt;$ &lt;/span&gt;pickle pypy3.6 &lt;span class="m"&gt;4&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;[1, &amp;quot;abc&amp;quot;]&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;|&lt;/span&gt; md5sum
+&lt;span class="go"&gt;02fa88b9fea0912efe731ed56906b251  -&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;... until it doesn't:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;pickle python3.6 &lt;span class="m"&gt;4&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;datetime(1, 1, 1)&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;|&lt;/span&gt; md5sum
+&lt;span class="go"&gt;9c4423b791578d865d8fbeb070a1b934  -&lt;/span&gt;
+&lt;span class="gp"&gt;$ &lt;/span&gt;pickle pypy3.6 &lt;span class="m"&gt;4&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;datetime(1, 1, 1)&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;|&lt;/span&gt; md5sum
+&lt;span class="go"&gt;3c7c834cb2f1cf4aba8be5c326bb9ddd  -&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Version 0 isn't stable either, but in a different way:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;pickle python3.6 &lt;span class="m"&gt;0&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;datetime(1, 1, 1)&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;|&lt;/span&gt; md5sum
+&lt;span class="go"&gt;01acd91b95556a09f5ff9b7495e120da  -&lt;/span&gt;
+&lt;span class="gp"&gt;$ &lt;/span&gt;pickle pypy3.6 &lt;span class="m"&gt;0&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;datetime(1, 1, 1)&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;|&lt;/span&gt; md5sum
+&lt;span class="go"&gt;01acd91b95556a09f5ff9b7495e120da  -&lt;/span&gt;
+&lt;span class="gp"&gt;$ &lt;/span&gt;pickle python3.7 &lt;span class="m"&gt;0&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;datetime(1, 1, 1)&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;|&lt;/span&gt; md5sum
+&lt;span class="go"&gt;a6c815eca494dbf716cd4a7e5556d779  -&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Version 3 does &lt;em&gt;seem&lt;/em&gt; to work fine across all of the above,
+on both macOS and Linux (I also tested it with more complicated data).
+But what's to say it'll remain that way?&lt;/p&gt;
+&lt;p&gt;In fairness, &lt;em&gt;this is not an issue with pickle&lt;/em&gt; –
+it guarantees you'll get the same object back after unpickling,
+not that you'll get the same binary stream after pickling.&lt;/p&gt;
+&lt;p&gt;And it's easy to explain why: pickles are actually &lt;em&gt;programs&lt;/em&gt;.
+Some relevant comments from &lt;a href="https://github.com/python/cpython/blob/3.9/Lib/pickletools.py"&gt;pickletools&lt;/a&gt;:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&amp;quot;A pickle&amp;quot; is a program for a virtual pickle machine (PM, but more accurately
+called an unpickling machine). It's a sequence of opcodes, interpreted by the
+PM, building an arbitrarily complex Python object.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Historically, many enhancements
+have been made to the pickle protocol in order to do a better (faster,
+and/or more compact) job on
+[builtin scalar and container types, like ints and tuples].&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;blockquote&gt;
+&lt;p&gt;As explained below [for compatibility],
+pickle opcodes never go away, not even when better ways to do a thing
+get invented. The repertoire of the PM just keeps growing over time.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;This means there can be multiple pickles
+that unpickle to the same object&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;,
+even within the bounds of a specific protocol.&lt;/p&gt;
+&lt;h3 id="str-and-repr"&gt;str() and repr()&lt;span class="headerlink"&gt; &lt;a href="#str-and-repr" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;&lt;a href="https://docs.python.org/3/library/functions.html#func-str"&gt;str()&lt;/a&gt; and &lt;a href="https://docs.python.org/3/library/functions.html#repr"&gt;repr()&lt;/a&gt; might seem like valid solutions,
+but neither of them are.&lt;/p&gt;
+&lt;p&gt;First, they're not stable, and not guaranteed
+to have all the information we may care about:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;code&gt;str(object)&lt;/code&gt; returns &lt;code&gt;object.__str__()&lt;/code&gt;, which is the &amp;quot;informal&amp;quot; or nicely printable string representation of object. [...] If object does not have a &lt;code&gt;__str__()&lt;/code&gt; method, then &lt;code&gt;str()&lt;/code&gt; falls back to returning &lt;code&gt;repr(object)&lt;/code&gt;.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;blockquote&gt;
+&lt;p&gt;For many types, [&lt;code&gt;repr()&lt;/code&gt;] makes an attempt to return a string that would yield an object with the same value when passed to &lt;code&gt;eval()&lt;/code&gt;, otherwise the representation is a string enclosed in angle brackets that contains the name of the type of the object together with additional information often including the name and address of the object.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;More importantly, they're not safe – &lt;em&gt;all&lt;/em&gt; Python objects have them,
+even some that we would not want to serialize at all:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;Content&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;object&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;
+&lt;span class="go"&gt;Content(value=&amp;lt;object object at 0x7f993cd5ff40&amp;gt;, language=None)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;Content&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;lambda&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;Content(value=&amp;lt;function &amp;lt;lambda&amp;gt; at 0x7f993e96ec10&amp;gt;, language=None)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h3 id="json"&gt;json&lt;span class="headerlink"&gt; &lt;a href="#json" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;&lt;a href="https://docs.python.org/3/library/json.html"&gt;json&lt;/a&gt; might be what we need;
+even the pickle documentation seems to recommend it,
+although for &lt;a href="https://docs.python.org/3/library/pickle.html#comparison-with-json"&gt;different reasons&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Compared to the previous solutions, json has the opposite problem:
+it &lt;a href="https://docs.python.org/3/library/json.html#json.JSONEncoder"&gt;only supports&lt;/a&gt; dicts (with string/number keys only),
+lists, strings, and a few others.&lt;/p&gt;
+&lt;p&gt;But we can turn this to our advantage
+by converting &lt;em&gt;only&lt;/em&gt; the stuff we want to support to a JSON-encodable form,
+and the json module makes this really easy; let's start with datetimes:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;json_default&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;isinstance&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;datetime&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;isoformat&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;timespec&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;microseconds&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;TypeError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;object of type &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="nb"&gt;type&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="vm"&gt;__name__&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; not serializable&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;json&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;dumps&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;datetime&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;default&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;json_default&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;&amp;quot;0001-01-01T00:00:00.000000&amp;quot;&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Dataclasses aren't much harder to add, thanks to &lt;a href="https://docs.python.org/3/library/dataclasses.html#dataclasses.asdict"&gt;asdict()&lt;/a&gt;,
+which converts dataclass instances to a dict,
+recursing into other dataclasses, dicts, lists and tuples:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;json_default&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;dataclasses&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;asdict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="ne"&gt;TypeError&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;pass&lt;/span&gt;
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;isinstance&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;datetime&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;datetime&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;isoformat&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;timespec&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;microseconds&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;TypeError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;object of type &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="nb"&gt;type&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="vm"&gt;__name__&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; not serializable&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;json&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;dumps&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Entry&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;id&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;datetime&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;content&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;Content&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;value&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)]),&lt;/span&gt; &lt;span class="n"&gt;default&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;json_default&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;{&amp;quot;id&amp;quot;: &amp;quot;id&amp;quot;, &amp;quot;updated&amp;quot;: &amp;quot;0001-01-01T00:00:00.000000&amp;quot;, &amp;quot;content&amp;quot;: [{&amp;quot;value&amp;quot;: &amp;quot;value&amp;quot;, &amp;quot;language&amp;quot;: null}]}&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;You may notice the dataclass type does not appear in the result,
+which for our use case is actually fine:
+dataclasses &lt;code&gt;One(value=1)&lt;/code&gt; and &lt;code&gt;Two(value=1)&lt;/code&gt; will both get converted
+to the dict &lt;code&gt;{'value': 1}&lt;/code&gt;, resulting in the same hash.
+If we wanted them to be different, we could include the type name:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;__type&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;type&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="vm"&gt;__name__&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;asdict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;)}&lt;/span&gt;
+&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;__type&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;Content&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;value&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;language&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;To ensure the output remains stable across Python versions,
+we'll force all of the &lt;a href="https://docs.python.org/3/library/json.html#json.dumps"&gt;dumps()&lt;/a&gt; default arguments to known values,
+and require it to sort the keys in dicts:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;json_dumps&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;json&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;dumps&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+        &lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;default&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;json_default&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;ensure_ascii&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;False&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;sort_keys&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;indent&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;separators&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;,&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;:&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;
+    &lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;One more wrapper to hash the serialized value, and we're done:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;get_hash&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;hashlib&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;md5&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;json_dumps&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;encode&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;utf-8&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;digest&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;get_hash&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Entry&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;id&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;datetime&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;content&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;Content&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;value&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)]))&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hex&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;78b4b8120af5f832b7ecfc34db1fe02b&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id="problem-we-need-to-ignore-empty-values"&gt;Problem: we need to ignore empty values&lt;span class="headerlink"&gt; &lt;a href="#problem-we-need-to-ignore-empty-values" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Say we have a dataclass like the following:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;
+&lt;span class="gp"&gt;...&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;get_hash&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hex&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;5d872de403edb944a7b10450eda2f46a&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Which in time evolves to get another attribute:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;another&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+&lt;span class="gp"&gt;...&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;get_hash&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hex&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;e54ad2c961239bd70da9a603cd078e18&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The old and new versions result in different dicts,
+so they have different hashes.&lt;/p&gt;
+&lt;p&gt;But should they?
+The only &amp;quot;real&amp;quot; data &lt;code&gt;Data(2)&lt;/code&gt; contains is &lt;code&gt;value=2&lt;/code&gt;.
+Likewise, there's not much of a difference
+in actual information between &lt;code&gt;None&lt;/code&gt; and &lt;code&gt;[]&lt;/code&gt;
+(for our use case, at least).&lt;/p&gt;
+&lt;p&gt;We can ignore &amp;quot;empty&amp;quot; values quite easily
+by using the asdict() dict_factory argument.
+I overlooked it initially, thinking it has to be a mapping class;
+it turns out any function that takes a key-value pair iterable works:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;collections.abc&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;Collection&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;dict_drop_empty&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;pairs&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+        &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;k&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;k&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;v&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;pairs&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;
+            &lt;span class="n"&gt;v&lt;/span&gt; &lt;span class="ow"&gt;is&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+            &lt;span class="ow"&gt;or&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="n"&gt;v&lt;/span&gt; &lt;span class="ow"&gt;and&lt;/span&gt; &lt;span class="nb"&gt;isinstance&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Collection&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;json_default&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;dataclasses&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;asdict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;dict_factory&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;dict_drop_empty&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="c1"&gt;# ...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;We now get the same hash as for the first version of the object:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;Data(value=2, another=None)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;get_hash&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hex&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;5d872de403edb944a7b10450eda2f46a&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Note that we are specific about the &lt;em&gt;falsy&lt;/em&gt; values we ignore:
+an empty string, list, or dict are empty, but &lt;code&gt;0&lt;/code&gt; or &lt;code&gt;False&lt;/code&gt; are not.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;div class="admonition-text"&gt;
+&lt;p&gt;&lt;a href="https://docs.python.org/3/library/collections.abc.html"&gt;collections.abc&lt;/a&gt; provides abstract base classes
+ that can be used to test whether a class provides a particular interface.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;isinstance(v, (str, tuple, list, dict))&lt;/code&gt;
+ might cover all our needs in the code above, but
+ &lt;code&gt;isinstance(v, Collection)&lt;/code&gt; checks for other collections
+ we may failed to think about that don't inherit from them
+ (e.g. set, collections.deque, or even numpy.ndarray).&lt;/p&gt;
+&lt;/div&gt;
+&lt;/section&gt;
+&lt;h2 id="problem-we-need-to-skip-some-fields"&gt;Problem: we need to skip some fields&lt;span class="headerlink"&gt; &lt;a href="#problem-we-need-to-skip-some-fields" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Let's look at a more advanced version of our Entry class:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Entry&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;feed_url&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;
+    &lt;span class="nb"&gt;id&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;
+    &lt;span class="n"&gt;updated&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Optional&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;datetime&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+    &lt;span class="n"&gt;content&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Sequence&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;Content&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;It the &lt;a href="https://reader.readthedocs.io/en/latest/guide.html#changing-feed-urls"&gt;feed URL changes&lt;/a&gt;, does the data of the entry change?&lt;/p&gt;
+&lt;p&gt;In the context of our problem, both feed_url and id are metadata;
+changing them should not change the hash,
+since the actual data does not change.&lt;/p&gt;
+&lt;p&gt;We could deal with this by changing json_default()
+to remove specific keys from the asdict() result.&lt;/p&gt;
+&lt;p&gt;However, this moves class-specific logic away from the class and into json_default()
+and forces us to change it whenever we add a new class or
+the list metadata attributes changes;
+passing the list of metadata attributes as an argument to get_hash()
+just moves the problem elsewhere.&lt;/p&gt;
+&lt;p&gt;A better way is to allow classes to tell json_default()
+what attributes to remove via a well-known class attribute.&lt;/p&gt;
+&lt;p&gt;Neither of these approaches work with asdict() and nested dataclasses,
+since asdict() is recursive, and we only get to look at the top-level class.
+We cannot do anything in dict_factory either,
+since we don't know which class the attribute pairs belong to.&lt;/p&gt;
+&lt;p&gt;To work around it, we'll implement a non-recursive version of asdict(),
+and rely on json.dumps() for recursion.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;dataclass_dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;fields&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;dataclasses&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;fields&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;isinstance&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;type&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;TypeError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;got dataclass type, expected instance&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="n"&gt;exclude&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;getattr&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;_hash_exclude_&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;())&lt;/span&gt;
+
+    &lt;span class="n"&gt;rv&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{}&lt;/span&gt;
+    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;field&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;fields&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;field&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;exclude&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;continue&lt;/span&gt;
+        &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;getattr&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;field&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="ow"&gt;is&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt; &lt;span class="ow"&gt;or&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="ow"&gt;and&lt;/span&gt; &lt;span class="nb"&gt;isinstance&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Collection&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+            &lt;span class="k"&gt;continue&lt;/span&gt;
+        &lt;span class="n"&gt;rv&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;field&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt;
+
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;rv&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;json_default&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;dataclass_dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="c1"&gt;# ...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;section class="admonition note"&gt;
+&lt;div class="admonition-text"&gt;
+&lt;p&gt;We're using &lt;code&gt;_hash_exclude_&lt;/code&gt; (with an underscore at the end) to mimic
+ the &lt;code&gt;__double_underscore__&lt;/code&gt; convention Python uses for magic methods;
+ we are &lt;em&gt;not&lt;/em&gt; using double underscores because &lt;a href="https://docs.python.org/3/reference/lexical_analysis.html#reserved-classes-of-identifiers"&gt;they are reserved&lt;/a&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/section&gt;
+&lt;p&gt;To use it, we just need to set the &lt;code&gt;_hash_exclude_&lt;/code&gt; class attribute
+to a tuple of the attributes to exclude from the hash:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Entry&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;feed_url&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;
+    &lt;span class="nb"&gt;id&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;
+    &lt;span class="n"&gt;updated&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Optional&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;datetime&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+    &lt;span class="n"&gt;content&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Sequence&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;Content&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;()&lt;/span&gt;
+    &lt;span class="n"&gt;_hash_exclude_&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;feed_url&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;id&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;get_hash&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Entry&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;feed one&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;id&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;datetime&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)))&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hex&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;4f97b1e8e99d3304f50cd3c4428f224e&amp;#39;&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;get_hash&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Entry&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;feed two&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;id&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;datetime&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)))&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hex&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;4f97b1e8e99d3304f50cd3c4428f224e&amp;#39;&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;get_hash&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Entry&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;feed one&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;id&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;datetime&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;)))&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hex&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;0c739e158792c5a91ec1632804d905c1&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id="conclusion"&gt;Conclusion&lt;span class="headerlink"&gt; &lt;a href="#conclusion" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;By leveraging &lt;a href="https://docs.python.org/3/library/dataclasses.html"&gt;dataclasses&lt;/a&gt; and the &lt;a href="https://docs.python.org/3/library/json.html"&gt;json&lt;/a&gt; module,
+we've managed to get stable hashes
+for (almost) arbitrary Python data objects,
+with a decent trade-off between generality and safety,
+and two extra features,
+all in under 50 lines of code!&lt;/p&gt;
+&lt;p&gt;If you're interested in using this, also have a look at:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;the &lt;a href="https://github.com/lemon24/reader/blob/1efcd38c78f70dcc4e0d279e0fa2a0276749111e/src/reader/_hash_utils.py"&gt;commented, type-annotated version&lt;/a&gt;, and&lt;/li&gt;
+&lt;li&gt;the &lt;a href="https://github.com/lemon24/reader/blob/1efcd38c78f70dcc4e0d279e0fa2a0276749111e/tests/test_hash_utils.py"&gt;test suite&lt;/a&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;As always,
+if you found it useful and would like to see more,
+&lt;a href="about#contact"&gt;drop me a line&lt;/a&gt; :)&lt;/p&gt;
+&lt;section class="footnotes"&gt;
+&lt;ol&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;I found this idea somewhere on Stack Overflow,
+but I can't seem to find that specific post again. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+    <link href="https://death.andgravity.com/stable-hashing" rel="alternate"/>
+    <published>2021-03-19T17:25:00+00:00</published>
+  </entry>
   <entry xml:base="https://death.andgravity.com/aosa">
     <id>https://death.andgravity.com/aosa</id>
     <title>Struggling to structure code in larger programs? Great resources a beginner might not find so easily</title>
