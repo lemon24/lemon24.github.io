@@ -92,6 +92,25 @@ by generating special methods like <code>__init__</code> and <code>__repr__</cod
 <li>use Python 3.6 or later</li>
 </ul>
 <p>Read on!</p>
+<details>
+<summary>Contents</summary>
+<section class="toc">
+<ul>
+<li><a href="#a-bit-of-language-lawyering">A bit of language lawyering</a></li>
+<li><a href="#if-not-type-hints-then-what">If not type hints, then what?</a>
+<ul>
+<li><a href="#ellipsis">Ellipsis</a></li>
+<li><a href="#documentation">Documentation</a></li>
+<li><a href="#partial-types">Partial types</a></li>
+<li><a href="#being-type-hints-friendly">Being type hints friendly</a></li>
+</ul>
+</li>
+<li><a href="#if-you-really-don-t-like-variable-annotations">If you really don't like variable annotations</a></li>
+<li><a href="#named-tuples">Named tuples</a></li>
+<li><a href="#tbd">... TBD ...</a></li>
+</ul>
+</section>
+</details>
 <h2 id="a-bit-of-language-lawyering">A bit of language lawyering<span class="headerlink"> <a href="#a-bit-of-language-lawyering" title="permalink">#</a></span></h2>
 <p>First, let's define some terms, straight from the Python glossary:</p>
 <dl>
@@ -125,7 +144,7 @@ There's this example from the beginning of the <a href="https://docs.python.org/
 
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">Literally</span><span class="p">:</span>
-    <span class="n">one</span><span class="p">:</span> <span class="s2">&quot;anything can go in here,&quot;</span>
+    <span class="n">one</span><span class="p">:</span> <span class="s2">&quot;anything can go in here&quot;</span><span class="p">,</span>
     <span class="n">two</span><span class="p">:</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">ord</span><span class="p">,</span> <span class="s2">&quot;as long as&quot;</span><span class="p">))</span>
     <span class="n">three</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="s2">&quot;it can be evaluated&quot;</span>
 
@@ -133,9 +152,9 @@ There's this example from the beginning of the <a href="https://docs.python.org/
 
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">Hell</span><span class="p">:</span>
-    <span class="n">one</span><span class="p">:</span> <span class="s2">&quot;starting with Python 3.10&quot;</span>
+    <span class="n">one</span><span class="p">:</span> <span class="s2">&quot;starting with Python 3.10&quot;</span><span class="p">,</span>
     <span class="n">two</span><span class="p">:</span> <span class="n">it</span><span class="p">(</span><span class="n">s</span><span class="o">=</span><span class="ow">not</span> <span class="n">even</span><span class="o">.</span><span class="n">evaluated</span><span class="p">)</span>
-    <span class="n">three</span><span class="p">:</span> <span class="n">it</span><span class="p">[</span><span class="n">just</span><span class="p">]</span><span class="o">.</span><span class="n">has</span><span class="p">(</span><span class="n">to</span><span class="o">=</span><span class="n">be</span><span class="p">)</span> <span class="o">*</span> <span class="n">valid</span> <span class="o">+</span> <span class="n">syntax</span>
+    <span class="n">three</span><span class="p">:</span> <span class="n">it</span><span class="p">[</span><span class="n">just</span><span class="p">]</span><span class="o">.</span><span class="n">has</span><span class="p">(</span><span class="n">to</span><span class="o">=</span><span class="n">be</span><span class="p">)</span> <span class="o">*</span> <span class="n">syntactically</span> <span class="o">+</span> <span class="n">valid</span>
 
 <span class="c1"># Stop that!</span>
 </code></pre></div>
@@ -152,23 +171,71 @@ There's this example from the beginning of the <a href="https://docs.python.org/
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">Data</span><span class="p">:</span>
     <span class="n">one</span><span class="p">:</span> <span class="s2">&quot;the first thing&quot;</span>
-    <span class="n">two</span><span class="p">:</span> <span class="s2">&quot;the second thing&quot;</span>
+    <span class="n">two</span><span class="p">:</span> <span class="s2">&quot;the second thing&quot;</span> <span class="o">=</span> <span class="mi">2</span>
 </code></pre></div>
 <h3 id="partial-types">Partial types<span class="headerlink"> <a href="#partial-types" title="permalink">#</a></span></h3>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">Data</span><span class="p">:</span>
     <span class="n">one</span><span class="p">:</span> <span class="nb">list</span>
-    <span class="n">two</span><span class="p">:</span> <span class="nb">dict</span>
+    <span class="n">two</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="being-type-hints-friendly">Being type hints friendly<span class="headerlink"> <a href="#being-type-hints-friendly" title="permalink">#</a></span></h3>
-<p>also from the module doc</p>
-<pre class="code code-container"><code>@dataclass
-class Data:
-    one: Any
-    two: Any
-</code></pre>
-<h2 id="if-you-don-t-like-variable-annotations">If you don't like variable annotations<span class="headerlink"> <a href="#if-you-don-t-like-variable-annotations" title="permalink">#</a></span></h2>
-<p>TBD: typeless decorator</p>
+<p>also from the module examples</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Data</span><span class="p">:</span>
+    <span class="n">one</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="n">two</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="mi">2</span>
+</code></pre></div>
+<p>or:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Data</span><span class="p">:</span>
+    <span class="n">one</span><span class="p">:</span> <span class="nb">object</span>
+    <span class="n">two</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="mi">2</span>
+</code></pre></div>
+<h2 id="if-you-really-don-t-like-variable-annotations">If you really don't like variable annotations<span class="headerlink"> <a href="#if-you-really-don-t-like-variable-annotations" title="permalink">#</a></span></h2>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">typing</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">dataclasses</span>
+
+<span class="k">def</span> <span class="nf">isattribute</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
+    <span class="k">return</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">p</span><span class="p">(</span><span class="n">thing</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="p">[</span>
+        <span class="n">inspect</span><span class="o">.</span><span class="n">isroutine</span><span class="p">,</span>
+        <span class="n">inspect</span><span class="o">.</span><span class="n">ismethoddescriptor</span><span class="p">,</span>
+        <span class="n">inspect</span><span class="o">.</span><span class="n">isdatadescriptor</span><span class="p">,</span>
+    <span class="p">])</span>
+
+<span class="k">def</span> <span class="nf">typeless</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="s1">&#39;__annotations__&#39;</span><span class="p">):</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="vm">__annotations__</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">thing</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;__&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;__&#39;</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">isattribute</span><span class="p">(</span><span class="n">thing</span><span class="p">):</span>
+            <span class="k">continue</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">thing</span><span class="p">,</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">Field</span><span class="p">):</span>
+            <span class="n">annotation</span> <span class="o">=</span> <span class="n">typing</span><span class="o">.</span><span class="n">Any</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">annotation</span> <span class="o">=</span> <span class="n">typing</span><span class="o">.</span><span class="n">ClassVar</span><span class="p">[</span><span class="n">typing</span><span class="o">.</span><span class="n">Any</span><span class="p">]</span>
+
+        <span class="bp">cls</span><span class="o">.</span><span class="vm">__annotations__</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">annotation</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="bp">cls</span>
+</code></pre></div>
+<p>Using it:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
+<span class="nd">@typeless</span>
+<span class="k">class</span> <span class="nc">Data</span><span class="p">:</span>
+    <span class="n">one</span> <span class="o">=</span> <span class="n">field</span><span class="p">()</span>
+    <span class="n">two</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+</code></pre></div>
+<p>Compare with attrs:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@attr</span><span class="o">.</span><span class="n">s</span>
+<span class="k">class</span> <span class="nc">Data</span><span class="p">:</span>
+    <span class="n">one</span> <span class="o">=</span> <span class="n">attr</span><span class="o">.</span><span class="n">ib</span><span class="p">()</span>
+    <span class="n">two</span> <span class="o">=</span> <span class="n">attr</span><span class="o">.</span><span class="n">ib</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+</code></pre></div>
 <h2 id="named-tuples">Named tuples<span class="headerlink"> <a href="#named-tuples" title="permalink">#</a></span></h2>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">NamedTuple</span>
 
@@ -176,30 +243,7 @@ class Data:
     <span class="n">one</span><span class="p">:</span> <span class="o">...</span>
     <span class="n">two</span><span class="p">:</span> <span class="o">...</span> <span class="o">=</span> <span class="mi">2</span>
 </code></pre></div>
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
-<hr />
+<h2 id="tbd">... TBD ...<span class="headerlink"> <a href="#tbd" title="permalink">#</a></span></h2>
 <!--
 
 dataclasses without type annotations
