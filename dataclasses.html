@@ -1,0 +1,263 @@
+<!doctype html>
+
+<meta name="viewport" content="width=device-width" />
+
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+
+
+
+
+
+<title>untitled - death and gravity</title>
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1>untitled</h1>
+
+<p class="text-gray"><small>
+
+
+
+
+
+</small></p>
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<p>dataclasses (added in 3.7, pip-installable 3.6 backport exists)
+reduces the boilerplate of writing classes with lots of attributes
+by generating special methods like <code>__init__</code> and <code>__repr__</code>.</p>
+<p>(if you don't know what they are, check out the docs or this realpython tutorial)</p>
+<p>I've noticed a small (but vocal) minority of people that would like to use dataclasses, but</p>
+<ul>
+<li>feel that they are forced to use type annotations if they want to use dataclasses<ul>
+<li>feel that if they opt out of type hints, they have to opt out of other language features</li>
+</ul>
+</li>
+<li>feel that dataclasses being added to stdlib makes type hints compulsory, requiring programmers to use them</li>
+<li>that a feature like dataclasses is completely orthogonal to type aliases</li>
+</ul>
+<p>Well, they aren't and you're not:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nd">@dataclass</span>
+<span class="gp">... </span><span class="k">class</span> <span class="nc">Data</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">one</span><span class="p">:</span> <span class="o">...</span>
+<span class="gp">... </span>    <span class="n">two</span><span class="p">:</span> <span class="o">...</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Data</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="go">Data(one=1, two=2)</span>
+</code></pre></div>
+<p>I'll say it again: <strong>type annotations are not required to use dataclasses</strong>, they just require variable annotations (despite what most examples show).</p>
+<p>So, if you:</p>
+<ul>
+<li>want to use dataclasses</li>
+<li>don't want to use typing (which is fine, by the way)</li>
+<li>use Python 3.6 or later</li>
+</ul>
+<p>Read on!</p>
+<h2 id="a-bit-of-language-lawyering">A bit of language lawyering<span class="headerlink"> <a href="#a-bit-of-language-lawyering" title="permalink">#</a></span></h2>
+<p>First, let's define some terms, straight from the Python glossary:</p>
+<dl>
+<dt><a href="https://docs.python.org/3/glossary.html#term-annotation">annotation</a></dt>
+<dd>A label associated with a variable, a class attribute or a function parameter or return value, used by convention as a <em>type hint</em>.</dd>
+<dt><a href="https://docs.python.org/3/glossary.html#term-variable-annotation">variable annotation</a></dt>
+<dd>An <em>annotation</em> of a variable or a class attribute.</dd>
+<dt><a href="https://docs.python.org/3/glossary.html#term-type-hint">type hint</a></dt>
+<dd>An <em>annotation</em> that specifies the expected type for a variable, a class attribute, or a function parameter or return value. Type hints are optional and are not enforced by Python [...].</dd>
+<dt><a href="https://www.python.org/dev/peps/pep-0526/">PEP 526</a></dt>
+<dd>(my definition) Titled &quot;Syntax for Variable Annotations&quot;, Python enhancement proposal that specifies two different things: syntax to add annotations to variables <em>and</em> how to use said syntax with <a href="https://www.python.org/dev/peps/pep-0484/">PEP 484</a>, &quot;Type Hints&quot;.</dd>
+</dl>
+<hr />
+<p>In practice, <em>annotation</em> is used somewhat interchangably with <em>type annotation</em>.
+There's this example from the beginning of the <a href="https://docs.python.org/3/library/dataclasses.html">dataclasses</a> module:</p>
+<blockquote>
+<p>The member variables to use in these generated methods are defined using PEP 526 type annotations.</p>
+</blockquote>
+<p>It's also true that most of the examples are using PEP 484 annotations.</p>
+<p>However, the <a href="https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass">dataclass()</a> decorator documentation clearly says that the types specified in the annotation are ignored:</p>
+<blockquote>
+<p>The dataclass() decorator examines the class to find fields. A field is defined as class variable that has a type annotation. With two exceptions described below, <strong>nothing in dataclass() examines the type specified in the variable annotation</strong>.</p>
+</blockquote>
+<p>Which has some very interesting implications: you can use <em>anything</em> as the annotation.</p>
+<p>Don't believe me? Here's <a href="https://www.reddit.com/r/Python/comments/7hpmp8/-/dqtjftk/?context=3">from the author himself</a>, again:</p>
+<blockquote>
+<p>That is, use any type you want. If you're not using a static type checker, no one is going to care what type you use.</p>
+</blockquote>
+<p>Really,</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Literally</span><span class="p">:</span>
+    <span class="n">one</span><span class="p">:</span> <span class="s2">&quot;anything can go in here,&quot;</span>
+    <span class="n">two</span><span class="p">:</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">ord</span><span class="p">,</span> <span class="s2">&quot;as long as&quot;</span><span class="p">))</span>
+    <span class="n">three</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="s2">&quot;it can be evaluated&quot;</span>
+
+<span class="c1"># Now, I&#39;ve noticed a tendency for this program to get rather silly.</span>
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Hell</span><span class="p">:</span>
+    <span class="n">one</span><span class="p">:</span> <span class="s2">&quot;starting with Python 3.10&quot;</span>
+    <span class="n">two</span><span class="p">:</span> <span class="n">it</span><span class="p">(</span><span class="n">s</span><span class="o">=</span><span class="ow">not</span> <span class="n">even</span><span class="o">.</span><span class="n">evaluated</span><span class="p">)</span>
+    <span class="n">three</span><span class="p">:</span> <span class="n">it</span><span class="p">[</span><span class="n">just</span><span class="p">]</span><span class="o">.</span><span class="n">has</span><span class="p">(</span><span class="n">to</span><span class="o">=</span><span class="n">be</span><span class="p">)</span> <span class="o">*</span> <span class="n">valid</span> <span class="o">+</span> <span class="n">syntax</span>
+
+<span class="c1"># Stop that!</span>
+</code></pre></div>
+<h2 id="if-not-type-hints-then-what">If not type hints, then what?<span class="headerlink"> <a href="#if-not-type-hints-then-what" title="permalink">#</a></span></h2>
+<p>TBD</p>
+<p>https://www.reddit.com/r/Python/comments/8d7ddz/-/dxlm6ul/?context=8&amp;depth=9</p>
+<h3 id="ellipsis">Ellipsis<span class="headerlink"> <a href="#ellipsis" title="permalink">#</a></span></h3>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Data</span><span class="p">:</span>
+    <span class="n">one</span><span class="p">:</span> <span class="o">...</span>
+    <span class="n">two</span><span class="p">:</span> <span class="o">...</span> <span class="o">=</span> <span class="mi">2</span>
+</code></pre></div>
+<h3 id="documentation">Documentation<span class="headerlink"> <a href="#documentation" title="permalink">#</a></span></h3>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Data</span><span class="p">:</span>
+    <span class="n">one</span><span class="p">:</span> <span class="s2">&quot;the first thing&quot;</span>
+    <span class="n">two</span><span class="p">:</span> <span class="s2">&quot;the second thing&quot;</span>
+</code></pre></div>
+<h3 id="partial-types">Partial types<span class="headerlink"> <a href="#partial-types" title="permalink">#</a></span></h3>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Data</span><span class="p">:</span>
+    <span class="n">one</span><span class="p">:</span> <span class="nb">list</span>
+    <span class="n">two</span><span class="p">:</span> <span class="nb">dict</span>
+</code></pre></div>
+<h3 id="being-type-hints-friendly">Being type hints friendly<span class="headerlink"> <a href="#being-type-hints-friendly" title="permalink">#</a></span></h3>
+<p>also from the module doc</p>
+<pre class="code code-container"><code>@dataclass
+class Data:
+    one: Any
+    two: Any
+</code></pre>
+<h2 id="if-you-don-t-like-variable-annotations">If you don't like variable annotations<span class="headerlink"> <a href="#if-you-don-t-like-variable-annotations" title="permalink">#</a></span></h2>
+<p>TBD: typeless decorator</p>
+<h2 id="named-tuples">Named tuples<span class="headerlink"> <a href="#named-tuples" title="permalink">#</a></span></h2>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">NamedTuple</span>
+
+<span class="k">class</span> <span class="nc">Data</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="n">one</span><span class="p">:</span> <span class="o">...</span>
+    <span class="n">two</span><span class="p">:</span> <span class="o">...</span> <span class="o">=</span> <span class="mi">2</span>
+</code></pre></div>
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<hr />
+<!--
+
+dataclasses without type annotations
+
+consenting adults
+
+dataclasses great tool, shame to not use it
+
+pep 8 quote hobgoblin consistency
+
+
+
+https://docs.python.org/3/library/typing.html#typing.NamedTuple
+https://docs.python.org/3/library/dataclasses.html
+https://pypi.org/project/dataclasses/
+
+always optional
+
+https://www.python.org/dev/peps/pep-0484/#non-goals
+https://www.python.org/dev/peps/pep-0526/#non-goals
+https://www.python.org/dev/peps/pep-0563/#non-goals
+
+https://docs.python.org/3/glossary.html#term-variable-annotation
+
+consenting adults
+
+https://mail.python.org/pipermail/tutor/2003-October/025932.html
+
+hobgoblin
+
+https://www.python.org/dev/peps/pep-0008/#a-foolish-consistency-is-the-hobgoblin-of-little-minds
+
+
+
+
+https://realpython.com/python-data-classes/
+
+
+--->
+
+
+
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+</footer>
+
+
+</div>
