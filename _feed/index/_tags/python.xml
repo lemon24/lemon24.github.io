@@ -2,13 +2,306 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #python</title>
-  <updated>2021-03-19T19:51:00+00:00</updated>
+  <updated>2021-03-23T15:18:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
   </author>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index/_tags/python.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/dataclasses">
+    <id>https://death.andgravity.com/dataclasses</id>
+    <title>Dataclasses without type annotations</title>
+    <updated>2021-03-23T15:18:00+00:00</updated>
+    <content type="html">&lt;p&gt;The &lt;a href="https://docs.python.org/3/library/dataclasses.html"&gt;dataclasses&lt;/a&gt; standard library module
+reduces the boilerplate of writing classes
+by generating special methods like &lt;code&gt;__init__&lt;/code&gt; and &lt;code&gt;__repr__&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;I've noticed a small (but vocal) minority of people that:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;would like to use dataclasses, but are forced to use type annotations&lt;/li&gt;
+&lt;li&gt;feel that choosing to opt out of type hints
+means they are restricted from using specific orthogonal language features
+(dataclasses, in this case)&lt;/li&gt;
+&lt;li&gt;perceive dataclasses' use of type annotations 
+as a sign of type annotations becoming compulsory in the future&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Now, I know most of these people are probably just looking 
+for something to be angry about – this is the internet, after all.&lt;/p&gt;
+&lt;p&gt;But if you &lt;em&gt;really&lt;/em&gt; want to use dataclasses, you can, static typing or not. Here:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;one&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;two&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;
+&lt;span class="gp"&gt;...&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;Data(one=1, two=2)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;I'll say it again: 
+&lt;strong&gt;dataclasses do not require type annotations&lt;/strong&gt;.
+Despite what most examples show, they only require variable annotations.&lt;/p&gt;
+&lt;p&gt;If you'd like to know why, how to make the best of it, 
+and what this means about Python in general, read on!&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;div class="admonition-text"&gt;
+&lt;p&gt;Dataclasses were added in Python 3.7, 
+ with a &lt;a href="https://pypi.org/project/dataclasses/"&gt;backport&lt;/a&gt; available for 3.6.
+ If you need to support earlier versions,
+ or want more powerful features like validators, 
+ converters, and &lt;code&gt;__slots__&lt;/code&gt;, check out &lt;a href="https://www.attrs.org/en/stable/why.html#data-classes"&gt;attrs&lt;/a&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/section&gt;
+&lt;!--
+
+.. tip::
+
+    If you really don't like variable annotations,
+    and would be willing to use a custom decorator 
+    to make them truly optional,
+    [check this out](#if-you-really-don-t-like-variable-annotations).
+
+--&gt;
+&lt;details&gt;
+&lt;summary&gt;Contents&lt;/summary&gt;
+&lt;section class="toc"&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#a-bit-of-language-lawyering"&gt;A bit of language lawyering&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#if-not-type-hints-then-what"&gt;If not type hints, then what?&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#partial-types"&gt;Partial types&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#documentation"&gt;Documentation&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#ellipsis"&gt;Ellipsis&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#being-type-checker-friendly"&gt;Being type checker friendly&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#aside-named-tuples"&gt;Aside: named tuples&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#will-this-not-break-stuff"&gt;Will this not break stuff?&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#if-you-really-don-t-like-variable-annotations"&gt;If you really don't like variable annotations&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#we-are-all-consenting-adults"&gt;We are all consenting adults&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;/details&gt;
+&lt;h2 id="a-bit-of-language-lawyering"&gt;A bit of language lawyering&lt;span class="headerlink"&gt; &lt;a href="#a-bit-of-language-lawyering" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;First, let's define some terms, straight from the Python glossary:&lt;/p&gt;
+&lt;dl&gt;
+&lt;dt&gt;&lt;a href="https://docs.python.org/3/glossary.html#term-annotation"&gt;annotation&lt;/a&gt;&lt;/dt&gt;
+&lt;dd&gt;A label associated with a variable, a class attribute or a function parameter or return value, used by convention as a &lt;em&gt;type hint&lt;/em&gt;.&lt;/dd&gt;
+&lt;dt&gt;&lt;a href="https://docs.python.org/3/glossary.html#term-variable-annotation"&gt;variable annotation&lt;/a&gt;&lt;/dt&gt;
+&lt;dd&gt;An &lt;em&gt;annotation&lt;/em&gt; of a variable or a class attribute.&lt;/dd&gt;
+&lt;dt&gt;&lt;a href="https://docs.python.org/3/glossary.html#term-type-hint"&gt;type hint&lt;/a&gt;&lt;/dt&gt;
+&lt;dd&gt;An &lt;em&gt;annotation&lt;/em&gt; that specifies the expected type for a variable, a class attribute, or a function parameter or return value. Type hints are optional and are not enforced by Python [...].&lt;/dd&gt;
+&lt;dt&gt;&lt;a href="https://www.python.org/dev/peps/pep-0526/"&gt;PEP 526&lt;/a&gt;&lt;/dt&gt;
+&lt;dd&gt;(my definition) Titled &amp;quot;Syntax for Variable Annotations&amp;quot;, Python enhancement proposal that specifies two different things: syntax to add annotations to variables &lt;em&gt;and&lt;/em&gt; how to use said syntax with &lt;a href="https://www.python.org/dev/peps/pep-0484/"&gt;PEP 484&lt;/a&gt;, &amp;quot;Type Hints&amp;quot;.&lt;/dd&gt;
+&lt;/dl&gt;
+&lt;hr /&gt;
+&lt;p&gt;In practice, &lt;em&gt;annotation&lt;/em&gt; is used somewhat interchangably with &lt;em&gt;type annotation&lt;/em&gt;.
+There's this example from the beginning of the &lt;a href="https://docs.python.org/3/library/dataclasses.html"&gt;dataclasses&lt;/a&gt; module:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;The member variables to use in these generated methods are defined using PEP 526 type annotations.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;It's also true that most of the examples are using PEP 484 annotations.&lt;/p&gt;
+&lt;p&gt;However, the &lt;a href="https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass"&gt;dataclass()&lt;/a&gt; decorator documentation clearly says that the types specified in the annotation are ignored:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;The dataclass() decorator examines the class to find fields. A field is defined as class variable that has a type annotation. With two exceptions described below, &lt;strong&gt;nothing in dataclass() examines the type specified in the variable annotation&lt;/strong&gt;.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Which has some very interesting implications: you can use &lt;em&gt;anything&lt;/em&gt; as the annotation.&lt;/p&gt;
+&lt;p&gt;Don't believe me? Here's &lt;a href="https://www.reddit.com/r/Python/comments/7hpmp8/-/dqtjftk/?context=3"&gt;from the author himself&lt;/a&gt;, again:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;That is, use any type you want. If you're not using a static type checker, no one is going to care what type you use.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Really,&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Literally&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;one&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;anything can go in here&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;two&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;sum&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;ord&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;as long as&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+    &lt;span class="n"&gt;three&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="k"&gt;lambda&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;it can be evaluated&amp;quot;&lt;/span&gt;
+
+&lt;span class="c1"&gt;# Now, I&amp;#39;ve noticed a tendency for this program to get rather silly.&lt;/span&gt;
+
+&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Hell&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;one&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;starting with Python 3.10&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;two&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;it&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="n"&gt;even&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;evaluated&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;three&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;it&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;just&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;has&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;to&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;be&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="n"&gt;syntactically&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="n"&gt;valid&lt;/span&gt;
+
+&lt;span class="c1"&gt;# Right! Stop that! It&amp;#39;s SILLY!&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id="if-not-type-hints-then-what"&gt;If not type hints, then what?&lt;span class="headerlink"&gt; &lt;a href="#if-not-type-hints-then-what" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Now that we've seen that type hints are not required,
+let's look at some decent alternatives 
+of using dataclasses without them.&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;h3 id="partial-types"&gt;Partial types&lt;span class="headerlink"&gt; &lt;a href="#partial-types" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;My favorite approach is to use a built-in, string or literal
+that roughly matches type of the attribute,
+to make the intent more obvious to human readers.
+I've found myself doing this naturally,
+and it's what prompted this article in the first place.&lt;/p&gt;
+&lt;p&gt;It's quite convenient when you come back to the code after a few months :)&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;one&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;set&lt;/span&gt;
+    &lt;span class="n"&gt;two&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;dict(int -&amp;gt; str)&amp;#39;&lt;/span&gt;
+    &lt;span class="n"&gt;three&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;one&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;two&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h3 id="documentation"&gt;Documentation&lt;span class="headerlink"&gt; &lt;a href="#documentation" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Speaking of showing intent:
+if you're not using &lt;a href="https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html#directive-autoattribute"&gt;some other convention&lt;/a&gt; for attribute documentation,
+annotations seem like a good place for short docstrings.
+(Although I doubt any documentation generator support this;
+still fine for scripts, though.)&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;one&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;the first thing&amp;quot;&lt;/span&gt;
+    &lt;span class="n"&gt;two&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;the second thing; an integer&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h3 id="ellipsis"&gt;Ellipsis&lt;span class="headerlink"&gt; &lt;a href="#ellipsis" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;The &lt;a href="https://docs.python.org/3/library/stdtypes.html#the-ellipsis-object"&gt;Ellipsis&lt;/a&gt; literal is a nice way of saying 
+&amp;quot;I don't care about this value&amp;quot;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;one&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
+    &lt;span class="n"&gt;two&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h3 id="being-type-checker-friendly"&gt;Being type checker friendly&lt;span class="headerlink"&gt; &lt;a href="#being-type-checker-friendly" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;If you still want the dataclass to work with type checking,
+while not bothering with types yourself, you can use &lt;a href="https://docs.python.org/3/library/typing.html#typing.Any"&gt;Any&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;typing&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;Any&lt;/span&gt;
+
+&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;one&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Any&lt;/span&gt;
+    &lt;span class="n"&gt;two&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Any&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Or, if you don't like the extra import, use &lt;a href="https://docs.python.org/3/library/functions.html#object"&gt;object&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;one&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;object&lt;/span&gt;
+    &lt;span class="n"&gt;two&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;object&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;This works because everything in Python is an object (figuratively &lt;em&gt;and literally&lt;/em&gt;).&lt;/p&gt;
+&lt;h3 id="aside-named-tuples"&gt;Aside: named tuples&lt;span class="headerlink"&gt; &lt;a href="#aside-named-tuples" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Not directly related to dataclasses, 
+but all of the above work with the &lt;a href="https://docs.python.org/3/library/typing.html#typing.NamedTuple"&gt;types version of namedtuple&lt;/a&gt; as well:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;NamedTuple&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;one&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
+    &lt;span class="n"&gt;two&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;dict&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id="will-this-not-break-stuff"&gt;Will this not break stuff?&lt;span class="headerlink"&gt; &lt;a href="#will-this-not-break-stuff" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;No.&lt;/p&gt;
+&lt;p&gt;If the documentation states &lt;a href="https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass"&gt;dataclass()&lt;/a&gt; ignores annotation values, 
+it will stay like that for the foreseeable future;
+standard library deprecations aren't taken lightly.&lt;/p&gt;
+&lt;p&gt;Also, all of the major typing PEPs (&lt;a href="https://www.python.org/dev/peps/pep-0484/#non-goals"&gt;484&lt;/a&gt;, &lt;a href="https://www.python.org/dev/peps/pep-0526/#non-goals"&gt;526&lt;/a&gt;, &lt;a href="https://www.python.org/dev/peps/pep-0563/#non-goals"&gt;563&lt;/a&gt;)
+clearly state that:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Python will remain a dynamically typed language, 
+and the authors have no desire to ever make type hints mandatory, 
+even by convention.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;563 does imply that the type hinting use of annotations will become
+standard in the future, but that's only relevant if you care about typing.&lt;/p&gt;
+&lt;h2 id="if-you-really-don-t-like-variable-annotations"&gt;If you really don't like variable annotations&lt;span class="headerlink"&gt; &lt;a href="#if-you-really-don-t-like-variable-annotations" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;... I made a decorator that makes them optional:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;dataclasses&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;dataclass&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;field&lt;/span&gt;
+
+&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="nd"&gt;@typeless&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;one&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;field&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+    &lt;span class="n"&gt;two&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;field&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;default&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Compare with attrs:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;attr&lt;/span&gt;
+
+&lt;span class="nd"&gt;@attr&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Data&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;one&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;attr&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ib&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+    &lt;span class="n"&gt;two&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;attr&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ib&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;default&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;details&gt;
+&lt;summary&gt;It is less than 30 lines of code, 
+and works by adding annotations programmatically:&lt;/summary&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;typing&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;inspect&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;dataclasses&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;typeless&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;cls&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="nb"&gt;hasattr&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;cls&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;__annotations__&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="bp"&gt;cls&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="vm"&gt;__annotations__&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{}&lt;/span&gt;
+
+    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;thing&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="bp"&gt;cls&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="vm"&gt;__dict__&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;items&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;__&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="ow"&gt;and&lt;/span&gt; &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;endswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;__&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+            &lt;span class="k"&gt;continue&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="n"&gt;isattribute&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+            &lt;span class="k"&gt;continue&lt;/span&gt;
+
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;isinstance&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;dataclasses&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Field&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+            &lt;span class="n"&gt;annotation&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;typing&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Any&lt;/span&gt;
+        &lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="n"&gt;annotation&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;typing&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ClassVar&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;typing&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Any&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+
+        &lt;span class="bp"&gt;cls&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="vm"&gt;__annotations__&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;setdefault&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;annotation&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="bp"&gt;cls&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;isattribute&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="nb"&gt;any&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;p&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;
+        &lt;span class="n"&gt;inspect&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;isroutine&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;inspect&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ismethoddescriptor&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;inspect&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;isdatadescriptor&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="p"&gt;])&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/details&gt;
+&lt;p&gt;It's silly, but it works!&lt;/p&gt;
+&lt;h2 id="we-are-all-consenting-adults"&gt;We are all consenting adults&lt;span class="headerlink"&gt; &lt;a href="#we-are-all-consenting-adults" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;There's a saying in the Python world,
+probably as pervasive as &lt;a href="https://www.python.org/dev/peps/pep-0020/"&gt;The Zen of Python&lt;/a&gt; itself, 
+that you may be unaware of if you haven't read older articles 
+or discussions on python-dev: &lt;em&gt;we are all consenting adults&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;It was initially used to refer to Python's attitude towards
+&lt;a href="https://mail.python.org/pipermail/tutor/2003-October/025932.html"&gt;private class attributes&lt;/a&gt; (that is, nothing's really private),
+but it also applies to things like &lt;a href="https://code.activestate.com/lists/python-list/185411"&gt;monkey patching&lt;/a&gt;, &lt;a href="https://mail.python.org/pipermail/tutor/2012-July/090243.html"&gt;code generation&lt;/a&gt;,
+and more:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;[...] No class or class instance can
+keep you away from all what's inside (this makes introspection
+possible and powerful). Python trusts you. It says &amp;quot;hey, if you want
+to go poking around in dark places, I'm gonna trust that you've got
+a good reason and you're not making trouble.&amp;quot;&lt;/p&gt;
+&lt;p&gt;After all, we're all consenting adults here.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;As long as you're OK with the consequences,
+you can do whatever you please;
+no one's stopping you.
+Of course, it is the responsible, adult thing to &lt;em&gt;learn&lt;/em&gt; what those are
+– &amp;quot;know the rules so you can break them effectively&amp;quot; kind of thing.&lt;/p&gt;
+&lt;p&gt;Yes, if you're working on a team,
+you might have to gather consensus and persuade people
+(or if you can't, go with the current one),
+but isn't that how a healthy team works anyway?&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;Type annotations are (and will continue to be) a thing, 
+and dataclasses exist in the context of that;
+it would be silly to not converge on something, 
+and not have clear guidance for beginners.&lt;/p&gt;
+&lt;p&gt;But if you go and read the documentation,
+there is a clear alternative &lt;em&gt;right there&lt;/em&gt;.
+If you are experienced enough have opinions about things,
+you are probably experienced enough to understand the alternatives
+and make your own choices.&lt;/p&gt;
+&lt;p&gt;Python trusts you :)&lt;/p&gt;
+&lt;section class="footnotes"&gt;
+&lt;ol&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;You may have seen some of the examples below 
+in very nice Reddit comments like &lt;a href="https://www.reddit.com/r/Python/comments/8d7ddz/-/dxlm6ul/?context=8&amp;amp;depth=9"&gt;this one&lt;/a&gt;
+(it appears in other threads as well,
+where the author's patience wasn't really deserved;
+I'm deliberately not linking to those). &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+    <link href="https://death.andgravity.com/dataclasses" rel="alternate"/>
+    <published>2021-03-23T15:18:00+00:00</published>
+  </entry>
   <entry xml:base="https://death.andgravity.com/stable-hashing">
     <id>https://death.andgravity.com/stable-hashing</id>
     <title>Deterministic hashing of Python data objects</title>
