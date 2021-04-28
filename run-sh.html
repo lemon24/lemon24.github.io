@@ -1,0 +1,247 @@
+<!doctype html>
+
+<meta name="viewport" content="width=device-width" />
+
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+
+
+
+
+
+<title>Using Makefiles with only .PHONY targets? Use a run.sh script instead
+ - death and gravity</title>
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1>Using Makefiles with only .PHONY targets? Use a run.sh script instead
+</h1>
+
+<p class="text-gray"><small>
+
+
+
+
+
+</small></p>
+
+
+
+
+
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<p>I recently discovered a neat pattern for when
+using Makefiles with only <code>.PHONY</code> targets:
+turn it into a script with functions,
+and dispatching to them by adding <code>&quot;$@&quot;</code>.</p>
+<p>It makes more complicated things easier to write and read,
+and also allows passing arguments to the &quot;targets&quot;.</p>
+<p>This is not my idea,
+but I'm quite thrilled about it,
+so I thought I should share it;
+here's <a href="http://www.oilshell.org/blog/2020/02/good-parts-sketch.html#seim-automation-with-runsh-scripts">the article that sold me on it</a>
+(plus examples of other projects that use this pattern).</p>
+<h2 id="why-have-a-makefile-in-the-first-place">Why have a Makefile in the first place?<span class="headerlink"> <a href="#why-have-a-makefile-in-the-first-place" title="permalink">#</a></span></h2>
+<p>I've been using a Makefile in my python feed reader project
+for a while now to have convenient shortcuts
+for the commands used to test / build the project etc.
+to include in the <a href="https://github.com/lemon24/reader/blob/1.16/docs/dev.rst#testing">developer documentation</a>.</p>
+<p>I stole this pattern from Flask
+(they stopped using it shortly after 1.0 was released).</p>
+<p>Here's an abridged version to give you a taste (<a href="https://github.com/lemon24/reader/blob/1.16/Makefile">full Makefile here</a>):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Makefile"><span></span><code><span class="nf">.PHONY</span><span class="o">:</span> <span class="n">install</span>-<span class="n">dev</span> <span class="n">test</span> <span class="n">typing</span>
+
+<span class="nf">install-dev</span><span class="o">:</span>
+    pip install -e <span class="s1">&#39;.[search,cli,app,tests,docs,dev,unstable-plugins]&#39;</span>
+
+<span class="nf">test</span><span class="o">:</span>
+    pytest --runslow
+
+<span class="c"># mypy does not work on pypy as of January 2020</span>
+<span class="nf">typing</span><span class="o">:</span>
+    <span class="nb">test</span> <span class="nv">$$</span><span class="o">(</span> python -c <span class="s1">&#39;import sys; print(sys.implementation.name)&#39;</span> <span class="o">)</span> <span class="o">=</span> pypy <span class="se">\</span>
+    <span class="o">&amp;&amp;</span> <span class="nb">echo</span> <span class="s2">&quot;mypy does not work on pypy, doing nothing&quot;</span> <span class="se">\</span>
+    <span class="o">||</span> mypy --strict src
+</code></pre></div>
+<p>For me, this has two main downsides:</p>
+<ul>
+<li>there's no way to pass arguments to the targets,
+e.g. to call <code>pytest -v</code> while also benefiting
+from the &quot;default&quot; <code>--runslow</code> option;
+specifically for pytest, I could have used <code>addopts</code> in its config file,
+but I don't want to force everyone to use that option,
+I just want to show this is the recommended way of doing it;
+also, not all tools have a per-project config file</li>
+<li>it's hard to write shell scripts;
+it is <em>possible</em>, but the results tend to be <a href="https://unix.stackexchange.com/a/270799">less readable</a></li>
+</ul>
+<h2 id="enter-run-py">Enter run.py<span class="headerlink"> <a href="#enter-run-py" title="permalink">#</a></span></h2>
+<p>Instead of the makefile above,
+we could put almost the same commands in a script;
+let's call it <code>run.sh</code>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="ch">#!/bin/bash</span>
+
+<span class="k">function</span> install-dev <span class="o">{</span>
+    pip install -e <span class="s1">&#39;.[search,cli,app,tests,docs,dev,unstable-plugins]&#39;</span>
+<span class="o">}</span>
+
+<span class="k">function</span> <span class="nb">test</span> <span class="o">{</span>
+    pytest --runslow <span class="s2">&quot;</span><span class="nv">$@</span><span class="s2">&quot;</span>
+<span class="o">}</span>
+
+<span class="k">function</span> typing <span class="o">{</span>
+    <span class="nb">local</span> <span class="nv">impl</span><span class="o">=</span><span class="k">$(</span> python -c <span class="s1">&#39;import sys; print(sys.implementation.name)&#39;</span> <span class="k">)</span>
+
+    <span class="c1"># mypy does not work on pypy as of January 2020</span>
+    <span class="k">if</span> <span class="o">[[</span> <span class="nv">$impl</span> <span class="o">==</span> pypy <span class="o">]]</span><span class="p">;</span> <span class="k">then</span>
+        <span class="nb">echo</span> <span class="s2">&quot;mypy does not work on pypy, doing nothing&quot;</span>
+        <span class="k">return</span>
+    <span class="k">fi</span>
+
+    mypy --strict src <span class="s2">&quot;</span><span class="nv">$@</span><span class="s2">&quot;</span>
+<span class="o">}</span>
+
+<span class="s2">&quot;</span><span class="nv">$@</span><span class="s2">&quot;</span>
+</code></pre></div>
+<p>The <code>$@</code> at the end dispatches the script argv to a function
+(so <code>./run.sh test</code> calls the <code>test</code> function).
+Even better, the <code>$@</code> in the <code>test</code> function passes the remaining arguments
+along (so <code>./run.sh test -v</code> runs <code>pytest --runslow -v</code>).</p>
+<h2 id="why-i-think-it-s-cool">Why I think it's cool<span class="headerlink"> <a href="#why-i-think-it-s-cool" title="permalink">#</a></span></h2>
+<p>This is quite an important thing.
+For example, it enabled me to stop dublicated commands
+in both the Makefile (for CI) and in tox.ini;
+the commands were almost the same, with a few differing arguments.</p>
+<p>Now, in the CI scripts I have (actually, this is wrapped in a <code>ci-run</code> function):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code>coverage-run <span class="o">&amp;&amp;</span> coverage-report <span class="o">&amp;&amp;</span> typing
+</code></pre></div>
+<p>and in tox.ini I have</p>
+<div class="highlight code-container"><pre class="code" data-lang="INI"><span></span><code><span class="k">[testenv]</span>
+<span class="na">commands</span> <span class="o">=</span> <span class="s">./run.sh coverage-run --cov-append</span>
+
+<span class="k">[testenv:coverage-report]</span>
+<span class="na">commands</span> <span class="o">=</span> <span class="s">./run.sh coverage-report</span>
+
+<span class="k">[testenv:typing]</span>
+<span class="na">commands</span> <span class="o">=</span> <span class="s">./run.sh typing</span>
+</code></pre></div>
+<p>while the user-facing <code>coverage-all</code> function I have:</p>
+<pre class="code code-container"><code>function coverage-all {
+    coverage-run --cov-context=test &quot;$@&quot;
+    coverage-report --show-contexts
+}
+</code></pre>
+<p>Previously, the contexts were generated in CI and tox runs as well,
+increasing the runtime by ~50% despite being unused,
+and the content of <code>coverage-report</code> being duplicated in both the makefile and tox.ini.</p>
+<details>
+<summary>It looked like this:</summary>
+<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code>coverage html --show-contexts
+coverage report <span class="se">\</span>
+    --include <span class="s1">&#39;*/reader/*&#39;</span> <span class="se">\</span>
+    --omit <span class="s1">&#39;*/reader/_vendor/*,*/reader/__main__.py,*/reader/_cli*,*/reader/_config*,*/reader/_app/*,*/reader/_plugins/*,tests/*&#39;</span> <span class="se">\</span>
+    --fail-under <span class="m">100</span>
+</code></pre></div>
+</details>
+<hr />
+<p>Another neat thing is what the original article calls <a href="http://www.oilshell.org/blog/2020/02/good-parts-sketch.html#the-0-dispatch-pattern-solves-three-important-problems"><code>$0</code>-dispatch</a>;
+this pattern allows exposing the shell functions to other commands,
+including from within the script:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="k">function</span> typing-dev <span class="o">{</span>
+    find src -name <span class="s1">&#39;*.py&#39;</span> <span class="p">|</span> entr -cdr <span class="s2">&quot;</span><span class="nv">$0</span><span class="s2">&quot;</span> typing <span class="s2">&quot;</span><span class="nv">$@</span><span class="s2">&quot;</span>
+<span class="o">}</span>
+</code></pre></div>
+<p>Here, we're using <a href="http://eradman.com/entrproject/">entr</a> to run <code>mypy --strict src</code>
+every time a Python file in <code>src</code> changes
+(<code>entr</code> takes the command to run and its arguments as arguments:
+<code>entr command [argument ...]</code>).
+Note that we're not duplicating the contents of <code>typing</code> –
+we're using <code>$0</code> to dispatch to the script itself.</p>
+<hr />
+<p>Besides the features, this has a huge benefit
+that's highlighted by the original article as well:
+it is an effective way of documenting the project development practices;
+I'm strongly considering adding more comments to my run.py
+and including it in the developer documentation <em>instead</em> of the documentation.
+(It's doable with the Makefile as well, but arguably less powerful.)</p>
+<hr />
+<p>You can find reader's <a href="https://github.com/lemon24/reader/blob/master/run.sh">full run.py here</a>; in addition to the example above,
+it has more composition examples,
+a workaround to make <code>$0</code>-dispatch work when the script is called with <code>bash run.py</code>,
+and an nice example of using entr with <code>git ls-files</code> <a href="https://jvns.ca/blog/2020/06/28/entr/">from here</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+</footer>
+
+
+</div>
