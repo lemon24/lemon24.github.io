@@ -14,7 +14,7 @@
 
 
 
-<title>Using Makefiles with only .PHONY targets? Use a run.sh script instead
+<title>Using a Makefile .PHONY-only targets? Use a run.sh script instead
  - death and gravity</title>
 
 
@@ -56,7 +56,7 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1>Using Makefiles with only .PHONY targets? Use a run.sh script instead
+<h1>Using a Makefile .PHONY-only targets? Use a run.sh script instead
 </h1>
 
 <p class="text-gray"><small>
@@ -78,29 +78,28 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>I recently discovered a neat pattern for when
-using Makefiles with only <code>.PHONY</code> targets:
-turn it into a script with functions,
-and dispatching to them by adding <code>&quot;$@&quot;</code>.</p>
-<p>It makes more complicated things easier to write and read,
-and also allows passing arguments to the &quot;targets&quot;.</p>
-<p>This is not my idea,
-but I'm quite thrilled about it,
-so I thought I should share it;
-here's <a href="http://www.oilshell.org/blog/2020/02/good-parts-sketch.html#seim-automation-with-runsh-scripts">the article that sold me on it</a>
-(plus examples of other projects that use this pattern).</p>
+<p>I recently discovered a neat pattern:</p>
+<p>When you have a Makefile that only has <code>.PHONY</code> targets,
+you can <em>turn it into a shell script with functions</em>,
+and dispatch to them by adding <code>&quot;$@&quot;</code> at the end.</p>
+<p>It makes things easier to read and write,
+allows passing arguments to the &quot;targets&quot;,
+and allows reuse both inside and outside the script.</p>
+<p>This is not my idea, but I'm quite thrilled about it, 
+and thought others might be too.
+Here's <a href="http://www.oilshell.org/blog/2020/02/good-parts-sketch.html#semi-automation-with-runsh-scripts">the article that sold me on it</a>;
+it discusses the benefits in more detail,
+and links to other projects that use it.</p>
 <h2 id="why-have-a-makefile-in-the-first-place">Why have a Makefile in the first place?<span class="headerlink"> <a href="#why-have-a-makefile-in-the-first-place" title="permalink">#</a></span></h2>
-<p>I've been using a Makefile in my python feed reader project
-for a while now to have convenient shortcuts
-for the commands used to test / build the project etc.
-to include in the <a href="https://github.com/lemon24/reader/blob/1.16/docs/dev.rst#testing">developer documentation</a>.</p>
-<p>I stole this pattern from Flask
-(they stopped using it shortly after 1.0 was released).</p>
+<p>I've been using a Makefile in my <a href="https://github.com/lemon24/reader">Python feed reader library</a>
+to have convenient shortcuts for common development stuff:
+install dependencies, run tests, etc.
+In time, I ended up using some of the targets in CI,
+and mentioning them in the developer docs.</p>
+<p>(I originally took this pattern from Flask,
+although they stopped using it after 1.0.)</p>
 <p>Here's an abridged version to give you a taste (<a href="https://github.com/lemon24/reader/blob/1.16/Makefile">full Makefile here</a>):</p>
-<div class="highlight code-container"><pre class="code" data-lang="Makefile"><span></span><code><span class="nf">.PHONY</span><span class="o">:</span> <span class="n">install</span>-<span class="n">dev</span> <span class="n">test</span> <span class="n">typing</span>
-
-<span class="nf">install-dev</span><span class="o">:</span>
-    pip install -e <span class="s1">&#39;.[search,cli,app,tests,docs,dev,unstable-plugins]&#39;</span>
+<div class="highlight code-container"><pre class="code" data-lang="Makefile"><span></span><code><span class="nf">.PHONY</span><span class="o">:</span> <span class="n">test</span> <span class="n">typing</span>
 
 <span class="nf">test</span><span class="o">:</span>
     pytest --runslow
@@ -113,25 +112,18 @@ to include in the <a href="https://github.com/lemon24/reader/blob/1.16/docs/dev.
 </code></pre></div>
 <p>For me, this has two main downsides:</p>
 <ul>
-<li>there's no way to pass arguments to the targets,
-e.g. to call <code>pytest -v</code> while also benefiting
-from the &quot;default&quot; <code>--runslow</code> option;
-specifically for pytest, I could have used <code>addopts</code> in its config file,
-but I don't want to force everyone to use that option,
-I just want to show this is the recommended way of doing it;
-also, not all tools have a per-project config file</li>
-<li>it's hard to write shell scripts;
-it is <em>possible</em>, but the results tend to be <a href="https://unix.stackexchange.com/a/270799">less readable</a></li>
+<li>It makes it harder to write full-featured shell scripts;
+it is <em>possible</em>, but the result tends to be <a href="https://unix.stackexchange.com/a/270799">less readable</a>.</li>
+<li>There's no way to pass arguments to the targets,
+for example to call <code>pytest -v</code> while also getting 
+the &quot;default&quot; <code>--runslow</code> option
+(in this case, I could have used the <a href="https://docs.pytest.org/en/stable/reference.html#confval-addopts"><code>addopts</code></a> config key –
+but I don't want to <em>force</em> everyone to use it,
+I just want to show the <em>recommended</em> way of doing it).</li>
 </ul>
-<h2 id="enter-run-py">Enter run.py<span class="headerlink"> <a href="#enter-run-py" title="permalink">#</a></span></h2>
-<p>Instead of the makefile above,
-we could put almost the same commands in a script;
-let's call it <code>run.sh</code>:</p>
+<h2 id="enter-run-sh">Enter run.sh<span class="headerlink"> <a href="#enter-run-sh" title="permalink">#</a></span></h2>
+<p>Instead, we could write that as a shell script:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="ch">#!/bin/bash</span>
-
-<span class="k">function</span> install-dev <span class="o">{</span>
-    pip install -e <span class="s1">&#39;.[search,cli,app,tests,docs,dev,unstable-plugins]&#39;</span>
-<span class="o">}</span>
 
 <span class="k">function</span> <span class="nb">test</span> <span class="o">{</span>
     pytest --runslow <span class="s2">&quot;</span><span class="nv">$@</span><span class="s2">&quot;</span>
@@ -151,19 +143,39 @@ let's call it <code>run.sh</code>:</p>
 
 <span class="s2">&quot;</span><span class="nv">$@</span><span class="s2">&quot;</span>
 </code></pre></div>
-<p>The <code>$@</code> at the end dispatches the script argv to a function
-(so <code>./run.sh test</code> calls the <code>test</code> function).
-Even better, the <code>$@</code> in the <code>test</code> function passes the remaining arguments
-along (so <code>./run.sh test -v</code> runs <code>pytest --runslow -v</code>).</p>
+<p>The <code>$@</code> at the end dispatches the script arguments to a function
+(so <code>./run.sh test</code> calls <code>test</code>);
+the <code>$@</code> in <code>test</code> passes the remaining arguments along
+(so <code>./run.sh test -v</code> runs <code>pytest --runslow -v</code>).</p>
 <h2 id="why-i-think-it-s-cool">Why I think it's cool<span class="headerlink"> <a href="#why-i-think-it-s-cool" title="permalink">#</a></span></h2>
-<p>This is quite an important thing.
-For example, it enabled me to stop dublicated commands
-in both the Makefile (for CI) and in tox.ini;
-the commands were almost the same, with a few differing arguments.</p>
-<p>Now, in the CI scripts I have (actually, this is wrapped in a <code>ci-run</code> function):</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code>coverage-run <span class="o">&amp;&amp;</span> coverage-report <span class="o">&amp;&amp;</span> typing
+<h3 id="executable-documentation">Executable documentation<span class="headerlink"> <a href="#executable-documentation" title="permalink">#</a></span></h3>
+<p><strong>TODO</strong></p>
+<p>Besides the features, this has a huge benefit
+that's highlighted by the original article as well:
+it is an effective way of documenting the project development practices;
+I'm strongly considering adding more comments to my run.sh
+and including it in the developer documentation <em>instead</em> of the documentation.
+(It's doable with the Makefile as well, but arguably less powerful.)</p>
+<h3 id="reuse">Reuse<span class="headerlink"> <a href="#reuse" title="permalink">#</a></span></h3>
+<p>Let's look at an example.
+I run coverage in three ways:</p>
+<ul>
+<li>for development, with HTML reports and <a href="https://coverage.readthedocs.io/en/coverage-5.5/contexts.html">contexts</a> (&quot;who tests what&quot;)</li>
+<li>for testing across Python versions/interpreters, with <a href="https://tox.readthedocs.io/en/latest/">tox</a>;
+contexts could be useful, but they increase run time</li>
+<li>for continuous integration<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>; contexts are not needed</li>
+</ul>
+<p>All cases should fail if coverage for specific modules is below 100%.</p>
+<p>run.sh reduced CI run time by 10-30% 
+by making it possible to skip contexts when running under tox/CI.
+Also, it prevents duplicating some <a href="https://github.com/lemon24/reader/blob/1.16/Makefile#L14-L17">pretty hairy commands</a>.</p>
+<p>Now, the developer-facing <code>coverage-all</code> command looks like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="k">function</span> coverage-all <span class="o">{</span>
+    coverage-run --cov-context<span class="o">=</span><span class="nb">test</span> <span class="s2">&quot;</span><span class="nv">$@</span><span class="s2">&quot;</span>
+    coverage-report --show-contexts
+<span class="o">}</span>
 </code></pre></div>
-<p>and in tox.ini I have</p>
+<p>... the tox.ini commands look like this:</p>
 <div class="highlight code-container"><pre class="code" data-lang="INI"><span></span><code><span class="k">[testenv]</span>
 <span class="na">commands</span> <span class="o">=</span> <span class="s">./run.sh coverage-run --cov-append</span>
 
@@ -173,50 +185,38 @@ the commands were almost the same, with a few differing arguments.</p>
 <span class="k">[testenv:typing]</span>
 <span class="na">commands</span> <span class="o">=</span> <span class="s">./run.sh typing</span>
 </code></pre></div>
-<p>while the user-facing <code>coverage-all</code> function I have:</p>
-<pre class="code code-container"><code>function coverage-all {
-    coverage-run --cov-context=test &quot;$@&quot;
-    coverage-report --show-contexts
-}
-</code></pre>
-<p>Previously, the contexts were generated in CI and tox runs as well,
-increasing the runtime by ~50% despite being unused,
-and the content of <code>coverage-report</code> being duplicated in both the makefile and tox.ini.</p>
-<details>
-<summary>It looked like this:</summary>
-<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code>coverage html --show-contexts
-coverage report <span class="se">\</span>
-    --include <span class="s1">&#39;*/reader/*&#39;</span> <span class="se">\</span>
-    --omit <span class="s1">&#39;*/reader/_vendor/*,*/reader/__main__.py,*/reader/_cli*,*/reader/_config*,*/reader/_app/*,*/reader/_plugins/*,tests/*&#39;</span> <span class="se">\</span>
-    --fail-under <span class="m">100</span>
+<p>... and CI calls a function that looks like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="k">function</span> ci-run <span class="o">{</span>
+    coverage-run <span class="o">&amp;&amp;</span> coverage-report <span class="o">&amp;&amp;</span> typing
+<span class="o">}</span>
 </code></pre></div>
-</details>
-<hr />
-<p>Another neat thing is what the original article calls <a href="http://www.oilshell.org/blog/2020/02/good-parts-sketch.html#the-0-dispatch-pattern-solves-three-important-problems"><code>$0</code>-dispatch</a>;
-this pattern allows exposing the shell functions to other commands,
-including from within the script:</p>
+<p>This reuse extends to using the functions <em>anywhere</em> commands are expected:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code>timeout <span class="m">5</span> ./run.py myfunction
+</code></pre></div>
+<p>... including inside the script itself
+(the original article calls this <a href="http://www.oilshell.org/blog/2020/02/good-parts-sketch.html#the-0-dispatch-pattern-solves-three-important-problems"><code>$0</code>-dispatch</a>):</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="k">function</span> typing-dev <span class="o">{</span>
     find src -name <span class="s1">&#39;*.py&#39;</span> <span class="p">|</span> entr -cdr <span class="s2">&quot;</span><span class="nv">$0</span><span class="s2">&quot;</span> typing <span class="s2">&quot;</span><span class="nv">$@</span><span class="s2">&quot;</span>
 <span class="o">}</span>
 </code></pre></div>
-<p>Here, we're using <a href="http://eradman.com/entrproject/">entr</a> to run <code>mypy --strict src</code>
-every time a Python file in <code>src</code> changes
-(<code>entr</code> takes the command to run and its arguments as arguments:
-<code>entr command [argument ...]</code>).
-Note that we're not duplicating the contents of <code>typing</code> –
-we're using <code>$0</code> to dispatch to the script itself.</p>
+<p>Here, <code>entr</code> takes a command (and its arguments),
+and runs it every time a Python file in <code>src</code> changes.
+Note that we use <code>$0</code> to dispatch to the script's <code>typing</code> &quot;target&quot;.</p>
+<p>You can find reader's <a href="https://github.com/lemon24/reader/blob/master/run.sh">full run.sh here</a>; 
+in addition to the stuff above, it has
+more complex examples,
+a workaround to make <code>$0</code>-dispatch work
+when called with <code>bash run.sh</code>, and
+a wrapper for using <a href="http://eradman.com/entrproject/">entr</a> with <code>git ls-files</code>,
+based on <a href="https://jvns.ca/blog/2020/06/28/entr/#restart-every-time-a-new-file-is-added-entr-d">this pattern</a> from Julia Evans.</p>
 <hr />
-<p>Besides the features, this has a huge benefit
-that's highlighted by the original article as well:
-it is an effective way of documenting the project development practices;
-I'm strongly considering adding more comments to my run.py
-and including it in the developer documentation <em>instead</em> of the documentation.
-(It's doable with the Makefile as well, but arguably less powerful.)</p>
-<hr />
-<p>You can find reader's <a href="https://github.com/lemon24/reader/blob/master/run.sh">full run.py here</a>; in addition to the example above,
-it has more composition examples,
-a workaround to make <code>$0</code>-dispatch work when the script is called with <code>bash run.py</code>,
-and an nice example of using entr with <code>git ls-files</code> <a href="https://jvns.ca/blog/2020/06/28/entr/">from here</a>.</p>
+<h3 id="it-s-simple">It's simple<span class="headerlink"> <a href="#it-s-simple" title="permalink">#</a></span></h3>
+<p><strong>TODO</strong></p>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>I could probably use tox for CI as well, like <a href="https://github.com/pallets/flask/blob/2.0.0rc1/.github/workflows/tests.yaml#L53">Flask does</a> lately. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
 
 
 
