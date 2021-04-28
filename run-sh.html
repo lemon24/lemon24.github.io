@@ -146,17 +146,22 @@ I just want to show the <em>recommended</em> way of doing it).</li>
 <p>The <code>$@</code> at the end dispatches the script arguments to a function
 (so <code>./run.sh test</code> calls <code>test</code>);
 the <code>$@</code> in <code>test</code> passes the remaining arguments along
-(so <code>./run.sh test -v</code> runs <code>pytest --runslow -v</code>).</p>
+(so <code>./run.sh test -v</code> ends up running <code>pytest --runslow -v</code>).</p>
 <h2 id="why-i-think-it-s-cool">Why I think it's cool<span class="headerlink"> <a href="#why-i-think-it-s-cool" title="permalink">#</a></span></h2>
 <h3 id="executable-documentation">Executable documentation<span class="headerlink"> <a href="#executable-documentation" title="permalink">#</a></span></h3>
-<p><strong>TODO</strong></p>
-<p>Besides the features, this has a huge benefit
-that's highlighted by the original article as well:
-it is an effective way of documenting the project development practices;
-I'm strongly considering adding more comments to my run.sh
-and including it in the developer documentation <em>instead</em> of the documentation.
-(It's doable with the Makefile as well, but arguably less powerful.)</p>
-<h3 id="reuse">Reuse<span class="headerlink"> <a href="#reuse" title="permalink">#</a></span></h3>
+<p>A script is a simple way of documenting project-specific development tools
+– with a bit of care, it becomes <em>executable documentation;</em>
+this is a huge benefit that's highlighted in the original article as well.</p>
+<p>I'm strongly considering adding more comments to my <code>run.sh</code>,
+and including it directly in the developer docs,
+<em>instead</em> of the written documentation.</p>
+<p>Most commands are self-evident,
+and if you want to run something in a different way,
+you can copy-paste it directly into a terminal
+(arguably more difficult to do with a Makefile).
+Hell, you can even source it if you're using a compatible shell,
+and have a sort of &quot;project shell&quot;.</p>
+<h3 id="reusability">Reusability<span class="headerlink"> <a href="#reusability" title="permalink">#</a></span></h3>
 <p>Let's look at an example.
 I run coverage in three ways:</p>
 <ul>
@@ -166,9 +171,9 @@ contexts could be useful, but they increase run time</li>
 <li>for continuous integration<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>; contexts are not needed</li>
 </ul>
 <p>All cases should fail if coverage for specific modules is below 100%.</p>
-<p>run.sh reduced CI run time by 10-30% 
-by making it possible to skip contexts when running under tox/CI.
-Also, it prevents duplicating some <a href="https://github.com/lemon24/reader/blob/1.16/Makefile#L14-L17">pretty hairy commands</a>.</p>
+<p>run.sh made it possible to skip contexts when running under tox/CI,
+which reduced CI run time by 10-30%.
+Also, it avoids duplicating some <a href="https://github.com/lemon24/reader/blob/1.16/Makefile#L14-L17">pretty hairy commands</a>.</p>
 <p>Now, the developer-facing <code>coverage-all</code> command looks like this:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="k">function</span> coverage-all <span class="o">{</span>
     coverage-run --cov-context<span class="o">=</span><span class="nb">test</span> <span class="s2">&quot;</span><span class="nv">$@</span><span class="s2">&quot;</span>
@@ -190,7 +195,8 @@ Also, it prevents duplicating some <a href="https://github.com/lemon24/reader/bl
     coverage-run <span class="o">&amp;&amp;</span> coverage-report <span class="o">&amp;&amp;</span> typing
 <span class="o">}</span>
 </code></pre></div>
-<p>This reuse extends to using the functions <em>anywhere</em> commands are expected:</p>
+<hr />
+<p>This reusability extends to using the functions <em>anywhere</em> commands are expected:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code>timeout <span class="m">5</span> ./run.py myfunction
 </code></pre></div>
 <p>... including inside the script itself
@@ -202,16 +208,20 @@ Also, it prevents duplicating some <a href="https://github.com/lemon24/reader/bl
 <p>Here, <code>entr</code> takes a command (and its arguments),
 and runs it every time a Python file in <code>src</code> changes.
 Note that we use <code>$0</code> to dispatch to the script's <code>typing</code> &quot;target&quot;.</p>
-<p>You can find reader's <a href="https://github.com/lemon24/reader/blob/master/run.sh">full run.sh here</a>; 
-in addition to the stuff above, it has
-more complex examples,
-a workaround to make <code>$0</code>-dispatch work
-when called with <code>bash run.sh</code>, and
-a wrapper for using <a href="http://eradman.com/entrproject/">entr</a> with <code>git ls-files</code>,
-based on <a href="https://jvns.ca/blog/2020/06/28/entr/#restart-every-time-a-new-file-is-added-entr-d">this pattern</a> from Julia Evans.</p>
 <hr />
-<h3 id="it-s-simple">It's simple<span class="headerlink"> <a href="#it-s-simple" title="permalink">#</a></span></h3>
-<p><strong>TODO</strong></p>
+<p>You can find reader's <a href="https://github.com/lemon24/reader/blob/master/run.sh">full run.sh here</a>; 
+in addition to the things above, it has:</p>
+<ul>
+<li>more complex examples,</li>
+<li>a workaround to make <code>$0</code>-dispatch work
+when called with <code>bash run.sh</code>, and</li>
+<li>a wrapper for using <a href="http://eradman.com/entrproject/">entr</a> with <code>git ls-files</code>,
+based on <a href="https://jvns.ca/blog/2020/06/28/entr/#restart-every-time-a-new-file-is-added-entr-d">this pattern</a> from Julia Evans.</li>
+</ul>
+<hr />
+<p>That's it for now.</p>
+<p>Found this useful? Consider sharing it wherever you share stuff, it really helps! :)</p>
+<p>Have questions? <a href="/about#contact">Send me an email.</a></p>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>I could probably use tox for CI as well, like <a href="https://github.com/pallets/flask/blob/2.0.0rc1/.github/workflows/tests.yaml#L53">Flask does</a> lately. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
