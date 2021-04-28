@@ -60,9 +60,11 @@ window.addEventListener('resize', set_vh);
 </h1>
 
 <p class="text-gray"><small>
+<span>2021-04-28</span>
 
 
 
+∙ four minute read
 
 
 </small></p>
@@ -83,22 +85,22 @@ window.addEventListener('resize', set_vh);
 you can <em>turn it into a shell script with functions</em>,
 and dispatch to them by adding <code>&quot;$@&quot;</code> at the end.</p>
 <p>It makes things easier to read and write,
-allows passing arguments to the &quot;targets&quot;
-and reuse both inside and outside the script.</p>
+allows passing arguments to the &quot;targets&quot;,
+and enables reuse both inside and outside the script.</p>
 <p>This is not my idea, but I think it's quite cool,
 and thought others might too.
 Here's <a href="http://www.oilshell.org/blog/2020/02/good-parts-sketch.html#semi-automation-with-runsh-scripts">the article that sold me on it</a>;
-it discusses the benefits in more detail,
+it discusses the benefits in more detail
 and links to other projects that use it.</p>
 <h2 id="why-have-a-makefile-in-the-first-place">Why have a Makefile in the first place?<span class="headerlink"> <a href="#why-have-a-makefile-in-the-first-place" title="permalink">#</a></span></h2>
-<p>I've been using a Makefile in my <a href="https://github.com/lemon24/reader">Python feed reader library</a>
-to have convenient shortcuts for common development stuff:
+<p>I've been using a Makefile in my Python <a href="https://github.com/lemon24/reader">feed reader library</a>
+to get convenient shortcuts for common development stuff:
 install dependencies, run tests, etc.
 In time, I ended up using some of the targets in CI,
 and mentioning them in the developer docs.</p>
 <p>(I originally took this pattern from Flask,
 although they stopped using it after 1.0.)</p>
-<p>Here's an abridged version to give you a taste (<a href="https://github.com/lemon24/reader/blob/1.16/Makefile">full Makefile here</a>):</p>
+<p>Here's an abridged version to give you a taste (full Makefile <a href="https://github.com/lemon24/reader/blob/1.16/Makefile">here</a>):</p>
 <div class="highlight code-container"><pre class="code" data-lang="Makefile"><span></span><code><span class="nf">.PHONY</span><span class="o">:</span> <span class="n">test</span> <span class="n">typing</span>
 
 <span class="nf">test</span><span class="o">:</span>
@@ -112,17 +114,17 @@ although they stopped using it after 1.0.)</p>
 </code></pre></div>
 <p>For me, this has two main downsides:</p>
 <ul>
-<li>It makes it harder to write full-featured shell scripts;
-it is <em>possible</em>, but the result tends to be <a href="https://unix.stackexchange.com/a/270799">less readable</a>.</li>
 <li>There's no way to pass arguments to the targets,
 for example to call <code>pytest -v</code> while also getting 
-the &quot;default&quot; <code>--runslow</code> option
-(in this case, I could have used the <a href="https://docs.pytest.org/en/stable/reference.html#confval-addopts"><code>addopts</code></a> config key –
-but I don't want to <em>force</em> everyone to use it,
-I just want to show the <em>recommended</em> way of doing it).</li>
+the &quot;default&quot; <code>--runslow</code> option.
+(In this case, I could have used the <a href="https://docs.pytest.org/en/stable/reference.html#confval-addopts"><code>addopts</code></a> config key –
+but I don't want to <em>force</em> everyone to use <code>--runslow</code>,
+I just want to show it's the <em>recommended</em> way.)</li>
+<li>It makes it harder to write fully-featured scripts;
+it is <em>possible</em>, but the result tends to be <a href="https://unix.stackexchange.com/a/270799">less readable</a>.</li>
 </ul>
 <h2 id="enter-run-sh">Enter run.sh<span class="headerlink"> <a href="#enter-run-sh" title="permalink">#</a></span></h2>
-<p>Instead, we could write that as a shell script:</p>
+<p>We could re-write that as a shell script; let's call it <code>run.sh</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="ch">#!/bin/bash</span>
 
 <span class="k">function</span> <span class="nb">test</span> <span class="o">{</span>
@@ -158,7 +160,7 @@ and including it directly in the developer docs,
 <p>Most commands are self-evident,
 and if you want to run something in a different way,
 you can copy-paste it directly into a terminal
-(arguably more difficult to do with a Makefile).
+(not straightforward with a Makefile).
 Hell, you can even source it if you're using a compatible shell,
 and have a sort of &quot;project shell&quot;.</p>
 <h3 id="reusability">Reusability<span class="headerlink"> <a href="#reusability" title="permalink">#</a></span></h3>
@@ -171,7 +173,7 @@ contexts could be useful, but they increase run time</li>
 <li>for continuous integration<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>; contexts are not needed</li>
 </ul>
 <p>All cases should fail if coverage for specific modules is below 100%.</p>
-<p>run.sh made it possible to skip contexts when running under tox/CI,
+<p>run.sh makes it possible to skip contexts when running under tox/CI,
 which reduced CI run time by 10-30%.
 Also, it avoids duplicating some <a href="https://github.com/lemon24/reader/blob/1.16/Makefile#L14-L17">pretty hairy commands</a>.</p>
 <p>Now, the developer-facing <code>coverage-all</code> command looks like this:</p>
@@ -197,7 +199,7 @@ Also, it avoids duplicating some <a href="https://github.com/lemon24/reader/blob
 </code></pre></div>
 <hr />
 <p>This reusability extends to using the functions <em>anywhere</em> commands are expected:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code>timeout <span class="m">5</span> ./run.py myfunction
+<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code>timeout <span class="m">5</span> ./run.sh myfunction
 </code></pre></div>
 <p>... including inside the script itself
 (the original article calls this <a href="http://www.oilshell.org/blog/2020/02/good-parts-sketch.html#the-0-dispatch-pattern-solves-three-important-problems"><code>$0</code>-dispatch</a>):</p>
@@ -209,14 +211,14 @@ Also, it avoids duplicating some <a href="https://github.com/lemon24/reader/blob
 and runs it every time a Python file in <code>src</code> changes.
 Note that we use <code>$0</code> to dispatch to the script's <code>typing</code> &quot;target&quot;.</p>
 <hr />
-<p>You can find reader's <a href="https://github.com/lemon24/reader/blob/master/run.sh">full run.sh here</a>; 
+<p>You can find reader's full run.sh <a href="https://github.com/lemon24/reader/blob/master/run.sh">here</a>; 
 in addition to the things above, it has:</p>
 <ul>
-<li>more complex examples,</li>
+<li>more complex examples</li>
 <li>a workaround to make <code>$0</code>-dispatch work
-when called with <code>bash run.sh</code>, and</li>
+when called with <code>bash run.sh</code></li>
 <li>a wrapper for using <a href="http://eradman.com/entrproject/">entr</a> with <code>git ls-files</code>,
-based on <a href="https://jvns.ca/blog/2020/06/28/entr/#restart-every-time-a-new-file-is-added-entr-d">this pattern</a> from Julia Evans.</li>
+based on <a href="https://jvns.ca/blog/2020/06/28/entr/#restart-every-time-a-new-file-is-added-entr-d">this pattern</a> from Julia Evans</li>
 </ul>
 <hr />
 <p>That's it for now.</p>
@@ -236,6 +238,57 @@ based on <a href="https://jvns.ca/blog/2020/06/28/entr/#restart-every-time-a-new
 
 
 
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661"
+    method="post"
+    id="mc-embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 
 
 

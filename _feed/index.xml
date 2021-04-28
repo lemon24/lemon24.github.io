@@ -2,13 +2,171 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity</title>
-  <updated>2021-04-20T14:17:00+00:00</updated>
+  <updated>2021-04-28T15:40:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
   </author>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/run-sh">
+    <id>https://death.andgravity.com/run-sh</id>
+    <title>Using a Makefile with .PHONY-only targets? Use a run.sh script instead
+</title>
+    <updated>2021-04-28T15:40:00+00:00</updated>
+    <content type="html">&lt;p&gt;I recently discovered a neat pattern:&lt;/p&gt;
+&lt;p&gt;When you have a Makefile that only has &lt;code&gt;.PHONY&lt;/code&gt; targets,
+you can &lt;em&gt;turn it into a shell script with functions&lt;/em&gt;,
+and dispatch to them by adding &lt;code&gt;&amp;quot;$@&amp;quot;&lt;/code&gt; at the end.&lt;/p&gt;
+&lt;p&gt;It makes things easier to read and write,
+allows passing arguments to the &amp;quot;targets&amp;quot;,
+and enables reuse both inside and outside the script.&lt;/p&gt;
+&lt;p&gt;This is not my idea, but I think it's quite cool,
+and thought others might too.
+Here's &lt;a href="http://www.oilshell.org/blog/2020/02/good-parts-sketch.html#semi-automation-with-runsh-scripts"&gt;the article that sold me on it&lt;/a&gt;;
+it discusses the benefits in more detail
+and links to other projects that use it.&lt;/p&gt;
+&lt;h2 id="why-have-a-makefile-in-the-first-place"&gt;Why have a Makefile in the first place?&lt;span class="headerlink"&gt; &lt;a href="#why-have-a-makefile-in-the-first-place" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;I've been using a Makefile in my Python &lt;a href="https://github.com/lemon24/reader"&gt;feed reader library&lt;/a&gt;
+to get convenient shortcuts for common development stuff:
+install dependencies, run tests, etc.
+In time, I ended up using some of the targets in CI,
+and mentioning them in the developer docs.&lt;/p&gt;
+&lt;p&gt;(I originally took this pattern from Flask,
+although they stopped using it after 1.0.)&lt;/p&gt;
+&lt;p&gt;Here's an abridged version to give you a taste (full Makefile &lt;a href="https://github.com/lemon24/reader/blob/1.16/Makefile"&gt;here&lt;/a&gt;):&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Makefile"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nf"&gt;.PHONY&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt; &lt;span class="n"&gt;test&lt;/span&gt; &lt;span class="n"&gt;typing&lt;/span&gt;
+
+&lt;span class="nf"&gt;test&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;
+    pytest --runslow
+
+&lt;span class="c"&gt;# mypy does not work on pypy as of January 2020&lt;/span&gt;
+&lt;span class="nf"&gt;typing&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;
+    &lt;span class="nb"&gt;test&lt;/span&gt; &lt;span class="nv"&gt;$$&lt;/span&gt;&lt;span class="o"&gt;(&lt;/span&gt; python -c &lt;span class="s1"&gt;&amp;#39;import sys; print(sys.implementation.name)&amp;#39;&lt;/span&gt; &lt;span class="o"&gt;)&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; pypy &lt;span class="se"&gt;\&lt;/span&gt;
+    &lt;span class="o"&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class="nb"&gt;echo&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;mypy does not work on pypy, doing nothing&amp;quot;&lt;/span&gt; &lt;span class="se"&gt;\&lt;/span&gt;
+    &lt;span class="o"&gt;||&lt;/span&gt; mypy --strict src
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;For me, this has two main downsides:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;There's no way to pass arguments to the targets,
+for example to call &lt;code&gt;pytest -v&lt;/code&gt; while also getting 
+the &amp;quot;default&amp;quot; &lt;code&gt;--runslow&lt;/code&gt; option.
+(In this case, I could have used the &lt;a href="https://docs.pytest.org/en/stable/reference.html#confval-addopts"&gt;&lt;code&gt;addopts&lt;/code&gt;&lt;/a&gt; config key –
+but I don't want to &lt;em&gt;force&lt;/em&gt; everyone to use &lt;code&gt;--runslow&lt;/code&gt;,
+I just want to show it's the &lt;em&gt;recommended&lt;/em&gt; way.)&lt;/li&gt;
+&lt;li&gt;It makes it harder to write fully-featured scripts;
+it is &lt;em&gt;possible&lt;/em&gt;, but the result tends to be &lt;a href="https://unix.stackexchange.com/a/270799"&gt;less readable&lt;/a&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="enter-run-sh"&gt;Enter run.sh&lt;span class="headerlink"&gt; &lt;a href="#enter-run-sh" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;We could re-write that as a shell script; let's call it &lt;code&gt;run.sh&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="ch"&gt;#!/bin/bash&lt;/span&gt;
+
+&lt;span class="k"&gt;function&lt;/span&gt; &lt;span class="nb"&gt;test&lt;/span&gt; &lt;span class="o"&gt;{&lt;/span&gt;
+    pytest --runslow &lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="nv"&gt;$@&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;
+&lt;span class="o"&gt;}&lt;/span&gt;
+
+&lt;span class="k"&gt;function&lt;/span&gt; typing &lt;span class="o"&gt;{&lt;/span&gt;
+    &lt;span class="nb"&gt;local&lt;/span&gt; &lt;span class="nv"&gt;impl&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="k"&gt;$(&lt;/span&gt; python -c &lt;span class="s1"&gt;&amp;#39;import sys; print(sys.implementation.name)&amp;#39;&lt;/span&gt; &lt;span class="k"&gt;)&lt;/span&gt;
+
+    &lt;span class="c1"&gt;# mypy does not work on pypy as of January 2020&lt;/span&gt;
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="o"&gt;[[&lt;/span&gt; &lt;span class="nv"&gt;$impl&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; pypy &lt;span class="o"&gt;]]&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="k"&gt;then&lt;/span&gt;
+        &lt;span class="nb"&gt;echo&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;mypy does not work on pypy, doing nothing&amp;quot;&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt;
+    &lt;span class="k"&gt;fi&lt;/span&gt;
+
+    mypy --strict src &lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="nv"&gt;$@&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;
+&lt;span class="o"&gt;}&lt;/span&gt;
+
+&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="nv"&gt;$@&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The &lt;code&gt;$@&lt;/code&gt; at the end dispatches the script arguments to a function
+(so &lt;code&gt;./run.sh test&lt;/code&gt; calls &lt;code&gt;test&lt;/code&gt;);
+the &lt;code&gt;$@&lt;/code&gt; in &lt;code&gt;test&lt;/code&gt; passes the remaining arguments along
+(so &lt;code&gt;./run.sh test -v&lt;/code&gt; ends up running &lt;code&gt;pytest --runslow -v&lt;/code&gt;).&lt;/p&gt;
+&lt;h2 id="why-i-think-it-s-cool"&gt;Why I think it's cool&lt;span class="headerlink"&gt; &lt;a href="#why-i-think-it-s-cool" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;h3 id="executable-documentation"&gt;Executable documentation&lt;span class="headerlink"&gt; &lt;a href="#executable-documentation" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;A script is a simple way of documenting project-specific development tools
+– with a bit of care, it becomes &lt;em&gt;executable documentation;&lt;/em&gt;
+this is a huge benefit that's highlighted in the original article as well.&lt;/p&gt;
+&lt;p&gt;I'm strongly considering adding more comments to my &lt;code&gt;run.sh&lt;/code&gt;,
+and including it directly in the developer docs,
+&lt;em&gt;instead&lt;/em&gt; of the written documentation.&lt;/p&gt;
+&lt;p&gt;Most commands are self-evident,
+and if you want to run something in a different way,
+you can copy-paste it directly into a terminal
+(not straightforward with a Makefile).
+Hell, you can even source it if you're using a compatible shell,
+and have a sort of &amp;quot;project shell&amp;quot;.&lt;/p&gt;
+&lt;h3 id="reusability"&gt;Reusability&lt;span class="headerlink"&gt; &lt;a href="#reusability" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Let's look at an example.
+I run coverage in three ways:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;for development, with HTML reports and &lt;a href="https://coverage.readthedocs.io/en/coverage-5.5/contexts.html"&gt;contexts&lt;/a&gt; (&amp;quot;who tests what&amp;quot;)&lt;/li&gt;
+&lt;li&gt;for testing across Python versions/interpreters, with &lt;a href="https://tox.readthedocs.io/en/latest/"&gt;tox&lt;/a&gt;;
+contexts could be useful, but they increase run time&lt;/li&gt;
+&lt;li&gt;for continuous integration&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;; contexts are not needed&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;All cases should fail if coverage for specific modules is below 100%.&lt;/p&gt;
+&lt;p&gt;run.sh makes it possible to skip contexts when running under tox/CI,
+which reduced CI run time by 10-30%.
+Also, it avoids duplicating some &lt;a href="https://github.com/lemon24/reader/blob/1.16/Makefile#L14-L17"&gt;pretty hairy commands&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Now, the developer-facing &lt;code&gt;coverage-all&lt;/code&gt; command looks like this:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;function&lt;/span&gt; coverage-all &lt;span class="o"&gt;{&lt;/span&gt;
+    coverage-run --cov-context&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="nb"&gt;test&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="nv"&gt;$@&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;
+    coverage-report --show-contexts
+&lt;span class="o"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;... the tox.ini commands look like this:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="INI"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;[testenv]&lt;/span&gt;
+&lt;span class="na"&gt;commands&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;./run.sh coverage-run --cov-append&lt;/span&gt;
+
+&lt;span class="k"&gt;[testenv:coverage-report]&lt;/span&gt;
+&lt;span class="na"&gt;commands&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;./run.sh coverage-report&lt;/span&gt;
+
+&lt;span class="k"&gt;[testenv:typing]&lt;/span&gt;
+&lt;span class="na"&gt;commands&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;./run.sh typing&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;... and CI calls a function that looks like this:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;function&lt;/span&gt; ci-run &lt;span class="o"&gt;{&lt;/span&gt;
+    coverage-run &lt;span class="o"&gt;&amp;amp;&amp;amp;&lt;/span&gt; coverage-report &lt;span class="o"&gt;&amp;amp;&amp;amp;&lt;/span&gt; typing
+&lt;span class="o"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;hr /&gt;
+&lt;p&gt;This reusability extends to using the functions &lt;em&gt;anywhere&lt;/em&gt; commands are expected:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;timeout &lt;span class="m"&gt;5&lt;/span&gt; ./run.sh myfunction
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;... including inside the script itself
+(the original article calls this &lt;a href="http://www.oilshell.org/blog/2020/02/good-parts-sketch.html#the-0-dispatch-pattern-solves-three-important-problems"&gt;&lt;code&gt;$0&lt;/code&gt;-dispatch&lt;/a&gt;):&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;function&lt;/span&gt; typing-dev &lt;span class="o"&gt;{&lt;/span&gt;
+    find src -name &lt;span class="s1"&gt;&amp;#39;*.py&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;|&lt;/span&gt; entr -cdr &lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="nv"&gt;$0&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt; typing &lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="nv"&gt;$@&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;
+&lt;span class="o"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Here, &lt;code&gt;entr&lt;/code&gt; takes a command (and its arguments),
+and runs it every time a Python file in &lt;code&gt;src&lt;/code&gt; changes.
+Note that we use &lt;code&gt;$0&lt;/code&gt; to dispatch to the script's &lt;code&gt;typing&lt;/code&gt; &amp;quot;target&amp;quot;.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;You can find reader's full run.sh &lt;a href="https://github.com/lemon24/reader/blob/master/run.sh"&gt;here&lt;/a&gt;; 
+in addition to the things above, it has:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;more complex examples&lt;/li&gt;
+&lt;li&gt;a workaround to make &lt;code&gt;$0&lt;/code&gt;-dispatch work
+when called with &lt;code&gt;bash run.sh&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;a wrapper for using &lt;a href="http://eradman.com/entrproject/"&gt;entr&lt;/a&gt; with &lt;code&gt;git ls-files&lt;/code&gt;,
+based on &lt;a href="https://jvns.ca/blog/2020/06/28/entr/#restart-every-time-a-new-file-is-added-entr-d"&gt;this pattern&lt;/a&gt; from Julia Evans&lt;/li&gt;
+&lt;/ul&gt;
+&lt;hr /&gt;
+&lt;p&gt;That's it for now.&lt;/p&gt;
+&lt;p&gt;Found this useful? Consider sharing it wherever you share stuff, it really helps! :)&lt;/p&gt;
+&lt;p&gt;Have questions? &lt;a href="/about#contact"&gt;Send me an email.&lt;/a&gt;&lt;/p&gt;
+&lt;section class="footnotes"&gt;
+&lt;ol&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;I could probably use tox for CI as well, like &lt;a href="https://github.com/pallets/flask/blob/2.0.0rc1/.github/workflows/tests.yaml#L53"&gt;Flask does&lt;/a&gt; lately. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+    <link href="https://death.andgravity.com/run-sh" rel="alternate"/>
+    <published>2021-04-28T15:40:00+00:00</published>
+  </entry>
   <entry xml:base="https://death.andgravity.com/hashlib-buffer-required">
     <id>https://death.andgravity.com/hashlib-buffer-required</id>
     <title>hashlib: object supporting the buffer API required</title>
