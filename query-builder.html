@@ -19,7 +19,7 @@
 
 
 
-<title>query-builder - death and gravity</title>
+<title>An SQL query builder in 150 lines of Python - death and gravity</title>
 
 
 <script>
@@ -51,7 +51,7 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1>query-builder</h1>
+<h1>An SQL query builder in 150 lines of Python</h1>
 
 <p class="text-gray"><small>
 
@@ -72,69 +72,78 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>building an sql query builder in 150 lines of Python</p>
+<p>In this series,
+we'll take a look at the SQL query builder
+I wrote for my feed aggregator library, <a href="https://github.com/lemon24/reader">reader</a>
+(this is just a teaser).</p>
+<p>While the code itself is interesting in its own right
+(if for no other reason other than how small it turned out),
+in the first few articles we'll discuss something more important:
+<strong>why I did it</strong>, <strong>what I didn't do</strong>, and <strong>how I thought about it</strong>.</p>
+<p>We'll cover:</p>
 <ul>
-<li><p>intro</p>
+<li>Why (and when) does one need a query builder in the first place.</li>
+<li>Why was this the right decision in my case.<ul>
+<li>What existing libraries I looked at, and why I didn't use one.</li>
+<li>Why (and when) I decided to write my own.</li>
+<li>How I knew it wouldn't spiral out into a huge project,
+what I did to decrease the likelihood of it happening,
+what I did to decrease the maintenance burden.</li>
+</ul>
+</li>
+<li>How I thought about the problem.<ul>
+<li>The crucial insight, and how the initial research was essential in getting it.</li>
+</ul>
+</li>
+</ul>
+<p>After that, we'll write the thing from scratch, iteratively;
+along the way, we'll discuss:</p>
 <ul>
-<li>real, useful, <em>used</em> library (in <code>reader</code>); not a toy</li>
-<li>we'll cover why<ul>
-<li>why it is useful</li>
-<li>why it was the right decision for my project<ul>
-<li>how I knew it wouldn't spiral out into huge project</li>
-</ul>
-</li>
-<li>why not other things</li>
-</ul>
-</li>
-<li>we'll cover how<ul>
-<li>how I thought about the problem<ul>
-<li>initial insight required</li>
-<li>tiny bit of metaprogramming</li>
-</ul>
-</li>
-<li>how I implemented it</li>
-<li>how I tested it (or didn't)</li>
-</ul>
-</li>
-<li>we'll talk about lessons learned, throught the thing</li>
-<li>an example</li>
-</ul>
-</li>
-<li><p>why is it useful</p>
-<ul>
-<li>makes conditional query building less verbose</li>
-<li>provides standard way of describing a query, which enables<ul>
-<li>composition; reuse by moving stuff into functions (example: apply filter options)</li>
-<li>introspection (example: scrolling window queries)</li>
+<li>The data structures and techniques I used.</li>
+<li>The API choices I made.</li>
+<li>How I tested the thing (and how I avoided testing it too much).</li>
+<li>The things I changed my mind after the initial implementation, and why.</li>
+<li>When and why I stopped adding, and even removed, features.<ul>
+<li>How to implement a few other features.</li>
 </ul>
 </li>
 </ul>
-</li>
-<li><p>why was it the right choice for my project</p>
-<ul>
-<li>no dependencies (reader is library, deps get passed down to users)</li>
-<li>already high test coverage, could rely on existing higher level tests</li>
-<li>already had the initial insight</li>
-<li>didn't know it would be small<ul>
-<li>did two prototypes before deciding to start</li>
-<li>had a relatively clear list of requirements</li>
-<li>more time was spent on adding annotations, and even more on refactoring for this article</li>
-</ul>
-</li>
-<li>didn't know it would be easy to understand (again, prototypes)</li>
-<li>alternatives considered (TODO: include details from lemon24/reader#123)<ul>
-<li>do nothing</li>
-<li>disable bits of the query with booleans and hope the optimizer sorts it out</li>
-<li>sqlbuilder.mini</li>
-<li>JinjaSQL</li>
-<li>SQLAlchemy</li>
-<li>sqlpy (found it too late)</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-<p>TBD: how, lots of it</p>
+<p>So, what does it look like?</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">builder</span> <span class="kn">import</span> <span class="n">Query</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;url&#39;</span><span class="p">,</span> <span class="s1">&#39;title&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;feeds&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+<span class="go">SELECT</span>
+<span class="go">    url,</span>
+<span class="go">    title</span>
+<span class="go">FROM</span>
+<span class="go">    feeds</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">SELECT</span><span class="p">((</span><span class="s2">&quot;title_sort&quot;</span><span class="p">,</span> <span class="s2">&quot;lower(coalesce(user_title, title))&quot;</span><span class="p">))</span>
+<span class="go">&lt;builder.Query object at 0x7fad40935a30&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">ORDER_BY</span><span class="p">(</span><span class="s1">&#39;title_sort&#39;</span><span class="p">)</span>
+<span class="go">&lt;builder.Query object at 0x7fad40935a30&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+<span class="go">SELECT</span>
+<span class="go">    url,</span>
+<span class="go">    title,</span>
+<span class="go">    lower(coalesce(user_title, title)) AS title_sort</span>
+<span class="go">FROM</span>
+<span class="go">    feeds</span>
+<span class="go">ORDER BY</span>
+<span class="go">    title_sort</span>
+</code></pre></div>
+<p>If you're curious to see the code,
+you can find the final version <em>here</em>,
+and the &quot;productized&quot;, type-annotated version <em>here</em>.</p>
+<p>As new articles appear,
+the bullets above will point to the specific articles.
+If you wanna keep up with them, subscribe and hit the bell.</p>
+<p>Note:
+This is my first <em>planned</em> series,
+so I haven't actually written the articles yet.
+If you have comments, questions or suggestions,
+drop me a line.</p>
 
 
 
