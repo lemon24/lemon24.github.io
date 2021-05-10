@@ -19,7 +19,7 @@
 
 
 
-<title>An SQL query builder in 150 lines of Python - death and gravity</title>
+<title>An SQL query builder in 150 lines of Python: Introduction - death and gravity</title>
 
 
 <script>
@@ -51,7 +51,7 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1>An SQL query builder in 150 lines of Python</h1>
+<h1>An SQL query builder in 150 lines of Python: Introduction</h1>
 
 <p class="text-gray"><small>
 
@@ -73,53 +73,50 @@ window.addEventListener('resize', set_vh);
 <div class="column col-sm-12 col-md-10 col-8">
 
 <p>In this series,
-we'll take a look at the SQL query builder
-I wrote for my feed aggregator library, <a href="https://github.com/lemon24/reader">reader</a>
-(this is just a teaser).</p>
-<p>While the code itself is interesting in its own right
-(if for no other reason other than how small it turned out),
-in the first few articles we'll discuss something more important:
-<strong>why I did it</strong>, <strong>what I didn't do</strong>, and <strong>how I thought about it</strong>.</p>
-<p>We'll cover:</p>
+we'll look at an SQL query builder
+I wrote for my <a href="https://github.com/lemon24/reader">feed reader library</a>.
+<em>Yes, you read that right, the whole thing is just under 150 lines of Python.</em></p>
+<p>Read on for a summary of what you can expect from the rest of the series.</p>
+<hr />
+<p>While the code is interesting in its own right,
+in the first few articles we'll discuss
+<strong>why I did it</strong>, <strong>what I didn't do</strong>, and <strong>how I thought about it</strong>:</p>
 <ul>
-<li>Why (and when) does one need a query builder in the first place.</li>
-<li>Why was this the right decision in my case.<ul>
-<li>What existing libraries I looked at, and why I didn't use one.</li>
-<li>Why (and when) I decided to write my own.</li>
-<li>How I knew it wouldn't spiral out into a huge project,
-what I did to decrease the likelihood of it happening,
-what I did to decrease the maintenance burden.</li>
+<li>why use a query builder in the first place</li>
+<li>why I decided to write my own<ul>
+<li>what existing libraries I looked at, and why I didn't use one</li>
+<li>how I knew it wouldn't become too big and/or a maintenance burden</li>
 </ul>
 </li>
-<li>How I thought about the problem.<ul>
-<li>The crucial insight, and how the initial research was essential in getting it.</li>
+<li>how I modeled the problem</li>
 </ul>
-</li>
-</ul>
-<p>After that, we'll write the thing from scratch, iteratively;
-along the way, we'll discuss:</p>
+<p>After that, we'll rewrite the builder <strong>from scratch</strong>, iteratively,
+and talk about:</p>
 <ul>
-<li>The data structures and techniques I used.</li>
-<li>The API choices I made.</li>
-<li>How I tested the thing (and how I avoided testing it too much).</li>
-<li>The things I changed my mind after the initial implementation, and why.</li>
-<li>When and why I stopped adding, and even removed, features.<ul>
-<li>How to implement a few other features.</li>
+<li>API design</li>
+<li>data stuctures</li>
+<li>metaprogramming</li>
+<li>worse ways of doing things</li>
+<li>why I removed a bunch of features</li>
 </ul>
-</li>
-</ul>
+<hr />
 <p>So, what does it look like?</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">builder</span> <span class="kn">import</span> <span class="n">Query</span>
-<span class="go">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;url&#39;</span><span class="p">,</span> <span class="s1">&#39;title&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;feeds&#39;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+<p>You create a <code>Query</code> object,
+and then chain-call <code>KEYWORD</code> methods to add stuff to it:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;url&#39;</span><span class="p">,</span> <span class="s1">&#39;title&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;feeds&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">query</span>
+<span class="go">&lt;builder.Query object at 0x7fad40935a30&gt;</span>
+</code></pre></div>
+<p>To get the SQL, you convert it to a string:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
 <span class="go">SELECT</span>
 <span class="go">    url,</span>
 <span class="go">    title</span>
 <span class="go">FROM</span>
 <span class="go">    feeds</span>
-
-<span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">SELECT</span><span class="p">((</span><span class="s2">&quot;title_sort&quot;</span><span class="p">,</span> <span class="s2">&quot;lower(coalesce(user_title, title))&quot;</span><span class="p">))</span>
+</code></pre></div>
+<p>Repeated calls modify the query in-place:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">SELECT</span><span class="p">((</span><span class="s2">&quot;title_sort&quot;</span><span class="p">,</span> <span class="s2">&quot;lower(coalesce(user_title, title))&quot;</span><span class="p">))</span>  <span class="c1"># alias</span>
 <span class="go">&lt;builder.Query object at 0x7fad40935a30&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">ORDER_BY</span><span class="p">(</span><span class="s1">&#39;title_sort&#39;</span><span class="p">)</span>
 <span class="go">&lt;builder.Query object at 0x7fad40935a30&gt;</span>
@@ -133,9 +130,11 @@ along the way, we'll discuss:</p>
 <span class="go">ORDER BY</span>
 <span class="go">    title_sort</span>
 </code></pre></div>
+<!-- TBD -->
 <p>If you're curious to see the code,
 you can find the final version <em>here</em>,
 and the &quot;productized&quot;, type-annotated version <em>here</em>.</p>
+<!-- TODO: clean up constructor -->
 <p>As new articles appear,
 the bullets above will point to the specific articles.
 If you wanna keep up with them, subscribe and hit the bell.</p>
@@ -153,6 +152,61 @@ drop me a line.</p>
 
 
 
+
+
+
+
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661"
+    method="post"
+    id="mc-embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 
 
 
