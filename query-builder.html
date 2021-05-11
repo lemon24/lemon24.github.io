@@ -89,7 +89,8 @@ I wrote for my feed <a href="https://github.com/lemon24/reader">reader</a> libra
 <em>Yup, you read that right, the whole thing fits in 150 lines!</em></p>
 <p>Read on for a preview.</p>
 <hr />
-<p>While the code is interesting in its own right,
+<p>While the code is interesting in its own right
+(if for no other reason other than the size),
 in the first few articles we'll discuss
 <strong>why I did it</strong>, <strong>what I didn't do</strong>, and <strong>how I thought about it</strong>:</p>
 <ul>
@@ -120,39 +121,36 @@ and talk about:</p>
 <span class="go">SELECT</span>
 <span class="go">    url</span>
 </code></pre></div>
-<p>You can chain the calls for convenience:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;title&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;feeds&#39;</span><span class="p">)</span>
-<span class="go">&lt;builder.Query object at 0x7fad40935a30&gt;</span>
+<p>You can chain the calls for convenience (order doesn't matter):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;feeds&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;title&#39;</span><span class="p">,</span> <span class="s1">&#39;updated&#39;</span><span class="p">)</span>
+<span class="go">&lt;builder.Query object at 0x7fc953e60640&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
 <span class="go">SELECT</span>
 <span class="go">    url,</span>
-<span class="go">    title</span>
+<span class="go">    title,</span>
+<span class="go">    updated</span>
 <span class="go">FROM</span>
 <span class="go">    feeds</span>
 </code></pre></div>
 <p>To get the SQL, convert the query to a string:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
-<span class="go">&#39;SELECT\n    url,\n    title\nFROM\n    feeds\n&#39;</span>
+<span class="go">&#39;SELECT\n    url,\n    title,\n    updated\nFROM\n    feeds\n&#39;</span>
 </code></pre></div>
-<p>Here's a more complicated query, derived from the one above:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">deepcopy</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
-<span class="gp">... </span>    <span class="o">.</span><span class="n">SELECT</span><span class="p">((</span><span class="s2">&quot;title_sort&quot;</span><span class="p">,</span> <span class="s2">&quot;lower(coalesce(user_title, title))&quot;</span><span class="p">))</span>
-<span class="gp">... </span>    <span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="s1">&#39;updates_enabled&#39;</span><span class="p">)</span>
-<span class="gp">... </span>    <span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="s2">&quot;datetime(updated) &gt; datetime(&#39;now&#39;, &#39;-1 day&#39;)&quot;</span><span class="p">)</span>
-<span class="gp">... </span>    <span class="o">.</span><span class="n">ORDER_BY</span><span class="p">(</span><span class="s1">&#39;title_sort&#39;</span><span class="p">)</span>
-<span class="gp">... </span><span class="p">)</span>
+<p>Other common things work as well:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">((</span><span class="s1">&#39;alias&#39;</span><span class="p">,</span> <span class="s1">&#39;long(expression)&#39;</span><span class="p">)))</span>
 <span class="go">SELECT</span>
-<span class="go">    url,</span>
-<span class="go">    title,</span>
-<span class="go">    lower(coalesce(user_title, title)) AS title_sort</span>
-<span class="go">FROM</span>
-<span class="go">    feeds</span>
+<span class="go">    long(expression) AS alias</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="s1">&#39;condition&#39;</span><span class="p">,</span> <span class="s1">&#39;another condition&#39;</span><span class="p">))</span>
 <span class="go">WHERE</span>
-<span class="go">    updates_enabled AND</span>
-<span class="go">    datetime(updated) &gt; datetime(&#39;now&#39;, &#39;-1 day&#39;)</span>
-<span class="go">ORDER BY</span>
-<span class="go">    title_sort</span>
+<span class="go">    condition AND</span>
+<span class="go">    another condition</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;first&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">LEFT_JOIN</span><span class="p">(</span><span class="s1">&#39;second USING (column)&#39;</span><span class="p">))</span>
+<span class="go">FROM</span>
+<span class="go">    first</span>
+<span class="go">LEFT JOIN</span>
+<span class="go">    second USING (column)</span>
 </code></pre></div>
 <p>If you want to take a peek at the code right now,
 you can find the final version <a href="/_file/query-builder/07-more-init/builder.py">here</a>
@@ -160,12 +158,17 @@ and the tests <a href="/_file/query-builder/07-more-init/test_builder.py">here</
 The type-annotated version used by <a href="https://github.com/lemon24/reader">reader</a>
 is <a href="https://github.com/lemon24/reader/blob/722e20e328f35a3558e36f2c5bd784dd3574b594/src/reader/_sql_utils.py">here</a>.</p>
 <hr />
-<p>That's all for now.</p>
-<p>Note: This is my first <em>planned</em> series,
-so I'm still working on it.
-If you have questions or comments,
-<a href="/about#contact">drop me a line</a>,
-and I will address them in one of the future articles.</p>
+<p>New articles will be linked on this page as they get published;
+you can also get updates via email (below)
+or <a href="https://death.andgravity.com/_feed/index.xml">Atom feed</a>.</p>
+<section class="admonition note">
+<div class="admonition-text">
+<p>This is my first <em>planned</em> series, and still a work in progress.</p>
+<p>This means <strong>you get a say</strong> in it.
+ Send me your questions or comments <a href="/about#contact">via email</a>,
+ and I'll do my best to address them in one of the future articles.</p>
+</div>
+</section>
 
 
 
