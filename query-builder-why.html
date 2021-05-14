@@ -53,9 +53,11 @@ window.addEventListener('resize', set_vh);
 <h1 class="heading-noindex">Why does one need a query builder in the first place?</h1>
 
 <p class="text-gray"><small>
+<span>2021-05-13</span>
 
 
 
+∙ four minute read
 
 
 </small></p>
@@ -71,22 +73,189 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
+<p>intro TBD</p>
+<details>
+<summary>Contents</summary>
+<section class="toc">
+<ul>
+<li><a href="#the-problem">The problem</a></li>
+<li><a href="#combinatorial-explosion">Combinatorial explosion</a></li>
+<li><a href="#cleaner-code-and-queries">Cleaner code and queries</a></li>
+<li><a href="#composition-and-reuse">Composition and reuse</a></li>
+<li><a href="#introspection-and-abstraction">Introspection and abstraction</a></li>
+</ul>
+</section>
+</details>
+<h2 id="the-problem">The problem<span class="headerlink"> <a href="#the-problem" title="permalink">#</a></span></h2>
+<p>You have method that looks like the one below.
+I excluded everything except the argument types,
+since they're the only relvant things.</p>
+<p>In the end, the method needs to do an SQL query on an <code>entries</code> table;
+the query changes depending on arguments.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span>
+    <span class="n">feed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">entry</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]],</span>
+    <span class="n">read</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">],</span>
+    <span class="n">important</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">],</span>
+    <span class="n">has_enclosures</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">],</span>
+    <span class="n">sort</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;recent&#39;</span><span class="p">,</span> <span class="s1">&#39;random&#39;</span><span class="p">],</span>
+<span class="p">):</span> <span class="o">...</span>
+</code></pre></div>
 <h2 id="combinatorial-explosion">Combinatorial explosion<span class="headerlink"> <a href="#combinatorial-explosion" title="permalink">#</a></span></h2>
+<p>A solution is to have one query for each variation;
+in a way, this is a natural extension of the original method,
+which (maybe) had no arguments.</p>
+<p>Let's see how many queries you'd need for <code>get_entries()</code> above:</p>
 <ul>
-<li>also, prevents combinatorial explosion</li>
-</ul>
-<h2 id="cleaner-code-and-queries">Cleaner code and queries<span class="headerlink"> <a href="#cleaner-code-and-queries" title="permalink">#</a></span></h2>
-<ul>
-<li>makes conditional query building less verbose</li>
-<li>clean, regular SQL</li>
-</ul>
-<h2 id="composition-and-reuse">Composition and reuse<span class="headerlink"> <a href="#composition-and-reuse" title="permalink">#</a></span></h2>
-<ul>
-<li>provides standard way of describing a query, which enables<ul>
-<li>composition; reuse by moving stuff into functions (example: apply filter options)</li>
+<li>all queries are <a href="https://docs.python.org/3/library/sqlite3.html#sqlite3-placeholders">parametrized</a></li>
+<li>the optional arguments are either present or not present (2 queries each)<ul>
+<li>the optional bool arguments can be treated the same,
+but to make the query more readable,
+I actually emit one query for True (<code>condition</code>)
+and one for False (<code>NOT condition</code>);
+with None (absent), this makes 3 queries;
+however, since it's possible to express them as 2,
+we'll count 2 queries each</li>
 </ul>
 </li>
+<li><code>sort</code> changes the query in more complicated ways,
+but it currently has 2 values, so we'll count it as 2 queries
+(additional sorts <em>can</em> be added in the future, though)</li>
 </ul>
+<p>So, there's 6 parameters with 2 variations each: 2<sup>6</sup> = <strong>64 variations</strong>!
+I don't think having 64 queries is a good idea. 😕</p>
+<section class="admonition note">
+<div class="admonition-text">
+<p>The <a href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.get_entries">real method</a> has one parameter that can take an <em>arbitrary number</em> of tags
+ in a bunch of different formats
+ (<code>True</code>, <code>['one']</code>, <code>[['one'], ['two']]</code>, <code>[['one', 'two']]</code>, ...).
+ I honestly don't know how to count that, so I just left it out;
+ even without it, the conclusion is the same.</p>
+</div>
+</section>
+<p>OK, so what now?</p>
+<p>Let's build the query from a bunch of strings;
+we'll only do <code>read</code> and <code>important</code>, to keep things short:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">make_entries_query</span><span class="p">(</span><span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">where_snippets</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">if</span> <span class="n">read</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">where_snippets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;&#39;</span> <span class="k">if</span> <span class="n">read</span> <span class="k">else</span> <span class="s1">&#39;NOT&#39;</span><span class="si">}</span><span class="s2"> entries.read&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">important</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">where_snippets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;&#39;</span> <span class="k">if</span> <span class="n">important</span> <span class="k">else</span> <span class="s1">&#39;NOT&#39;</span><span class="si">}</span><span class="s2"> entries.important&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">where_snippets</span><span class="p">):</span>
+        <span class="n">where_keyword</span> <span class="o">=</span> <span class="s1">&#39;WHERE&#39;</span>
+        <span class="n">where_snippet</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">            AND &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">where_snippets</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">where_keyword</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+        <span class="n">where_snippet</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">        SELECT</span>
+<span class="s2">            entries.id,</span>
+<span class="s2">            entries.title</span>
+<span class="s2">        FROM entries</span>
+<span class="s2">        </span><span class="si">{</span><span class="n">where_keyword</span><span class="si">}</span><span class="s2"></span>
+<span class="s2">            </span><span class="si">{</span><span class="n">where_snippet</span><span class="si">}</span><span class="s2"></span>
+<span class="s2">    &quot;&quot;&quot;</span>
+</code></pre></div>
+<p>That looks decent. Dedented, <code>make_entries_query(False, True)</code> results in:</p>
+<div class="highlight code-container"><pre class="code" data-lang="SQL"><span></span><code><span class="k">SELECT</span>
+    <span class="n">entries</span><span class="p">.</span><span class="n">id</span><span class="p">,</span>
+    <span class="n">entries</span><span class="p">.</span><span class="n">title</span>
+<span class="k">FROM</span> <span class="n">entries</span>
+<span class="k">WHERE</span>
+      <span class="n">entries</span><span class="p">.</span><span class="k">read</span>
+    <span class="k">AND</span> <span class="k">NOT</span> <span class="n">entries</span><span class="p">.</span><span class="n">important</span>
+</code></pre></div>
+<p>Not bad.</p>
+<h2 id="cleaner-code-and-queries">Cleaner code and queries<span class="headerlink"> <a href="#cleaner-code-and-queries" title="permalink">#</a></span></h2>
+<p>OK, but that's a bit verbose,
+especially if you need to add snippets in other places than the <code>WHERE</code>;
+that's a lot of coordination required to just <code>append()</code> some strings.</p>
+<p>Don't believe me? Here's the <a href="https://github.com/lemon24/reader/blob/7b47c88bb4e1388e7c5af1c269fb4a78e227120a/src/reader/_storage.py#L605-L746">original code</a> before using a query builder.</p>
+<p>Also, while for this example the SQL is acceptable,
+it's not the best:</p>
+<ul>
+<li>I had to dedent the output</li>
+<li>there's an extra space in front of <code>entries.read</code></li>
+<li>if I indent the function, I have to add more spaces to the <code>where_snippets</code> joiner</li>
+</ul>
+<p>We could wrap everything in <code>dedent</code>/<code>indent</code> calls,
+but it'd make things less readable.</p>
+<p>What if we had an object with <code>append()</code>-like methods? Something like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">make_entries_query</span><span class="p">(</span><span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">query</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">Query</span><span class="p">()</span>
+        <span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;entries.id&#39;</span><span class="p">,</span> <span class="s1">&#39;entries.title&#39;</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;entries&#39;</span><span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">read</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">query</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;&#39;</span> <span class="k">if</span> <span class="n">read</span> <span class="k">else</span> <span class="s1">&#39;NOT&#39;</span><span class="si">}</span><span class="s2"> entries.read&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">important</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">query</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;&#39;</span> <span class="k">if</span> <span class="n">important</span> <span class="k">else</span> <span class="s1">&#39;NOT&#39;</span><span class="si">}</span><span class="s2"> entries.important&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">query</span>
+</code></pre></div>
+<p>The important bits are still there, but most of the noise went away.</p>
+<p>Formatting is a <a href="https://en.wikipedia.org/wiki/Separation_of_concerns">separate concern</a>, so it happens somewhere else;
+things are magically cleaned up, dedented, and stitched back together
+into clean, regular SQL:</p>
+<div class="highlight code-container"><pre class="code" data-lang="SQL"><span></span><code><span class="k">SELECT</span>
+    <span class="n">entries</span><span class="p">.</span><span class="n">id</span><span class="p">,</span>
+    <span class="n">entries</span><span class="p">.</span><span class="n">title</span>
+<span class="k">FROM</span>
+    <span class="n">entries</span>
+<span class="k">WHERE</span>
+    <span class="n">entries</span><span class="p">.</span><span class="k">read</span> <span class="k">AND</span>
+    <span class="k">NOT</span> <span class="n">entries</span><span class="p">.</span><span class="n">important</span>
+</code></pre></div>
+<h2 id="composition-and-reuse">Composition and reuse<span class="headerlink"> <a href="#composition-and-reuse" title="permalink">#</a></span></h2>
+<p>What if we later add <a href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.get_entry_counts">another method</a> to count entries?</p>
+<p>Surely, we'd want it to have the same filtering capabilities as <code>get_entries()</code>.
+So we move them into a function:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">apply_filter_options</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">read</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">query</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;&#39;</span> <span class="k">if</span> <span class="n">read</span> <span class="k">else</span> <span class="s1">&#39;NOT&#39;</span><span class="si">}</span><span class="s2"> entries.read&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">important</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">query</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;&#39;</span> <span class="k">if</span> <span class="n">important</span> <span class="k">else</span> <span class="s1">&#39;NOT&#39;</span><span class="si">}</span><span class="s2"> entries.important&quot;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">make_entry_counts_query</span><span class="p">(</span><span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">query</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">Query</span><span class="p">()</span>
+        <span class="o">.</span><span class="n">SELECT</span><span class="p">(</span>
+            <span class="s1">&#39;count(*)&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;coalesce(sum(read == 1), 0)&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;coalesce(sum(important == 1), 0)&#39;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s2">&quot;entries&quot;</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">apply_filter_options</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">read</span><span class="p">,</span> <span class="n">important</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">query</span>
+</code></pre></div>
+<p>You may notice we could have <em>returned</em> the WHERE snippets,
+and then used them with <code>query.WHERE(*make_filter_snippets(read, important))</code>.
+You may also notice we can do the same with the f-string version;
+how does a query builder help here?</p>
+<p>Let's imagine we add a new filter,
+to count entries from feeds that have updates enabled;
+it'd look something like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">if</span> <span class="n">updates_enabled</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">query</span><span class="o">.</span><span class="n">JOIN</span><span class="p">(</span><span class="s2">&quot;feeds ON feeds.url = entries.feed&quot;</span><span class="p">)</span>
+    <span class="n">query</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;&#39;</span> <span class="k">if</span> <span class="n">updates_enabled</span> <span class="k">else</span> <span class="s1">&#39;NOT&#39;</span><span class="si">}</span><span class="s2"> feeds.updates_enabled&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>With <code>make_filter_snippets()</code>,
+we'd need to change it to also return a potential JOIN snippet
+(and in time, maybe something else).</p>
+<p>With <code>apply_filter_options()</code>, we only have to pass the new argument along.
+The <code>Query</code> object provides a standard way of doing arbitrary changes to a query,
+which makes it easier to compose operations,
+which in turn makes it easier to reuse logic.</p>
+<p>You may find the example above a bit contrived;
+check out <a href="https://github.com/lemon24/reader/blob/1.17/src/reader/_storage.py#L1409-L1479">this function</a> that sorts entries by &quot;recent&quot;
+for a better real-world use-case.</p>
 <h2 id="introspection-and-abstraction">Introspection and abstraction<span class="headerlink"> <a href="#introspection-and-abstraction" title="permalink">#</a></span></h2>
 <ul>
 <li>provides standard way of describing a query, which enables<ul>
