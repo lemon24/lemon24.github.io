@@ -82,12 +82,8 @@ window.addEventListener('resize', set_vh);
 <li><a href="#combinatorial-explosion">Combinatorial explosion</a></li>
 <li><a href="#cleaner-code-and-queries">Cleaner code and queries</a></li>
 <li><a href="#composition-and-reuse">Composition and reuse</a></li>
-<li><a href="#introspection">Introspection</a>
-<ul>
 <li><a href="#intermission-scrolling-window-queries">Intermission: scrolling window queries</a></li>
-<li><a href="#back-to-our-regularly-scheduled-programming">Back to our regularly scheduled programming</a></li>
-</ul>
-</li>
+<li><a href="#introspection">Introspection</a></li>
 <li><a href="#abstraction">Abstraction</a></li>
 </ul>
 </section>
@@ -262,8 +258,12 @@ which in turn makes it easier to reuse logic.</p>
 <p>You may find the example above a bit contrived;
 check out <a href="https://github.com/lemon24/reader/blob/1.17/src/reader/_storage.py#L1409-L1479">this function</a> that sorts entries by &quot;recent&quot;
 for a better real-world use-case.</p>
-<h2 id="introspection">Introspection<span class="headerlink"> <a href="#introspection" title="permalink">#</a></span></h2>
-<h3 id="intermission-scrolling-window-queries">Intermission: scrolling window queries<span class="headerlink"> <a href="#intermission-scrolling-window-queries" title="permalink">#</a></span></h3>
+<h2 id="intermission-scrolling-window-queries">Intermission: scrolling window queries<span class="headerlink"> <a href="#intermission-scrolling-window-queries" title="permalink">#</a></span></h2>
+<p><em>If you're already familiar with
+scrolling window queries / cursor based pagination,
+feel free to skip to the
+<a href="#introspection">next section</a>.</em></p>
+<p>Before we go forward, we need to get familiar with a pattern.</p>
 <p>Given a table like this:</p>
 <div class="highlight code-container"><pre class="code" data-lang="sqlite3con"><span></span><code><span class="gp">sqlite&gt; </span><span class="k">CREATE</span> <span class="k">TABLE</span> <span class="n">things</span><span class="p">(</span><span class="n">name</span><span class="p">);</span>
 <span class="gp">sqlite&gt; </span><span class="k">INSERT</span> <span class="k">INTO</span> <span class="n">things</span> <span class="k">VALUES</span> <span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">),</span> <span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">),</span> <span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">);</span>
@@ -298,8 +298,9 @@ While superficially the same as LIMIT+OFFSET,
 the database can now use indices to avoid fetching the rows
 up to the ones it actually needs.</p>
 <p>See <a href="https://medium.com/swlh/why-you-shouldnt-use-offset-and-limit-for-your-pagination-4440e421ba87">this article</a> for a more detailed explanation.</p>
-<h3 id="back-to-our-regularly-scheduled-programming">Back to our regularly scheduled programming<span class="headerlink"> <a href="#back-to-our-regularly-scheduled-programming" title="permalink">#</a></span></h3>
-<p>Let's see how we can do scrolling window queries with a query builder.</p>
+<h2 id="introspection">Introspection<span class="headerlink"> <a href="#introspection" title="permalink">#</a></span></h2>
+<p>Now that you're familiar with scrolling window queries,
+let's see how we can use a query builder to implement them.</p>
 <p>The query below retrieves feeds;
 it sorts them by title (case insensitive), preferring custom titles, if set;
 it also sorts by the primary key,
@@ -336,6 +337,7 @@ so that order is consistent for feeds with the same title.
 <span class="gp">&gt;&gt;&gt; </span><span class="n">last_result</span> <span class="o">=</span> <span class="n">first_page</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">last_result</span>
 <span class="go">(&#39;file:feed.xml&#39;, &#39;Title&#39;, &#39;title&#39;)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">last</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">last_title_sort</span><span class="o">=</span><span class="n">last_result</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">last_url</span><span class="o">=</span><span class="n">last_result</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 </code></pre></div>
 <p>To get the second page, we also have to add a WHERE clause:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
@@ -343,11 +345,8 @@ so that order is consistent for feeds with the same title.
 <span class="n">query</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="s1">&#39;(title_sort, url) &gt; (:last_title_sort, :last_url)&#39;</span><span class="p">)</span>
 </code></pre></div>
 <p>And pass the sort key from the last result as query parameters:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">last_title_sort</span><span class="o">=</span><span class="n">last_result</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
-<span class="gp">... </span>    <span class="n">last_url</span><span class="o">=</span><span class="n">last_result</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-<span class="gp">... </span><span class="p">)</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">last</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">second_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
 </code></pre></div>
 <p>But. Every time we do this,
@@ -394,39 +393,45 @@ and and let the computer do the work itself.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">order_by_things</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;ORDER BY&#39;</span><span class="p">]]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">alias</span> <span class="ow">or</span> <span class="n">t</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;SELECT&#39;</span><span class="p">]]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">last</span> <span class="o">=</span> <span class="p">[</span><span class="n">last_result</span><span class="p">[</span><span class="n">names</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">t</span><span class="p">)]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">order_by_things</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="o">**</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">params</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="sa">f</span><span class="s1">&#39;last_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">:</span> <span class="n">l</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">last</span><span class="p">)})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">params</span>
-<span class="go">{&#39;limit&#39;: 2, &#39;:last_0&#39;: &#39;title&#39;, &#39;:last_1&#39;: &#39;file:feed.xml&#39;}</span>
+<span class="go">{&#39;limit&#39;: 2, &#39;last_0&#39;: &#39;title&#39;, &#39;last_1&#39;: &#39;file:feed.xml&#39;}</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">second_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
 </code></pre></div>
+<p>Now, <code>make_feeds_query()</code> is the only place where we need to
+be aware of what we're sorting by.</p>
+<p>Can we do better?</p>
 <h2 id="abstraction">Abstraction<span class="headerlink"> <a href="#abstraction" title="permalink">#</a></span></h2>
-<pre class="code code-container"><code>def make_feeds_query():
-    query = Query().SELECT('url', 'coalesce(user_title, title)').FROM('feeds')
+<p>Since the pattern above is quite common,
+it would be nice if everyone could use it,
+wouldn't it?</p>
+<p>If only there was standard place for this kind of method...</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">make_feeds_query</span><span class="p">():</span>
+    <span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;url&#39;</span><span class="p">,</span> <span class="s1">&#39;coalesce(user_title, title)&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;feeds&#39;</span><span class="p">)</span>
 
-    # if sort == 'title':
-    query.SELECT((&quot;title_sort&quot;, &quot;lower(coalesce(user_title, title))&quot;))
-    query.scrolling_window_order_by('title_sort', 'url')
+    <span class="c1"># if sort == &#39;title&#39;:</span>
+    <span class="n">query</span><span class="o">.</span><span class="n">SELECT</span><span class="p">((</span><span class="s2">&quot;title_sort&quot;</span><span class="p">,</span> <span class="s2">&quot;lower(coalesce(user_title, title))&quot;</span><span class="p">))</span>
+    <span class="n">query</span><span class="o">.</span><span class="n">scrolling_window_order_by</span><span class="p">(</span><span class="s1">&#39;title_sort&#39;</span><span class="p">,</span> <span class="s1">&#39;url&#39;</span><span class="p">)</span>
 
-    return query
-</code></pre>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">first_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">last</span> <span class="o">=</span> <span class="n">query</span><span class="o">.</span><span class="n">extract_last</span><span class="p">(</span><span class="n">first_page</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
-<span class="o">&gt;&gt;&gt;</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">query</span><span class="o">.</span><span class="n">add_last</span><span class="p">(</span><span class="n">last</span><span class="p">))</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">second_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">query</span>
 </code></pre></div>
-<ul>
-<li>provides standard place for general query methods, which enables<ul>
-<li>abstraction (example: scrolling window queries)</li>
-</ul>
-</li>
-</ul>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">first_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">last</span> <span class="o">=</span> <span class="n">query</span><span class="o">.</span><span class="n">extract_last</span><span class="p">(</span><span class="n">first_page</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">add_last</span><span class="p">(</span><span class="n">last</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">second_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
+</code></pre></div>
+<p>TBD more words here.</p>
+<hr />
+<p>That's it for now.</p>
+<p>outro TBD</p>
 
 
 
@@ -436,6 +441,61 @@ and and let the computer do the work itself.</p>
 
 
 
+
+
+
+
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661"
+    method="post"
+    id="mc-embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 
 
 
