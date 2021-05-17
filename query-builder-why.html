@@ -57,7 +57,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ four minute read
+∙ six minute read
 
 
 </small></p>
@@ -82,14 +82,20 @@ window.addEventListener('resize', set_vh);
 <li><a href="#combinatorial-explosion">Combinatorial explosion</a></li>
 <li><a href="#cleaner-code-and-queries">Cleaner code and queries</a></li>
 <li><a href="#composition-and-reuse">Composition and reuse</a></li>
-<li><a href="#introspection-and-abstraction">Introspection and abstraction</a></li>
+<li><a href="#introspection">Introspection</a>
+<ul>
+<li><a href="#intermission-scrolling-window-queries">Intermission: scrolling window queries</a></li>
+<li><a href="#back-to-our-regularly-scheduled-programming">Back to our regularly scheduled programming</a></li>
+</ul>
+</li>
+<li><a href="#abstraction">Abstraction</a></li>
 </ul>
 </section>
 </details>
 <h2 id="the-problem">The problem<span class="headerlink"> <a href="#the-problem" title="permalink">#</a></span></h2>
 <p>You have method that looks like the one below.
 I excluded everything except the argument types,
-since they're the only relvant things.</p>
+since they're the only relevant things.</p>
 <p>In the end, the method needs to do an SQL query on an <code>entries</code> table;
 the query changes depending on arguments.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span>
@@ -160,16 +166,15 @@ we'll only do <code>read</code> and <code>important</code>, to keep things short
 <span class="s2">            </span><span class="si">{</span><span class="n">where_snippet</span><span class="si">}</span><span class="s2"></span>
 <span class="s2">    &quot;&quot;&quot;</span>
 </code></pre></div>
-<p>That looks decent. Dedented, <code>make_entries_query(False, True)</code> results in:</p>
-<div class="highlight code-container"><pre class="code" data-lang="SQL"><span></span><code><span class="k">SELECT</span>
-    <span class="n">entries</span><span class="p">.</span><span class="n">id</span><span class="p">,</span>
-    <span class="n">entries</span><span class="p">.</span><span class="n">title</span>
-<span class="k">FROM</span> <span class="n">entries</span>
-<span class="k">WHERE</span>
-      <span class="n">entries</span><span class="p">.</span><span class="k">read</span>
-    <span class="k">AND</span> <span class="k">NOT</span> <span class="n">entries</span><span class="p">.</span><span class="n">important</span>
+<p>That looks decent; <code>make_entries_query(False, True)</code> results in:</p>
+<div class="highlight code-container"><pre class="code" data-lang="SQL"><span></span><code>        <span class="k">SELECT</span>
+            <span class="n">entries</span><span class="p">.</span><span class="n">id</span><span class="p">,</span>
+            <span class="n">entries</span><span class="p">.</span><span class="n">title</span>
+        <span class="k">FROM</span> <span class="n">entries</span>
+        <span class="k">WHERE</span>
+             <span class="n">entries</span><span class="p">.</span><span class="k">read</span>
+            <span class="k">AND</span> <span class="k">NOT</span> <span class="n">entries</span><span class="p">.</span><span class="n">important</span>
 </code></pre></div>
-<p>Not bad.</p>
 <h2 id="cleaner-code-and-queries">Cleaner code and queries<span class="headerlink"> <a href="#cleaner-code-and-queries" title="permalink">#</a></span></h2>
 <p>OK, but that's a bit verbose,
 especially if you need to add snippets in other places than the <code>WHERE</code>;
@@ -178,9 +183,10 @@ that's a lot of coordination required to just <code>append()</code> some strings
 <p>Also, while for this example the SQL is acceptable,
 it's not the best:</p>
 <ul>
-<li>I had to dedent the output</li>
+<li>the output is needlessly indented</li>
 <li>there's an extra space in front of <code>entries.read</code></li>
-<li>if I indent the function, I have to add more spaces to the <code>where_snippets</code> joiner</li>
+<li>if I indent the function, I have to add more spaces to the <code>where_snippets</code> joiner to make things line up</li>
+<li>multi-line WHERE parts are even trickier to make look right</li>
 </ul>
 <p>We could wrap everything in <code>dedent</code>/<code>indent</code> calls,
 but it'd make things less readable.</p>
@@ -256,10 +262,148 @@ which in turn makes it easier to reuse logic.</p>
 <p>You may find the example above a bit contrived;
 check out <a href="https://github.com/lemon24/reader/blob/1.17/src/reader/_storage.py#L1409-L1479">this function</a> that sorts entries by &quot;recent&quot;
 for a better real-world use-case.</p>
-<h2 id="introspection-and-abstraction">Introspection and abstraction<span class="headerlink"> <a href="#introspection-and-abstraction" title="permalink">#</a></span></h2>
+<h2 id="introspection">Introspection<span class="headerlink"> <a href="#introspection" title="permalink">#</a></span></h2>
+<h3 id="intermission-scrolling-window-queries">Intermission: scrolling window queries<span class="headerlink"> <a href="#intermission-scrolling-window-queries" title="permalink">#</a></span></h3>
+<p>Given a table like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="sqlite3con"><span></span><code><span class="gp">sqlite&gt; </span><span class="k">CREATE</span> <span class="k">TABLE</span> <span class="n">things</span><span class="p">(</span><span class="n">name</span><span class="p">);</span>
+<span class="gp">sqlite&gt; </span><span class="k">INSERT</span> <span class="k">INTO</span> <span class="n">things</span> <span class="k">VALUES</span> <span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">),</span> <span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">),</span> <span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">);</span>
+</code></pre></div>
+<p>Let's say we need to get successive 2-row pages, sorted by <code>name</code>.
+There are two main ways of doing it.</p>
+<p>The obvious one is LIMIT+OFFSET:</p>
+<div class="highlight code-container"><pre class="code" data-lang="sqlite3con"><span></span><code><span class="gp">sqlite&gt; </span><span class="k">SELECT</span> <span class="o">*</span> <span class="k">FROM</span> <span class="n">things</span> <span class="k">ORDER</span> <span class="k">BY</span> <span class="n">name</span> <span class="k">LIMIT</span> <span class="mi">2</span> <span class="k">OFFSET</span> <span class="mi">0</span><span class="p">;</span>
+<span class="go">a</span>
+<span class="go">b</span>
+<span class="gp">sqlite&gt; </span><span class="k">SELECT</span> <span class="o">*</span> <span class="k">FROM</span> <span class="n">things</span> <span class="k">ORDER</span> <span class="k">BY</span> <span class="n">name</span> <span class="k">LIMIT</span> <span class="mi">2</span> <span class="k">OFFSET</span> <span class="mi">2</span><span class="p">;</span>
+<span class="go">c</span>
+</code></pre></div>
+<p>This returns the correct answer, but has one big performance issue:
+every query fetches the rows up to OFFSET, discards them,
+and then returns (at most) LIMIT more rows after that;
+the more data you have, and the nearer the end of the dataset,
+the slower this gets.</p>
+<p>The other one is <a href="https://www.sqlite.org/rowvalue.html#scrolling_window_queries">scrolling window queries</a>
+(also known as &quot;cursor based pagination&quot;):</p>
+<div class="highlight code-container"><pre class="code" data-lang="sqlite3con"><span></span><code><span class="gp">sqlite&gt; </span><span class="k">SELECT</span> <span class="o">*</span> <span class="k">FROM</span> <span class="n">things</span> <span class="k">ORDER</span> <span class="k">BY</span> <span class="n">name</span> <span class="k">LIMIT</span> <span class="mi">2</span><span class="p">;</span>
+<span class="go">a</span>
+<span class="go">b</span>
+<span class="gp">sqlite&gt; </span><span class="k">SELECT</span> <span class="o">*</span> <span class="k">FROM</span> <span class="n">things</span> <span class="k">WHERE</span> <span class="n">name</span> <span class="o">&gt;</span> <span class="s1">&#39;b&#39;</span> <span class="k">ORDER</span> <span class="k">BY</span> <span class="n">name</span> <span class="k">LIMIT</span> <span class="mi">2</span><span class="p">;</span>
+<span class="go">c</span>
+</code></pre></div>
+<p>Instead of using OFFSET to skip rows,
+we use WHERE to skip to immediately <em>after</em>
+the last row from the previous query,
+based on the sort key (the &quot;cursor&quot;).
+While superficially the same as LIMIT+OFFSET,
+the database can now use indices to avoid fetching the rows
+up to the ones it actually needs.</p>
+<p>See <a href="https://medium.com/swlh/why-you-shouldnt-use-offset-and-limit-for-your-pagination-4440e421ba87">this article</a> for a more detailed explanation.</p>
+<h3 id="back-to-our-regularly-scheduled-programming">Back to our regularly scheduled programming<span class="headerlink"> <a href="#back-to-our-regularly-scheduled-programming" title="permalink">#</a></span></h3>
+<p>Let's see how we can do this with the query builder.</p>
+<p>The query below retrieves feeds;
+it sorts them by title (case insensitive), preferring custom titles, if set;
+it also sorts by the primary key,
+so that order is consistent for feeds with the same title.
+(Other orderings are supported; I ommited them for brevity.)</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">make_feeds_query</span><span class="p">():</span>
+    <span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;url&#39;</span><span class="p">,</span> <span class="s1">&#39;coalesce(user_title, title)&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;feeds&#39;</span><span class="p">)</span>
+
+    <span class="c1"># if sort == &#39;title&#39;:</span>
+    <span class="n">query</span><span class="o">.</span><span class="n">SELECT</span><span class="p">((</span><span class="s2">&quot;title_sort&quot;</span><span class="p">,</span> <span class="s2">&quot;lower(coalesce(user_title, title))&quot;</span><span class="p">))</span>
+    <span class="n">query</span><span class="o">.</span><span class="n">ORDER_BY</span><span class="p">(</span><span class="s1">&#39;title_sort&#39;</span><span class="p">,</span> <span class="s1">&#39;url&#39;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">query</span>
+</code></pre></div>
+<p>To get the first page, we just have to add a limit:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
+<span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="SQL"><span></span><code><span class="k">SELECT</span>
+    <span class="n">url</span><span class="p">,</span>
+    <span class="k">coalesce</span><span class="p">(</span><span class="n">user_title</span><span class="p">,</span> <span class="n">title</span><span class="p">),</span>
+    <span class="k">lower</span><span class="p">(</span><span class="k">coalesce</span><span class="p">(</span><span class="n">user_title</span><span class="p">,</span> <span class="n">title</span><span class="p">))</span> <span class="k">AS</span> <span class="n">title_sort</span>
+<span class="k">FROM</span>
+    <span class="n">feeds</span>
+<span class="k">ORDER</span> <span class="k">BY</span>
+    <span class="n">title_sort</span><span class="p">,</span>
+    <span class="n">url</span>
+<span class="k">LIMIT</span>
+    <span class="p">:</span><span class="k">limit</span>
+</code></pre></div>
+<p>We then run the query, and save the last result to get the next page:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">first_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">last_result</span> <span class="o">=</span> <span class="n">first_page</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">last_result</span>
+<span class="go">(&#39;file:feed.xml&#39;, &#39;Title&#39;, &#39;title&#39;)</span>
+</code></pre></div>
+<p>To get the second page, we also have to add a WHERE clause:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
+<span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
+<span class="n">query</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="s1">&#39;(title_sort, url) &gt; (:last_title_sort, :last_url)&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p>And pass the sort key from the last result as query parameters:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">last_title_sort</span><span class="o">=</span><span class="n">last_result</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">last_url</span><span class="o">=</span><span class="n">last_result</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">second_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
+</code></pre></div>
+<p>But. Every time we do this,
+we need to remeber the names of the parameters,
+and their indices in the result tuple.
+They will will be different for other orderings,
+so we have to remeber those too.</p>
+<p>There must be a better way.</p>
+<p>The computer already the information it needs,
+it's right there in  <code>make_feeds_query()</code>.</p>
+<p>Because a builder provides a standard way of representing the query,
+we can inspect that representation programmatically,
+and and let the computer do the work itself.</p>
+<p>First, the query:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
+<span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
+
+<span class="n">order_by_things</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;ORDER BY&#39;</span><span class="p">]]</span>
+<span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s1">&#39;:last_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">order_by_things</span><span class="p">))]</span>
+<span class="n">comparison</span> <span class="o">=</span> <span class="n">Query</span><span class="p">({</span><span class="s1">&#39;(&#39;</span><span class="p">:</span> <span class="n">order_by_things</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;) &gt; (&#39;</span><span class="p">:</span> <span class="n">labels</span><span class="p">,</span> <span class="s1">&#39;)&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;&#39;</span><span class="p">]})</span>
+<span class="n">query</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">comparison</span><span class="p">))</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="SQL"><span></span><code><span class="k">SELECT</span>
+    <span class="n">url</span><span class="p">,</span>
+    <span class="k">coalesce</span><span class="p">(</span><span class="n">user_title</span><span class="p">,</span> <span class="n">title</span><span class="p">),</span>
+    <span class="k">lower</span><span class="p">(</span><span class="k">coalesce</span><span class="p">(</span><span class="n">user_title</span><span class="p">,</span> <span class="n">title</span><span class="p">))</span> <span class="k">AS</span> <span class="n">title_sort</span>
+<span class="k">FROM</span>
+    <span class="n">feeds</span>
+<span class="k">WHERE</span>
+    <span class="p">(</span>
+        <span class="n">title_sort</span><span class="p">,</span>
+        <span class="n">url</span>
+    <span class="p">)</span> <span class="o">&gt;</span> <span class="p">(</span>
+        <span class="p">:</span><span class="n">last_0</span><span class="p">,</span>
+        <span class="p">:</span><span class="n">last_1</span>
+    <span class="p">)</span>
+<span class="k">ORDER</span> <span class="k">BY</span>
+    <span class="n">title_sort</span><span class="p">,</span>
+    <span class="n">url</span>
+<span class="k">LIMIT</span>
+    <span class="p">:</span><span class="k">limit</span>
+</code></pre></div>
+<p>Then, the parameters:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">order_by_things</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;ORDER BY&#39;</span><span class="p">]]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">alias</span> <span class="ow">or</span> <span class="n">t</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;SELECT&#39;</span><span class="p">]]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">last</span> <span class="o">=</span> <span class="p">[</span><span class="n">last_result</span><span class="p">[</span><span class="n">names</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">t</span><span class="p">)]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">order_by_things</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="sa">f</span><span class="s1">&#39;:last_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">:</span> <span class="n">l</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">last</span><span class="p">)})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span>
+<span class="go">{&#39;limit&#39;: 2, &#39;:last_0&#39;: &#39;title&#39;, &#39;:last_1&#39;: &#39;file:feed.xml&#39;}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">second_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="abstraction">Abstraction<span class="headerlink"> <a href="#abstraction" title="permalink">#</a></span></h2>
 <ul>
-<li>provides standard way of describing a query, which enables<ul>
-<li>introspection (example: scrolling window queries)</li>
+<li>provides standard place for general query methods, which enables<ul>
+<li>abstraction (example: scrolling window queries)</li>
 </ul>
 </li>
 </ul>
