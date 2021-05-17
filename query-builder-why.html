@@ -57,7 +57,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ six minute read
+∙ seven minute read
 
 
 </small></p>
@@ -299,7 +299,7 @@ the database can now use indices to avoid fetching the rows
 up to the ones it actually needs.</p>
 <p>See <a href="https://medium.com/swlh/why-you-shouldnt-use-offset-and-limit-for-your-pagination-4440e421ba87">this article</a> for a more detailed explanation.</p>
 <h3 id="back-to-our-regularly-scheduled-programming">Back to our regularly scheduled programming<span class="headerlink"> <a href="#back-to-our-regularly-scheduled-programming" title="permalink">#</a></span></h3>
-<p>Let's see how we can do this with the query builder.</p>
+<p>Let's see how we can do scrolling window queries with a query builder.</p>
 <p>The query below retrieves feeds;
 it sorts them by title (case insensitive), preferring custom titles, if set;
 it also sorts by the primary key,
@@ -394,13 +394,33 @@ and and let the computer do the work itself.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">order_by_things</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;ORDER BY&#39;</span><span class="p">]]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">alias</span> <span class="ow">or</span> <span class="n">t</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;SELECT&#39;</span><span class="p">]]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">last</span> <span class="o">=</span> <span class="p">[</span><span class="n">last_result</span><span class="p">[</span><span class="n">names</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">t</span><span class="p">)]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">order_by_things</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="sa">f</span><span class="s1">&#39;:last_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">:</span> <span class="n">l</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">last</span><span class="p">)})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="o">**</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="sa">f</span><span class="s1">&#39;last_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">:</span> <span class="n">l</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">last</span><span class="p">)})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">params</span>
 <span class="go">{&#39;limit&#39;: 2, &#39;:last_0&#39;: &#39;title&#39;, &#39;:last_1&#39;: &#39;file:feed.xml&#39;}</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">second_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="abstraction">Abstraction<span class="headerlink"> <a href="#abstraction" title="permalink">#</a></span></h2>
+<pre class="code code-container"><code>def make_feeds_query():
+    query = Query().SELECT('url', 'coalesce(user_title, title)').FROM('feeds')
+
+    # if sort == 'title':
+    query.SELECT((&quot;title_sort&quot;, &quot;lower(coalesce(user_title, title))&quot;))
+    query.scrolling_window_order_by('title_sort', 'url')
+
+    return query
+</code></pre>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">first_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">last</span> <span class="o">=</span> <span class="n">query</span><span class="o">.</span><span class="n">extract_last</span><span class="p">(</span><span class="n">first_page</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+<span class="o">&gt;&gt;&gt;</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">query</span><span class="o">.</span><span class="n">add_last</span><span class="p">(</span><span class="n">last</span><span class="p">))</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">second_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
+</code></pre></div>
 <ul>
 <li>provides standard place for general query methods, which enables<ul>
 <li>abstraction (example: scrolling window queries)</li>
