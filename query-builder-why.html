@@ -57,7 +57,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ seven minute read
+∙ eight minute read
 
 
 </small></p>
@@ -75,12 +75,12 @@ window.addEventListener('resize', set_vh);
 
 <p><strong><a href="/query-builder">Previously</a></strong></p>
 <p>This is the second article <a href="/query-builder">in a series</a> about
-writing an 150-line SQL query builder in Python,
-<strong>why I did it</strong>, <strong>what I didn't do</strong>, and <strong>how I thought about it</strong>.</p>
-<p>Today, we'll talk about <em>why I needed a query builder in the first place</em>.</p>
+writing an SQL query builder in 150 lines of Python,
+<strong>why I did it</strong>, <strong>how I thought about it</strong>, and <strong>what I didn't do</strong>.</p>
+<p>Today, we'll talk about <strong>why I needed a query builder in the first place</strong>.</p>
 <p>The examples below are <em>actual use cases</em> I had for my feed <a href="https://github.com/lemon24/reader">reader</a> library.
 In practice, they overlap quite a bit,
-since they are all different aspects of the same problem.</p>
+since they're all different aspects of the same problem.</p>
 <details>
 <summary>Contents</summary>
 <section class="toc">
@@ -262,7 +262,7 @@ it would look something like this:</p>
 we'd need to change the return value to include a potential JOIN snippet,
 and deal with that at all the call sites.</p>
 <p>Changing the query, we only have to pass the new argument along.
-<code>Query</code> offers a <strong>standard interface for making changes to a query</strong>,
+The query builder offers a <strong>standard interface for making changes to a query</strong>,
 which makes it easier to compose operations,
 which in turn makes it easier to reuse logic.</p>
 <p>If you find this a bit contrived,
@@ -311,18 +311,13 @@ is that you won't get duplicate/missing results
 if rows are inserted/deleted between queries.</p>
 <section class="admonition tip">
 <div class="admonition-text">
-<p>See <a href="https://medium.com/swlh/why-you-shouldnt-use-offset-and-limit-for-your-pagination-4440e421ba87">this article</a> for more detailed explanation,
+<p>See <a href="https://medium.com/swlh/why-you-shouldnt-use-offset-and-limit-for-your-pagination-4440e421ba87">this article</a> for a more detailed explanation,
  complete with a benchmark you can run yourself.</p>
 </div>
 </section>
 <h2 id="introspection">Introspection<span class="headerlink"> <a href="#introspection" title="permalink">#</a></span></h2>
-<p>Now that you're familiar with scrolling window queries,
-let's see how we can use a query builder to implement them.</p>
-<p>The query below retrieves feeds;
-it sorts them by title (case insensitive), preferring custom titles, if set;
-it also sorts by the primary key,
-so that order is consistent for feeds with the same title.
-(Other orderings are supported; I omitted them for brevity.)</p>
+<p>Now that we're familiar with scrolling window queries,
+let's do it for a real query:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">make_feeds_query</span><span class="p">():</span>
     <span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;url&#39;</span><span class="p">,</span> <span class="s1">&#39;coalesce(user_title, title)&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;feeds&#39;</span><span class="p">)</span>
 
@@ -332,7 +327,11 @@ so that order is consistent for feeds with the same title.
 
     <span class="k">return</span> <span class="n">query</span>
 </code></pre></div>
-<p>To get the first page, we just have to add a limit:</p>
+<p>This query retrieves feeds sorted by title, preferring custom titles;
+for feeds with the same title, it falls back to the primary key,
+so the the result stays consistent between queries.
+I omitted other supported orderings for brevity.</p>
+<p>To get the first page, we add a limit:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
 <span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
 </code></pre></div>
@@ -348,7 +347,7 @@ so that order is consistent for feeds with the same title.
 <span class="k">LIMIT</span>
     <span class="p">:</span><span class="k">limit</span>
 </code></pre></div>
-<p>We then run the query, and save the last result to get the next page:</p>
+<p>After we run the query, we save the last sort key:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">first_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">last_result</span> <span class="o">=</span> <span class="n">first_page</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
@@ -356,34 +355,39 @@ so that order is consistent for feeds with the same title.
 <span class="go">(&#39;file:feed.xml&#39;, &#39;Title&#39;, &#39;title&#39;)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">last</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">last_title_sort</span><span class="o">=</span><span class="n">last_result</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">last_url</span><span class="o">=</span><span class="n">last_result</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 </code></pre></div>
-<p>To get the second page, we also have to add a WHERE clause:</p>
+<p>To get the second page, we add a limit and a WHERE condition:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
 <span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
 <span class="n">query</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="s1">&#39;(title_sort, url) &gt; (:last_title_sort, :last_url)&#39;</span><span class="p">)</span>
 </code></pre></div>
-<p>And pass the sort key from the last result as query parameters:</p>
+<p>...and use the last sort key from the previous page as query parameters:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">last</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">second_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
 </code></pre></div>
-<p>But. Every time we do this,
-we need to remeber the names of the parameters,
-and their indices in the result tuple.
-They will will be different for other orderings,
-so we have to remeber those too.</p>
+<p>But, every time we do this,
+we have to remember the ordering we used,
+the indices of the sort key values in the result,
+and the parameter names for that ordering.</p>
 <p>There must be a better way.</p>
-<p>The computer already the information it needs,
+<p>The WHERE parameters don't actually <em>need</em> to have a descriptive name;
+also, the computer <em>already knows</em> both what we're sorting by,
+and where those things are in the result tuple –
 it's right there in  <code>make_feeds_query()</code>.</p>
-<p>Because a builder provides a standard way of representing the query,
-we can inspect that representation programmatically,
-and and let the computer do the work itself.</p>
-<p>First, the query:</p>
+<p>Let's make the computer do the work, then.</p>
+<p>First, we generate the WHERE condition:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
 <span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
 
 <span class="n">order_by_things</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;ORDER BY&#39;</span><span class="p">]]</span>
 <span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s1">&#39;:last_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">order_by_things</span><span class="p">))]</span>
-<span class="n">comparison</span> <span class="o">=</span> <span class="n">Query</span><span class="p">({</span><span class="s1">&#39;(&#39;</span><span class="p">:</span> <span class="n">order_by_things</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;) &gt; (&#39;</span><span class="p">:</span> <span class="n">labels</span><span class="p">,</span> <span class="s1">&#39;)&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;&#39;</span><span class="p">]})</span>
+<span class="c1"># use the query builder do the formatting (sneaky, but it works)</span>
+<span class="n">comparison</span> <span class="o">=</span> <span class="n">Query</span><span class="p">({</span>
+    <span class="s1">&#39;(&#39;</span><span class="p">:</span> <span class="n">order_by_things</span><span class="p">,</span> 
+    <span class="s1">&#39;) &gt; (&#39;</span><span class="p">:</span> <span class="n">labels</span><span class="p">,</span> 
+    <span class="s1">&#39;)&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;&#39;</span><span class="p">],</span>
+<span class="p">})</span>
+
 <span class="n">query</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">comparison</span><span class="p">))</span>
 </code></pre></div>
 <div class="highlight code-container"><pre class="code" data-lang="SQL"><span></span><code><span class="k">SELECT</span>
@@ -406,24 +410,27 @@ and and let the computer do the work itself.</p>
 <span class="k">LIMIT</span>
     <span class="p">:</span><span class="k">limit</span>
 </code></pre></div>
-<p>Then, the parameters:</p>
+<p>Then, we extract the sort key parameters:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">order_by_things</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;ORDER BY&#39;</span><span class="p">]]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">alias</span> <span class="ow">or</span> <span class="n">t</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;SELECT&#39;</span><span class="p">]]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">last</span> <span class="o">=</span> <span class="p">[</span><span class="n">last_result</span><span class="p">[</span><span class="n">names</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">t</span><span class="p">)]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">order_by_things</span><span class="p">]</span>
+<span class="go">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">params</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="sa">f</span><span class="s1">&#39;last_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">:</span> <span class="n">l</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">last</span><span class="p">)})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">params</span>
 <span class="go">{&#39;limit&#39;: 2, &#39;last_0&#39;: &#39;title&#39;, &#39;last_1&#39;: &#39;file:feed.xml&#39;}</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">second_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
 </code></pre></div>
-<p>Now, <code>make_feeds_query()</code> is the only place where we need to
-be aware of what we're sorting by.</p>
+<p>Now, we only need to specify what we're sorting by once, in <code>make_feeds_query()</code>.
+Because the query builder provides a <strong>standard representation of a query</strong>,
+we can inspect that programmatically,
+and and let the computer do the work itself.</p>
 <p>Can we do better?</p>
 <h2 id="abstraction">Abstraction<span class="headerlink"> <a href="#abstraction" title="permalink">#</a></span></h2>
-<p>Since the pattern above is quite common,
-it would be nice if everyone could use it,
-wouldn't it?</p>
-<p>If only there was standard place for this kind of method...</p>
+<p>The pattern above seems quite useful,
+but it's complicated enough I probably wouldn't get it right all the time;
+I bet I missed some corner cases, too.</p>
+<p>If only there was a way to tell the computer what I want, directly:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">make_feeds_query</span><span class="p">():</span>
     <span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;url&#39;</span><span class="p">,</span> <span class="s1">&#39;coalesce(user_title, title)&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;feeds&#39;</span><span class="p">)</span>
 
@@ -433,22 +440,51 @@ wouldn't it?</p>
 
     <span class="k">return</span> <span class="n">query</span>
 </code></pre></div>
+<p>...and then have it execute the queries for me:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">first_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">last</span> <span class="o">=</span> <span class="n">query</span><span class="o">.</span><span class="n">extract_last</span><span class="p">(</span><span class="n">first_page</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">first_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">execute_paginated</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">first_page</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+<span class="go">((&#39;file:feed.xml&#39;, &#39;Title&#39;, &#39;title&#39;), (&#39;title&#39;, &#39;file:feed.xml&#39;))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">last</span> <span class="o">=</span> <span class="n">first_page</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
 </code></pre></div>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">add_last</span><span class="p">(</span><span class="n">last</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">second_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">second_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">execute_paginated</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">last</span><span class="o">=</span><span class="n">last</span><span class="p">))</span>
 </code></pre></div>
-<p>TBD more words here.</p>
+<p>I'll admit this is provided by a mixin that's not counted in the 150 lines.</p>
+<!-- the above doesn't exist yet, here's the non-fantasy version:
+
+```pycon
+>>> query = make_feeds_query()
+>>> query.LIMIT(':limit')
+>>> params = dict(limit=2)
+>>> first_page = list(db.execute(str(query), params)
+>>> last = query.extract_last(first_page[-1])
+```
+
+... and then change the query accordingly for me.
+
+```pycon
+>>> query = make_feeds_query()
+>>> query.LIMIT(':limit')
+>>> params = dict(limit=2)
+>>> params.update(query.add_last(last))
+>>> second_page = list(db.execute(str(query), params)
+```
+
+-->
 <hr />
 <p>That's it for now.</p>
-<p>outro TBD</p>
+<p>Learned something new today? 
+Share this article with others, it really helps! :)</p>
+<section class="admonition note">
+<div class="admonition-text">
+<p>This is my first <em>planned</em> series, and still a work in progress.</p>
+<p>This means <strong>you get a say</strong> in it.
+ <a href="/about#contact">Email me</a> your questions or comments,
+ and I'll do my best to address them in one of the future articles.</p>
+</div>
+</section>
+<p><a id="subscribe"></a></p>
 
 
 
