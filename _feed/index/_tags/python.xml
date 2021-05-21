@@ -126,7 +126,7 @@ To keep things short, we'll only do &lt;code&gt;read&lt;/code&gt; and &lt;code&g
              &lt;span class="n"&gt;entries&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="k"&gt;read&lt;/span&gt; &lt;span class="k"&gt;AND&lt;/span&gt;
             &lt;span class="k"&gt;NOT&lt;/span&gt; &lt;span class="n"&gt;entries&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;important&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;Not bad.&lt;/p&gt;
+&lt;p&gt;Not bad...&lt;/p&gt;
 &lt;h2 id="separation-of-concerns"&gt;Separation of concerns&lt;span class="headerlink"&gt; &lt;a href="#separation-of-concerns" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
 &lt;p&gt;OK, it is a bit verbose,
 especially as we add more snippets in other places.
@@ -171,7 +171,7 @@ into clean, regular SQL:&lt;/p&gt;
     &lt;span class="k"&gt;NOT&lt;/span&gt; &lt;span class="n"&gt;entries&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;important&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;h2 id="composition-and-reuse"&gt;Composition and reuse&lt;span class="headerlink"&gt; &lt;a href="#composition-and-reuse" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
-&lt;p&gt;Later, we add &lt;a href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.get_entry_counts"&gt;another method&lt;/a&gt; to count entries.&lt;/p&gt;
+&lt;p&gt;Let's say we later add a &lt;a href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.get_entry_counts"&gt;method to count entries&lt;/a&gt;.&lt;/p&gt;
 &lt;p&gt;Surely, we'd want it to have the same filtering capabilities as &lt;code&gt;get_entries()&lt;/code&gt;.
 So we move that part into a function:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;apply_filter_options&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;read&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;important&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
@@ -193,30 +193,22 @@ So we move that part into a function:&lt;/p&gt;
     &lt;span class="n"&gt;apply_filter_options&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;read&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;important&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
     &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;query&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;We could have returned the WHERE snippets instead,
-and we could have done that with the f-string version as well;
-why is a query builder better in this case?&lt;/p&gt;
-&lt;p&gt;Let's imagine we only want to count entries
-from feeds that have updates enabled;
-it would look something like this:&lt;/p&gt;
+&lt;p&gt;Why pass the query in, instead of just returning the WHERE snippets?
+Because it allows doing &lt;em&gt;other kinds&lt;/em&gt; of changes transparently:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;apply_filter_options&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;updates_enabled&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
     &lt;span class="o"&gt;...&lt;/span&gt;
     &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;updates_enabled&lt;/span&gt; &lt;span class="ow"&gt;is&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
         &lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;JOIN&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;feeds ON feeds.url = entries.feed&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
         &lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;WHERE&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&amp;#39;&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;updates_enabled&lt;/span&gt; &lt;span class="k"&gt;else&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;NOT&amp;#39;&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; feeds.updates_enabled&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;If we returned the snippets,
-we'd need to change the return value to include a potential JOIN snippet,
-and deal with that at all the call sites.&lt;/p&gt;
-&lt;p&gt;Changing the query, we only have to pass the new argument along.
-The query builder offers a &lt;strong&gt;standard interface for making changes to a query&lt;/strong&gt;,
+&lt;p&gt;The query builder offers a &lt;strong&gt;standard interface for making changes to a query&lt;/strong&gt;,
 which makes it easier to compose operations,
 which in turn makes it easier to reuse logic.&lt;/p&gt;
 &lt;p&gt;If you find this a bit contrived,
 check out &lt;a href="https://github.com/lemon24/reader/blob/1.17/src/reader/_storage.py#L1409-L1479"&gt;this function&lt;/a&gt; for a real-world example.&lt;/p&gt;
 &lt;h2 id="intermission-scrolling-window-queries"&gt;Intermission: scrolling window queries&lt;span class="headerlink"&gt; &lt;a href="#intermission-scrolling-window-queries" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
 &lt;p&gt;&lt;em&gt;If you're familiar with
-scrolling window queries / cursor based pagination,
+scrolling window queries / cursor pagination / keyset pagination,
 feel free to skip to the
 &lt;a href="#introspection"&gt;next section&lt;/a&gt;.&lt;/em&gt;&lt;/p&gt;
 &lt;p&gt;Before we go forward, we need to learn how to implement pagination.&lt;/p&gt;
@@ -274,9 +266,9 @@ let's do it for a real query:&lt;/p&gt;
 
     &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;query&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;This query retrieves feeds sorted by title, preferring custom titles;
+&lt;p&gt;This retrieves feeds sorted by title, preferring custom titles;
 for feeds with the same title, it falls back to the primary key,
-so the the result stays consistent between queries.
+so the result stays consistent between queries.
 I omitted other supported orderings for brevity.&lt;/p&gt;
 &lt;p&gt;To get the first page, we add a limit:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;query&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;make_feeds_query&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
@@ -313,27 +305,22 @@ I omitted other supported orderings for brevity.&lt;/p&gt;
 &lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;second_page&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;db&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;execute&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;params&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;But, every time we do this,
-we have to remember the ordering we used,
-the indices of the sort key values in the result,
-and the parameter names for that ordering.&lt;/p&gt;
+we have to remember the indices of the sort key values in the result
+and the parameter names for the current ordering.&lt;/p&gt;
 &lt;p&gt;There must be a better way.&lt;/p&gt;
-&lt;p&gt;The WHERE parameters don't actually &lt;em&gt;need&lt;/em&gt; to have a descriptive name;
+&lt;p&gt;The WHERE parameters don't actually &lt;em&gt;need&lt;/em&gt; a descriptive name;
 also, the computer &lt;em&gt;already knows&lt;/em&gt; both what we're sorting by,
 and where those things are in the result tuple –
 it's right there in  &lt;code&gt;make_feeds_query()&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;Let's make the computer do the work, then.&lt;/p&gt;
-&lt;p&gt;First, we generate the WHERE condition:&lt;/p&gt;
+&lt;p&gt;Let's make the computer do the work, then.
+To add the WHERE condition:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;query&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;make_feeds_query&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
 &lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;LIMIT&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;:limit&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 
 &lt;span class="n"&gt;order_by_things&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;t&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;t&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;ORDER BY&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]]&lt;/span&gt;
 &lt;span class="n"&gt;labels&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;:last_&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="nb"&gt;range&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;order_by_things&lt;/span&gt;&lt;span class="p"&gt;))]&lt;/span&gt;
 &lt;span class="c1"&gt;# use the query builder do the formatting (sneaky, but it works)&lt;/span&gt;
-&lt;span class="n"&gt;comparison&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;Query&lt;/span&gt;&lt;span class="p"&gt;({&lt;/span&gt;
-    &lt;span class="s1"&gt;&amp;#39;(&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;order_by_things&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
-    &lt;span class="s1"&gt;&amp;#39;) &amp;gt; (&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;labels&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
-    &lt;span class="s1"&gt;&amp;#39;)&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;
-&lt;span class="p"&gt;})&lt;/span&gt;
+&lt;span class="n"&gt;comparison&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;Query&lt;/span&gt;&lt;span class="p"&gt;({&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;(&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;order_by_things&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;) &amp;gt; (&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="n"&gt;labels&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;)&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]})&lt;/span&gt;
 
 &lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;WHERE&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;comparison&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
@@ -357,7 +344,7 @@ it's right there in  &lt;code&gt;make_feeds_query()&lt;/code&gt;.&lt;/p&gt;
 &lt;span class="k"&gt;LIMIT&lt;/span&gt;
     &lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="k"&gt;limit&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;Then, we extract the sort key parameters:&lt;/p&gt;
+&lt;p&gt;To extract the sort key parameters from the last result:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;order_by_things&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;t&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;t&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;ORDER BY&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]]&lt;/span&gt;
 &lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;names&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;t&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;alias&lt;/span&gt; &lt;span class="ow"&gt;or&lt;/span&gt; &lt;span class="n"&gt;t&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;t&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;SELECT&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]]&lt;/span&gt;
 &lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;last&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
@@ -366,11 +353,6 @@ it's right there in  &lt;code&gt;make_feeds_query()&lt;/code&gt;.&lt;/p&gt;
 &lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;
 &lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;last&lt;/span&gt;
 &lt;span class="go"&gt;{&amp;#39;last_0&amp;#39;: &amp;#39;title&amp;#39;, &amp;#39;last_1&amp;#39;: &amp;#39;file:feed.xml&amp;#39;}&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;Executing the second query looks exactly the same:&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;params&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;limit&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;params&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;update&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;last&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;second_page&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;db&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;execute&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;params&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;Now, we only need to specify what we're sorting by once, in &lt;code&gt;make_feeds_query()&lt;/code&gt;.
 Because the query builder provides a &lt;strong&gt;standard representation of a query&lt;/strong&gt;,
@@ -496,7 +478,7 @@ and talk about:&lt;/p&gt;
 &lt;p&gt;If you want to take a peek at the code right now,
 you can find the final version &lt;a href="/_file/query-builder/07-more-init/builder.py"&gt;here&lt;/a&gt;
 and the tests &lt;a href="/_file/query-builder/07-more-init/test_builder.py"&gt;here&lt;/a&gt;.
-The version used by &lt;a href="https://github.com/lemon24/reader"&gt;reader&lt;/a&gt; is &lt;a href="https://github.com/lemon24/reader/blob/fcbd43062afbef6cc2d381b3078641fdfbfe44ef/src/reader/_sql_utils.py"&gt;here&lt;/a&gt; 
+The version used by &lt;a href="https://github.com/lemon24/reader"&gt;reader&lt;/a&gt; is &lt;a href="https://github.com/lemon24/reader/blob/fcbd43062afbef6cc2d381b3078641fdfbfe44ef/src/reader/_sql_utils.py"&gt;here&lt;/a&gt;
 (type-annotated, and with extra features).&lt;/p&gt;
 &lt;hr /&gt;
 &lt;p&gt;New articles will be linked on this page as they get published;

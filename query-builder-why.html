@@ -195,7 +195,7 @@ To keep things short, we'll only do <code>read</code> and <code>important</code>
              <span class="n">entries</span><span class="p">.</span><span class="k">read</span> <span class="k">AND</span>
             <span class="k">NOT</span> <span class="n">entries</span><span class="p">.</span><span class="n">important</span>
 </code></pre></div>
-<p>Not bad.</p>
+<p>Not bad...</p>
 <h2 id="separation-of-concerns">Separation of concerns<span class="headerlink"> <a href="#separation-of-concerns" title="permalink">#</a></span></h2>
 <p>OK, it is a bit verbose,
 especially as we add more snippets in other places.
@@ -240,7 +240,7 @@ into clean, regular SQL:</p>
     <span class="k">NOT</span> <span class="n">entries</span><span class="p">.</span><span class="n">important</span>
 </code></pre></div>
 <h2 id="composition-and-reuse">Composition and reuse<span class="headerlink"> <a href="#composition-and-reuse" title="permalink">#</a></span></h2>
-<p>Later, we add <a href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.get_entry_counts">another method</a> to count entries.</p>
+<p>Let's say we later add a <a href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.get_entry_counts">method to count entries</a>.</p>
 <p>Surely, we'd want it to have the same filtering capabilities as <code>get_entries()</code>.
 So we move that part into a function:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">apply_filter_options</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -262,30 +262,22 @@ So we move that part into a function:</p>
     <span class="n">apply_filter_options</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">read</span><span class="p">,</span> <span class="n">important</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">query</span>
 </code></pre></div>
-<p>We could have returned the WHERE snippets instead,
-and we could have done that with the f-string version as well;
-why is a query builder better in this case?</p>
-<p>Let's imagine we only want to count entries
-from feeds that have updates enabled;
-it would look something like this:</p>
+<p>Why pass the query in, instead of just returning the WHERE snippets?
+Because it allows doing <em>other kinds</em> of changes transparently:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">apply_filter_options</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="n">updates_enabled</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="o">...</span>
     <span class="k">if</span> <span class="n">updates_enabled</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">query</span><span class="o">.</span><span class="n">JOIN</span><span class="p">(</span><span class="s2">&quot;feeds ON feeds.url = entries.feed&quot;</span><span class="p">)</span>
         <span class="n">query</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;&#39;</span> <span class="k">if</span> <span class="n">updates_enabled</span> <span class="k">else</span> <span class="s1">&#39;NOT&#39;</span><span class="si">}</span><span class="s2"> feeds.updates_enabled&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>If we returned the snippets,
-we'd need to change the return value to include a potential JOIN snippet,
-and deal with that at all the call sites.</p>
-<p>Changing the query, we only have to pass the new argument along.
-The query builder offers a <strong>standard interface for making changes to a query</strong>,
+<p>The query builder offers a <strong>standard interface for making changes to a query</strong>,
 which makes it easier to compose operations,
 which in turn makes it easier to reuse logic.</p>
 <p>If you find this a bit contrived,
 check out <a href="https://github.com/lemon24/reader/blob/1.17/src/reader/_storage.py#L1409-L1479">this function</a> for a real-world example.</p>
 <h2 id="intermission-scrolling-window-queries">Intermission: scrolling window queries<span class="headerlink"> <a href="#intermission-scrolling-window-queries" title="permalink">#</a></span></h2>
 <p><em>If you're familiar with
-scrolling window queries / cursor based pagination,
+scrolling window queries / cursor pagination / keyset pagination,
 feel free to skip to the
 <a href="#introspection">next section</a>.</em></p>
 <p>Before we go forward, we need to learn how to implement pagination.</p>
@@ -343,9 +335,9 @@ let's do it for a real query:</p>
 
     <span class="k">return</span> <span class="n">query</span>
 </code></pre></div>
-<p>This query retrieves feeds sorted by title, preferring custom titles;
+<p>This retrieves feeds sorted by title, preferring custom titles;
 for feeds with the same title, it falls back to the primary key,
-so the the result stays consistent between queries.
+so the result stays consistent between queries.
 I omitted other supported orderings for brevity.</p>
 <p>To get the first page, we add a limit:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
@@ -382,27 +374,22 @@ I omitted other supported orderings for brevity.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">second_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
 </code></pre></div>
 <p>But, every time we do this,
-we have to remember the ordering we used,
-the indices of the sort key values in the result,
-and the parameter names for that ordering.</p>
+we have to remember the indices of the sort key values in the result
+and the parameter names for the current ordering.</p>
 <p>There must be a better way.</p>
-<p>The WHERE parameters don't actually <em>need</em> to have a descriptive name;
+<p>The WHERE parameters don't actually <em>need</em> a descriptive name;
 also, the computer <em>already knows</em> both what we're sorting by,
 and where those things are in the result tuple –
 it's right there in  <code>make_feeds_query()</code>.</p>
-<p>Let's make the computer do the work, then.</p>
-<p>First, we generate the WHERE condition:</p>
+<p>Let's make the computer do the work, then.
+To add the WHERE condition:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">query</span> <span class="o">=</span> <span class="n">make_feeds_query</span><span class="p">()</span>
 <span class="n">query</span><span class="o">.</span><span class="n">LIMIT</span><span class="p">(</span><span class="s1">&#39;:limit&#39;</span><span class="p">)</span>
 
 <span class="n">order_by_things</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;ORDER BY&#39;</span><span class="p">]]</span>
 <span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s1">&#39;:last_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">order_by_things</span><span class="p">))]</span>
 <span class="c1"># use the query builder do the formatting (sneaky, but it works)</span>
-<span class="n">comparison</span> <span class="o">=</span> <span class="n">Query</span><span class="p">({</span>
-    <span class="s1">&#39;(&#39;</span><span class="p">:</span> <span class="n">order_by_things</span><span class="p">,</span>
-    <span class="s1">&#39;) &gt; (&#39;</span><span class="p">:</span> <span class="n">labels</span><span class="p">,</span>
-    <span class="s1">&#39;)&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;&#39;</span><span class="p">],</span>
-<span class="p">})</span>
+<span class="n">comparison</span> <span class="o">=</span> <span class="n">Query</span><span class="p">({</span><span class="s1">&#39;(&#39;</span><span class="p">:</span> <span class="n">order_by_things</span><span class="p">,</span> <span class="s1">&#39;) &gt; (&#39;</span><span class="p">:</span><span class="n">labels</span><span class="p">,</span> <span class="s1">&#39;)&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;&#39;</span><span class="p">]})</span>
 
 <span class="n">query</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">comparison</span><span class="p">))</span>
 </code></pre></div>
@@ -426,7 +413,7 @@ it's right there in  <code>make_feeds_query()</code>.</p>
 <span class="k">LIMIT</span>
     <span class="p">:</span><span class="k">limit</span>
 </code></pre></div>
-<p>Then, we extract the sort key parameters:</p>
+<p>To extract the sort key parameters from the last result:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">order_by_things</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;ORDER BY&#39;</span><span class="p">]]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">alias</span> <span class="ow">or</span> <span class="n">t</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;SELECT&#39;</span><span class="p">]]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">last</span> <span class="o">=</span> <span class="p">{</span>
@@ -435,11 +422,6 @@ it's right there in  <code>make_feeds_query()</code>.</p>
 <span class="gp">... </span><span class="p">}</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">last</span>
 <span class="go">{&#39;last_0&#39;: &#39;title&#39;, &#39;last_1&#39;: &#39;file:feed.xml&#39;}</span>
-</code></pre></div>
-<p>Executing the second query looks exactly the same:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">last</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">second_page</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">params</span><span class="p">)</span>
 </code></pre></div>
 <p>Now, we only need to specify what we're sorting by once, in <code>make_feeds_query()</code>.
 Because the query builder provides a <strong>standard representation of a query</strong>,
