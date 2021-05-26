@@ -53,9 +53,11 @@ window.addEventListener('resize', set_vh);
 <h1 class="heading-noindex">When to use classes? When you have a bunch of functions that take the same arguments</h1>
 
 <p class="text-gray"><small>
+<span>2021-05-26</span>
 
 
 
+∙ five minute read
 
 
 </small></p>
@@ -76,9 +78,9 @@ window.addEventListener('resize', set_vh);
 read a bunch of stuff, watched a bunch a talks,
 and <em>still</em>  don't know whether you should be using classes in any given situation?</p>
 <p>Have you read discussions about it that for all you know <em>may</em> be right,
-but they're so academic you can't parse the jargon?</p>
-<p>Have you read discussions that all treat the &quot;obvious&quot; cases,
-leaving you with no clear answer whey you try to apply them to your code?</p>
+but they're <em>so academic</em> you can't parse the jargon?</p>
+<p>Have you read articles that all treat the &quot;obvious&quot; cases,
+leaving you with no clear answer when you try to apply them to <em>your own code</em>?</p>
 <hr />
 <p>My experience is that, unfortunately, the best way to learn these things <em>is</em> to look at a lot of examples.</p>
 <p>Most guidelines tend to be either too vague if you don't already know enough about the subject, or too specific and repeating things you already know.</p>
@@ -92,7 +94,7 @@ and some considerations you should have in mind.</p>
 <p><strong>If you have a bunch of functions that take the same arguments, consider using a class.</strong></p>
 <p>That's it. In it's most basic form, a class is when you group data with functions that operate on that data.</p>
 <h2 id="example-highlightedstring">Example: HighlightedString<span class="headerlink"> <a href="#example-highlightedstring" title="permalink">#</a></span></h2>
-<p>The first example is <a href="https://github.com/lemon24/reader/blob/1.17/src/reader/types.py#L280-L434">HighlightedString</a>,
+<p>The first example is <a href="https://github.com/lemon24/reader/blob/8e46f5ddd9b8bc4c8c7c346c68f8abcd2d6ab441/src/reader/types.py#L280-L434">HighlightedString</a>,
 a class I use in my feed reader library
 to wrap full-text search results,
 and highlight the bits that matched when showing them in a web page.</p>
@@ -105,8 +107,8 @@ and adds before/after markers to the parts inside the slices:</p>
 </code></pre></div>
 <p>While doing it,
 we write a helper that splits the string such that
-parts with even indexes are inside a slice,
-and parts with odd indexes are not:</p>
+parts with odd indexes are inside a slice,
+and parts with even indexes are not:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">split_highlights</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">highlights</span><span class="p">))</span>
 <span class="go">[&#39;water on &#39;, &#39;mars&#39;, &#39;&#39;]</span>
 </code></pre></div>
@@ -126,7 +128,7 @@ so the rest of the code doesn't need to care about it.</p>
 <span class="gr">ValueError</span>: <span class="n">highlights must not overlap: slice(6, 10, None), slice(9, 13, None)</span>
 </code></pre></div>
 <p>We could, instead, have a class with the first two functions as methods,
-and validation in the constructor.</p>
+and do validation in <code>__init__</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">string</span> <span class="o">=</span> <span class="n">HighlightedString</span><span class="p">(</span><span class="s1">&#39;water on mars&#39;</span><span class="p">,</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">13</span><span class="p">)])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">string</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;&lt;b&gt;&#39;</span><span class="p">,</span> <span class="s1">&#39;&lt;/b&gt;&#39;</span><span class="p">)</span>
 <span class="go">&#39;water on &lt;b&gt;mars&lt;/b&gt;&#39;</span>
@@ -137,12 +139,65 @@ and validation in the constructor.</p>
   <span class="c">...</span>
 <span class="gr">ValueError</span>: <span class="n">invalid highlight: start must be not be greater than stop: slice(13, 9, None)</span>
 </code></pre></div>
-<h2 id="example-os-path-posixpath-ntpath-pathlib-pure-path">example: os.path / posixpath / ntpath, pathlib Pure*Path<span class="headerlink"> <a href="#example-os-path-posixpath-ntpath-pathlib-pure-path" title="permalink">#</a></span></h2>
+<p>Besides being shorter, the class version has a few additional benefits:</p>
 <ul>
-<li>parts: the path, the type</li>
-<li>twist: one of the arguments is implied (type)</li>
-<li>refer to stdlib article</li>
+<li>it shows intent:
+this isn't just a string and some slices,
+it's a <em>highlighted string</em></li>
+<li>it makes it easier for the user to discover what actions are possible;
+this is especially helpful if the code
+is in the same module with other, unrelated things</li>
+<li>it makes code cleaner / shorter;
+validating the data in <code>__init__</code>
+ensures invalid strings <em>cannot</em> exist;
+thus, the methods don't have to validate anything</li>
 </ul>
+<h2 id="example-os-path-and-pathlib">Example: os.path and pathlib<span class="headerlink"> <a href="#example-os-path-and-pathlib" title="permalink">#</a></span></h2>
+<p>The <a href="https://docs.python.org/3/library/pathlib.html">pathlib</a> standard library module
+provides an object-oriented solution
+for dealing with filesystem paths.</p>
+<p>Many of the methods available on the various <code>Path</code> objects
+have equivalent <a href="https://docs.python.org/3/library/os.path.html">os.path</a> / <a href="https://docs.python.org/3/library/os.html">os</a> functions
+that take a string path as the first argument:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">path_str</span> <span class="o">=</span> <span class="s1">&#39;ideas.md&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">path_obj</span> <span class="o">=</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">path_str</span><span class="p">)</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isabs</span><span class="p">(</span><span class="n">path_str</span><span class="p">)</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">path_obj</span><span class="o">.</span><span class="n">is_absolute</span><span class="p">()</span>
+<span class="go">False</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">path_str</span><span class="p">)</span><span class="o">.</span><span class="n">st_uid</span>
+<span class="go">501</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">path_obj</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_uid</span>
+<span class="go">501</span>
+</code></pre></div>
+<p>Where it makes sense, the <code>Path</code> methods return a new path object instead of a string:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path_str</span><span class="p">,</span> <span class="s1">&#39;another&#39;</span><span class="p">)</span>
+<span class="go">&#39;ideas.md/another&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">path_obj</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="s1">&#39;another&#39;</span><span class="p">)</span>
+<span class="go">PosixPath(&#39;ideas.md/another&#39;)</span>
+</code></pre></div>
+<p>Other functions are equivalent to properties instead:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">path_str</span><span class="p">)</span>
+<span class="go">(&#39;ideas&#39;, &#39;.md&#39;)</span>
+<span class="go">&#39;.md&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">path_obj</span><span class="o">.</span><span class="n">stem</span><span class="p">,</span> <span class="n">path_obj</span><span class="o">.</span><span class="n">suffix</span>
+<span class="go">(&#39;ideas&#39;, &#39;.md&#39;)</span>
+</code></pre></div>
+<p>The <a href="https://docs.python.org/3/library/pathlib.html">pathlib</a> documentation includes <a href="https://docs.python.org/3/library/pathlib.html#correspondence-to-tools-in-the-os-module">a full mapping</a>
+of various <a href="https://docs.python.org/3/library/os.html">os</a> functions to their corresponding <code>Path</code> methods,
+if you want to explore on your own.</p>
+<!--
+* twist: one of the arguments is implied (type); / posixpath / ntpath, Pure*Path
+-->
+<section class="admonition tip">
+<div class="admonition-text">
+<p>If you're curious about the design decisions behind
+ some popular standard library modules, including pathlib,
+ check out <a href="/stdlib">this article</a>.</p>
+</div>
+</section>
 <h2 id="example-reader-entry-filter-options">example: reader entry filter options<span class="headerlink"> <a href="#example-reader-entry-filter-options" title="permalink">#</a></span></h2>
 <ul>
 <li>twist: the methods don't live on it</li>
