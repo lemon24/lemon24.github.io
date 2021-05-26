@@ -57,7 +57,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ five minute read
+∙ seven minute read
 
 
 </small></p>
@@ -90,9 +90,29 @@ leaving you with no clear answer when you try to apply them to <em>your own code
 let's look at <strong>one specific case</strong> where you may want to use classes,
 a bunch of <strong>examples from real-world code</strong>,
 and some considerations you should have in mind.</p>
+<details>
+<summary>Contents</summary>
+<section class="toc">
+<ul>
+<li><a href="#the-heuristic">The heuristic</a></li>
+<li><a href="#example-highlightedstring">Example: HighlightedString</a></li>
+<li><a href="#example-os-path-and-pathlib">Example: os.path and pathlib</a></li>
+<li><a href="#caveat-attribute-changes-are-confusing">Caveat: attribute changes are confusing</a>
+<ul>
+<li><a href="#solution-make-the-class-immutable">Solution: make the class immutable</a></li>
+</ul>
+</li>
+<li><a href="#counter-example-single-method">Counter-example: single method</a></li>
+<li><a href="#counter-example-two-sets-of-arguments">Counter-example: two sets of arguments</a></li>
+<li><a href="#try-it-out">Try it out</a></li>
+</ul>
+</section>
+</details>
 <h2 id="the-heuristic">The heuristic<span class="headerlink"> <a href="#the-heuristic" title="permalink">#</a></span></h2>
-<p><strong>If you have a bunch of functions that take the same arguments, consider using a class.</strong></p>
-<p>That's it. In it's most basic form, a class is when you group data with functions that operate on that data.</p>
+<p><strong>If you have a bunch of functions that take the same set of arguments, consider using a class.</strong></p>
+<p>That's it.
+In its most basic form,
+a class is when you group data with functions that operate on that data.</p>
 <h2 id="example-highlightedstring">Example: HighlightedString<span class="headerlink"> <a href="#example-highlightedstring" title="permalink">#</a></span></h2>
 <p>The first example is <a href="https://github.com/lemon24/reader/blob/8e46f5ddd9b8bc4c8c7c346c68f8abcd2d6ab441/src/reader/types.py#L280-L434">HighlightedString</a>,
 a class I use in my feed reader library
@@ -117,19 +137,19 @@ we only allow non-overlapping slices with positive start/stop and no step;
 we write another helper that raises an exception
 if the string/slices combo doesn't obey this rule,
 so the rest of the code doesn't need to care about it.</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">validate_highlights</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">highlights</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">validate_highlights</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)])</span>
-<span class="gt">Traceback (most recent call last):</span>
-  <span class="c">...</span>
-<span class="gr">ValueError</span>: <span class="n">invalid highlight: start and stop must be equal to or greater than 0: slice(-4, -1, None)</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">validate_highlights</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">highlights</span><span class="p">)</span>  <span class="c1"># no exception</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">validate_highlights</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="nb">slice</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">13</span><span class="p">)])</span>
 <span class="gt">Traceback (most recent call last):</span>
   <span class="c">...</span>
 <span class="gr">ValueError</span>: <span class="n">highlights must not overlap: slice(6, 10, None), slice(9, 13, None)</span>
 </code></pre></div>
 <p>We could, instead, have a class with the first two functions as methods,
-and do validation in <code>__init__</code>:</p>
+and do the validation in <code>__init__</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">string</span> <span class="o">=</span> <span class="n">HighlightedString</span><span class="p">(</span><span class="s1">&#39;water on mars&#39;</span><span class="p">,</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">13</span><span class="p">)])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">string</span><span class="o">.</span><span class="n">value</span>
+<span class="go">&#39;water on mars&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">string</span><span class="o">.</span><span class="n">highlights</span>
+<span class="go">(slice(9, 13, None),)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">string</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;&lt;b&gt;&#39;</span><span class="p">,</span> <span class="s1">&#39;&lt;/b&gt;&#39;</span><span class="p">)</span>
 <span class="go">&#39;water on &lt;b&gt;mars&lt;/b&gt;&#39;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">string</span><span class="o">.</span><span class="n">split</span><span class="p">())</span>
@@ -198,53 +218,164 @@ if you want to explore on your own.</p>
  check out <a href="/stdlib">this article</a>.</p>
 </div>
 </section>
-<h2 id="example-reader-entry-filter-options">example: reader entry filter options<span class="headerlink"> <a href="#example-reader-entry-filter-options" title="permalink">#</a></span></h2>
-<ul>
-<li>twist: the methods don't live on it</li>
-</ul>
-<h2 id="caveat-sometimes-a-function-applies-to-many-differnt-kinds-of-arguments">caveat: sometimes a function applies to many differnt kinds of arguments<span class="headerlink"> <a href="#caveat-sometimes-a-function-applies-to-many-differnt-kinds-of-arguments" title="permalink">#</a></span></h2>
-<ul>
-<li>example: len</li>
-<li>example: various numpy functions</li>
-</ul>
-<h2 id="caveat-single-method">caveat: single method<span class="headerlink"> <a href="#caveat-single-method" title="permalink">#</a></span></h2>
-<blockquote>
-<p>If you have a class with only 2 methods, and one of them is init, consider not using a class.</p>
-</blockquote>
-<h2 id="caveat-if-the-arguments-change-can-be-confusing">caveat: if the arguments change, can be confusing<span class="headerlink"> <a href="#caveat-if-the-arguments-change-can-be-confusing" title="permalink">#</a></span></h2>
-<ul>
-<li><p>solution: make things immutable (werkzeug accept, pathlib)</p>
-<ul>
-<li>example: werkzeug datastructures accept</li>
-</ul>
-</li>
-<li><p>parts: just the things</p>
-</li>
-<li><p>twist: sometimes it's just one argument</p>
-</li>
-</ul>
-<p>highglightes stirngs</p>
-<ul>
-<li>bonus: by sticking validation in __post_init__, we ensure we cannot have an invalid string; thus, split/apply don't have to validate anything<ul>
-<li>the type encapsulates the idea of string+highlights that are valid for it</li>
-</ul>
-</li>
-<li>bonus: fourth function takes string and amrkers and returns string+highlights; makes sense for it to be an alternate constructor; makes it more discoverable</li>
-</ul>
-<h2 id="try-it-out">try it out<span class="headerlink"> <a href="#try-it-out" title="permalink">#</a></span></h2>
-<blockquote>
-<p>When doing something where you think you might need a class, <em>try doing or not doing it depending on what you think</em>. If you think you shouldn't use one, don't and just switch it to a class later on if your wrong.</p>
-</blockquote>
-<blockquote>
-<p>not sure it would be beneficial to group input and functions into classes</p>
-<p>If being able to call the function is enough for me to avoid duplicating code should I leave it as a standalone function?</p>
-</blockquote>
-<blockquote>
-<p>TL;DR: classes are often good; don't overuse them and don't be dogmatic; consider multiple approaches; be open-minded as you get more experience</p>
-</blockquote>
-<blockquote>
-<p>Abstraction is good when it's good, but when it's premature or bad, it can slow down development. It's nice when libraries that use classes after careful consideration of what the correct abstractions are and what their API should feel like, but abstraction is a difficult process that doesn't necessarily need to be done to the extreme in everyday code.</p>
-</blockquote>
+<!--
+
+# Counterexample: generic functions
+
+sometimes a function applies to many differnt kinds of arguments
+
+* example: len
+* example: various numpy functions
+* example: things in itertools?
+
+BIG ISSUE: the code is not available for these (cause they're not implemented in Python)
+
+-->
+<h2 id="caveat-attribute-changes-are-confusing">Caveat: attribute changes are confusing<span class="headerlink"> <a href="#caveat-attribute-changes-are-confusing" title="permalink">#</a></span></h2>
+<p>Looking at our previous HighlightedString example,
+let's say we pass it to a function that writes the results in a text file,
+and after that's done we do some other stuff with it.</p>
+<p>What would you think if this happened?</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">string</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;&lt;b&gt;&#39;</span><span class="p">,</span> <span class="s1">&#39;&lt;/b&gt;&#39;</span><span class="p">)</span>
+<span class="go">&#39;water on &lt;b&gt;mars&lt;/b&gt;&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">render_results_page</span><span class="p">(</span><span class="s1">&#39;output.txt&#39;</span><span class="p">,</span> <span class="n">titles</span><span class="o">=</span><span class="p">[</span><span class="n">string</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">string</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;&lt;b&gt;&#39;</span><span class="p">,</span> <span class="s1">&#39;&lt;/b&gt;&#39;</span><span class="p">)</span>
+<span class="go">&#39;&lt;b&gt;water&lt;/b&gt; on mars&#39;</span>
+</code></pre></div>
+<p>I think you would agree it is quite unexpected.
+Either intentionally or by mistake,
+<code>render_results_page()</code> seems to have changed our highlights,
+when it was supposed to just render the results.</p>
+<p>That's OK, mistakes happen.
+But how can we prevent it from happening in the future?</p>
+<h3 id="solution-make-the-class-immutable">Solution: make the class immutable<span class="headerlink"> <a href="#solution-make-the-class-immutable" title="permalink">#</a></span></h3>
+<p>Well, in the real implementation, <em>this mistake can't happen</em>.</p>
+<p>HighlightedString is actually a <a href="https://docs.python.org/3/library/dataclasses.html#frozen-instances">frozen dataclass</a>,
+which makes its attributes read-only;
+also, the <code>highlights</code> argument is always stored as a <a href="https://docs.python.org/3/library/stdtypes.html#tuple">tuple</a>,
+which immutable as well:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">string</span><span class="o">.</span><span class="n">highlights</span> <span class="o">=</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">)]</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">dataclasses.FrozenInstanceError</span>: <span class="n">cannot assign to field &#39;highlights&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">string</span><span class="o">.</span><span class="n">highlights</span><span class="p">[:]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">)]</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">TypeError</span>: <span class="n">&#39;tuple&#39; object does not support item assignment</span>
+</code></pre></div>
+<p>You can also find this pattern in <a href="https://werkzeug.palletsprojects.com/en/2.0.x/datastructures/">werkzeug.datastructures</a>,
+which contains a whole bunch of HTTP-flavored subclasses
+of common Python objects.
+For example, <a href="https://werkzeug.palletsprojects.com/en/2.0.x/datastructures/#werkzeug.datastructures.Accept">Accept</a> is an immutable <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a> subclass
+(<a href="https://flask.palletsprojects.com/en/2.0.x/api/#flask.Request.accept_encodings">accept_encodings</a> on Flask's <a href="https://flask.palletsprojects.com/en/2.0.x/api/#flask.request">request</a> global is an Accept instance):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">accept</span> <span class="o">=</span> <span class="n">Accept</span><span class="p">([(</span><span class="s1">&#39;image/png&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">accept</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="go">(&#39;image/png&#39;, 1)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">accept</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s1">&#39;image/gif&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">TypeError</span>: <span class="n">&#39;Accept&#39; objects are immutable</span>
+</code></pre></div>
+<h2 id="counter-example-single-method">Counter-example: single method<span class="headerlink"> <a href="#counter-example-single-method" title="permalink">#</a></span></h2>
+<p>If you have a class with <code>__init__</code> and one other method,
+<strong>consider not using a class</strong>.</p>
+<p>For example, you might implement a simple version of the <a href="https://en.wikipedia.org/wiki/Command_pattern">command pattern</a> like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">DoStuffCommand</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="o">=</span> <span class="n">path</span>
+
+    <span class="k">def</span> <span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="o">...</span>  <span class="c1"># do stuff with path</span>
+
+<span class="n">commands</span> <span class="o">=</span> <span class="p">[</span><span class="n">DoStuffCommand</span><span class="p">(</span><span class="s1">&#39;some/path&#39;</span><span class="p">)]</span>
+
+<span class="k">for</span> <span class="n">command</span> <span class="ow">in</span> <span class="n">commands</span><span class="p">:</span>
+    <span class="n">command</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+</code></pre></div>
+<p>Python supports <a href="https://en.wikipedia.org/wiki/First-class_function">first-class functions</a>, do this instead:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">patial</span>
+
+<span class="k">def</span> <span class="nf">do_stuff</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+    <span class="o">...</span>  <span class="c1"># do stuff with self.path</span>
+
+<span class="n">commands</span> <span class="o">=</span> <span class="p">[</span><span class="n">partial</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">,</span> <span class="s1">&#39;some/path&#39;</span><span class="p">)]</span>
+
+<span class="k">for</span> <span class="n">command</span> <span class="ow">in</span> <span class="n">commands</span><span class="p">:</span>
+    <span class="n">command</span><span class="p">()</span>
+</code></pre></div>
+<section class="admonition note">
+<div class="admonition-text">
+<p>If you're doing a fancier command pattern,
+ e.g. when you need undo support,
+ or to validate the arguments <em>before</em> the command is executed,
+ a class is probably still the way to go.</p>
+</div>
+</section>
+<h2 id="counter-example-two-sets-of-arguments">Counter-example: two sets of arguments<span class="headerlink"> <a href="#counter-example-two-sets-of-arguments" title="permalink">#</a></span></h2>
+<p>Consider some functions that take a database connection and other arguments,
+do some queries on the database, and return the result.</p>
+<p>Functions related to entries take some options to filter them;
+these options are never used directly by the calling code,
+but passed along to a helper function.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span> <span class="o">...</span>
+<span class="k">def</span> <span class="nf">get_entry_counts</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span> <span class="o">...</span>
+<span class="k">def</span> <span class="nf">search_entries</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span> <span class="o">...</span>
+<span class="k">def</span> <span class="nf">get_feeds</span><span class="p">(</span><span class="n">db</span><span class="p">):</span> <span class="o">...</span>
+</code></pre></div>
+<p>It would be convenient to group these functions as methods on a <a href="https://en.wikipedia.org/wiki/Data_access_object">data access object</a>,
+so whoever calls <code>get_entries()</code> doesn't have to care if they're coming
+from a database, a flat file, or a list in memory.</p>
+<p>Taking this heuristic to the extreme, we'd end up with something like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Storage</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">db</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_db</span> <span class="o">=</span> <span class="n">db</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_read</span> <span class="o">=</span> <span class="n">read</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_important</span> <span class="o">=</span> <span class="n">important</span>
+
+    <span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">get_entry_counts</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">search_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">get_feeds</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+</code></pre></div>
+<p>This is clearly silly:
+<code>Storage</code> can only filter entries in exactly one way,</p>
+<p>What that approach misses is a bit of nuance:
+there isn't <em>one</em> set of arguments, there are <em>two</em>,
+and one of them changes more often than the other.
+So, we should model them as such:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">NamedTuple</span>
+
+<span class="k">class</span> <span class="nc">FilterOptions</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="n">read</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">important</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="k">class</span> <span class="nc">Storage</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">db</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_db</span> <span class="o">=</span> <span class="n">db</span>
+
+    <span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filter_options</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">get_entry_counts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filter_options</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">search_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">filter_options</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">get_feeds</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+</code></pre></div>
+<h2 id="try-it-out">Try it out<span class="headerlink"> <a href="#try-it-out" title="permalink">#</a></span></h2>
+<p>If you're doing something and you think you might need a class,
+<em>try doing it and see how looks</em>.</p>
+<p>If you think it looks better, keep it, if not, revert the changes;
+you can always switch in either direction later.</p>
+<p>If you get it right the first time, great;
+if not, by having to fix it you'll learn something,
+and the next time you have a problem like this you'll know better.</p>
+<p>Also, don't beat yourself up.
+Sure, there are nice libraries out there
+that use classes in <em>just the right</em> way,
+after spending lots of time to find the right abstraction.
+But abstraction is difficult and time consuming,
+and in everyday code good enough is just that – good enough –
+you don't need to do it to the extreme.</p>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>A <a href="https://docs.python.org/3/library/functions.html#slice">slice</a> is an object Python uses internally for the extended indexing syntax;
