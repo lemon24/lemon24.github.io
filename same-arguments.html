@@ -18,7 +18,7 @@
 
 
 
-<title>When to use classes: if you have a bunch of functions that take the same arguments - death and gravity</title>
+<title>When to use classes? When you have a bunch of functions that take the same arguments - death and gravity</title>
 
 
 <script>
@@ -50,7 +50,7 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">When to use classes: if you have a bunch of functions that take the same arguments</h1>
+<h1 class="heading-noindex">When to use classes? When you have a bunch of functions that take the same arguments</h1>
 
 <p class="text-gray"><small>
 
@@ -75,38 +75,68 @@ window.addEventListener('resize', set_vh);
 <p>Have you repeatedly searched for &quot;when to use classes in Python&quot;,
 read a bunch of stuff, watched a bunch a talks,
 and <em>still</em>  don't know whether you should be using classes in any given situation?</p>
-<p>Have you read discussions about it that <em>may</em> be right,
+<p>Have you read discussions about it that for all you know <em>may</em> be right,
 but they're so academic you can't parse the jargon?</p>
-<p>Have you read discussions that all treat the obvious cases,
+<p>Have you read discussions that all treat the &quot;obvious&quot; cases,
 leaving you with no clear answer whey you try to apply them to your code?</p>
-<p>Are you worried you're not using enough
-abstraction / encapsulation / inheritance / polymorphism?
-Afraid you won't understand them until you see them applied?</p>
-<blockquote>
-<p>My experience is that, unfortunately, the best way to learn (and keep learning) these things is to look at a ton of examples. Guidelines tend to be too vague for anyone who doesn't already know enough about the subject. It's one of those things that once you've learned it seems obvious and intuitive, but it's not and it's very easy to fool yourself into think you've got this (in general, everyone has lots to learn about class design, when to use, how to use, why to use, ...).</p>
-</blockquote>
-<blockquote>
-<p>If not prescribing a general approach, maybe detailing the considerations you should have in mind when making such a decision.</p>
-</blockquote>
-<blockquote>
-<p>The use of these powerful OO techniques [inheritance/polymorphism] is never a goal in itself; you will only need them when the level of complexity becomes a concern.</p>
-</blockquote>
-<h2 id="tool-heuristic">tool / heuristic<span class="headerlink"> <a href="#tool-heuristic" title="permalink">#</a></span></h2>
-<blockquote>
-<p>If you have a <em>couple of functions that you are passing in the same arguments to over and over</em>, consider a class. A class is when you have data and methods that are interrelated. If you have a class with only 2 methods, and one of them is init, consider not using a class.</p>
-</blockquote>
-<blockquote>
-<p>The best hint that it's time to make a class is if you find yourself making a bunch of functions that take the same bunch of arguments. Those arguments should be the attributes and the functions should be methods.</p>
-</blockquote>
-<h2 id="example-reader-highlightedstring">example: reader HighlightedString<span class="headerlink"> <a href="#example-reader-highlightedstring" title="permalink">#</a></span></h2>
-<ul>
-<li>3 functions: __post_init__ (validate), split, apply</li>
-<li>bonus: by sticking validation in __post_init__, we ensure we cannot have an invalid string; thus, split/apply don't have to validate anything<ul>
-<li>the type encapsulates the idea of string+highlights that are valid for it</li>
-</ul>
-</li>
-<li>bonus: fourth function takes string and amrkers and returns string+highlights; makes sense for it to be an alternate constructor; makes it more discoverable</li>
-</ul>
+<hr />
+<p>My experience is that, unfortunately, the best way to learn these things <em>is</em> to look at a lot of examples.</p>
+<p>Most guidelines tend to be either too vague if you don't already know enough about the subject, or too specific and repeating things you already know.</p>
+<p>It <em>is</em> one of those things that once you got it seems obvious and intuitive (but it's not).</p>
+<hr />
+<p>So, instead of prescribing a general approach,
+let's look at <strong>one specific case</strong> where you may want to use classes,
+a bunch of <strong>examples from real-world code</strong>,
+and some considerations you should have in mind.</p>
+<h2 id="the-heuristic">The heuristic<span class="headerlink"> <a href="#the-heuristic" title="permalink">#</a></span></h2>
+<p><strong>If you have a bunch of functions that take the same arguments, consider using a class.</strong></p>
+<p>That's it. In it's most basic form, a class is when you group data with functions that operate on that data.</p>
+<h2 id="example-highlightedstring">Example: HighlightedString<span class="headerlink"> <a href="#example-highlightedstring" title="permalink">#</a></span></h2>
+<p>The first example is <a href="https://github.com/lemon24/reader/blob/1.17/src/reader/types.py#L280-L434">HighlightedString</a>,
+a class I use in my feed reader library
+to wrap full-text search results,
+and highlight the bits that matched when showing them in a web page.</p>
+<p>Say we write a function that takes a string and a list of slices<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
+and adds before/after markers to the parts inside the slices:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">value</span> <span class="o">=</span> <span class="s1">&#39;water on mars&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">highlights</span> <span class="o">=</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">13</span><span class="p">)]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">apply_highlights</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">highlights</span><span class="p">,</span> <span class="s1">&#39;&lt;b&gt;&#39;</span><span class="p">,</span> <span class="s1">&#39;&lt;/b&gt;&#39;</span><span class="p">)</span>
+<span class="go">&#39;water on &lt;b&gt;mars&lt;/b&gt;&#39;</span>
+</code></pre></div>
+<p>While doing it,
+we write a helper that splits the string such that
+parts with even indexes are inside a slice,
+and parts with odd indexes are not:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">split_highlights</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">highlights</span><span class="p">))</span>
+<span class="go">[&#39;water on &#39;, &#39;mars&#39;, &#39;&#39;]</span>
+</code></pre></div>
+<p>To make our lives easier,
+we only allow non-overlapping slices with positive start/stop and no step;
+we write another helper that raises an exception
+if the string/slices combo doesn't obey this rule,
+so the rest of the code doesn't need to care about it.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">validate_highlights</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">highlights</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">validate_highlights</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)])</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">ValueError</span>: <span class="n">invalid highlight: start and stop must be equal to or greater than 0: slice(-4, -1, None)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">validate_highlights</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="nb">slice</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">13</span><span class="p">)])</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">ValueError</span>: <span class="n">highlights must not overlap: slice(6, 10, None), slice(9, 13, None)</span>
+</code></pre></div>
+<p>We could, instead, have a class with the first two functions as methods,
+and validation in the constructor.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">string</span> <span class="o">=</span> <span class="n">HighlightedString</span><span class="p">(</span><span class="s1">&#39;water on mars&#39;</span><span class="p">,</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">13</span><span class="p">)])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">string</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;&lt;b&gt;&#39;</span><span class="p">,</span> <span class="s1">&#39;&lt;/b&gt;&#39;</span><span class="p">)</span>
+<span class="go">&#39;water on &lt;b&gt;mars&lt;/b&gt;&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">string</span><span class="o">.</span><span class="n">split</span><span class="p">())</span>
+<span class="go">[&#39;water on &#39;, &#39;mars&#39;, &#39;&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">HighlightedString</span><span class="p">(</span><span class="s1">&#39;water on mars&#39;</span><span class="p">,</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="mi">13</span><span class="p">,</span> <span class="mi">9</span><span class="p">)])</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">ValueError</span>: <span class="n">invalid highlight: start must be not be greater than stop: slice(13, 9, None)</span>
+</code></pre></div>
 <h2 id="example-os-path-posixpath-ntpath-pathlib-pure-path">example: os.path / posixpath / ntpath, pathlib Pure*Path<span class="headerlink"> <a href="#example-os-path-posixpath-ntpath-pathlib-pure-path" title="permalink">#</a></span></h2>
 <ul>
 <li>parts: the path, the type</li>
@@ -138,6 +168,14 @@ Afraid you won't understand them until you see them applied?</p>
 <li><p>twist: sometimes it's just one argument</p>
 </li>
 </ul>
+<p>highglightes stirngs</p>
+<ul>
+<li>bonus: by sticking validation in __post_init__, we ensure we cannot have an invalid string; thus, split/apply don't have to validate anything<ul>
+<li>the type encapsulates the idea of string+highlights that are valid for it</li>
+</ul>
+</li>
+<li>bonus: fourth function takes string and amrkers and returns string+highlights; makes sense for it to be an alternate constructor; makes it more discoverable</li>
+</ul>
 <h2 id="try-it-out">try it out<span class="headerlink"> <a href="#try-it-out" title="permalink">#</a></span></h2>
 <blockquote>
 <p>When doing something where you think you might need a class, <em>try doing or not doing it depending on what you think</em>. If you think you shouldn't use one, don't and just switch it to a class later on if your wrong.</p>
@@ -152,6 +190,12 @@ Afraid you won't understand them until you see them applied?</p>
 <blockquote>
 <p>Abstraction is good when it's good, but when it's premature or bad, it can slow down development. It's nice when libraries that use classes after careful consideration of what the correct abstractions are and what their API should feel like, but abstraction is a difficult process that doesn't necessarily need to be done to the extreme in everyday code.</p>
 </blockquote>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>A <a href="https://docs.python.org/3/library/functions.html#slice">slice</a> is an object Python uses internally for the extended indexing syntax;
+<code>thing[9:13]</code> and <code>thing[slice(9, 13)]</code> are equivalent. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
 
 
 
