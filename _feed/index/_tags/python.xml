@@ -2,13 +2,242 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #python</title>
-  <updated>2021-05-20T12:57:00+00:00</updated>
+  <updated>2021-05-27T09:55:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
   </author>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index/_tags/python.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/same-arguments">
+    <id>https://death.andgravity.com/same-arguments</id>
+    <title>When to use classes? When your functions take the same arguments</title>
+    <updated>2021-05-27T09:55:00+00:00</updated>
+    <content type="html">&lt;p&gt;Are you having trouble figuring out when to use classes or how to organize them?&lt;/p&gt;
+&lt;p&gt;Have you repeatedly searched for &amp;quot;when to use classes in Python&amp;quot;,
+read all the articles and watched all the talks,
+and &lt;em&gt;still&lt;/em&gt;  don't know whether you should be using classes in any given situation?&lt;/p&gt;
+&lt;p&gt;Have you read discussions about it that for all you know &lt;em&gt;may be right&lt;/em&gt;,
+but they're &lt;em&gt;so academic&lt;/em&gt; you can't parse the jargon?&lt;/p&gt;
+&lt;p&gt;Have you read articles that all treat the &amp;quot;obvious&amp;quot; cases,
+leaving you with no clear answer when you try to apply them to your own code?&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;My experience is that, &lt;strong&gt;unfortunately&lt;/strong&gt;,
+the best way to learn this &lt;em&gt;is&lt;/em&gt; to &lt;a href="/stdlib"&gt;look at lots of examples&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Most guidelines tend to either be too vague &lt;em&gt;if you don't already know enough&lt;/em&gt; about the subject,
+or too specific and saying things you already know.&lt;/p&gt;
+&lt;p&gt;This is one of those things that once you get it seems obvious and intuitive,
+&lt;em&gt;but it's not&lt;/em&gt;, and is quite difficult to explain properly.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;So, instead of prescribing a general approach,
+let's look at:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;one specific case&lt;/strong&gt; where you may want to use classes&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;examples from real-world code&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;some considerations you should keep in mind&lt;/li&gt;
+&lt;/ul&gt;
+&lt;details&gt;
+&lt;summary&gt;Contents&lt;/summary&gt;
+&lt;section class="toc"&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#the-heuristic"&gt;The heuristic&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#example-highlightedstring"&gt;Example: HighlightedString&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#caveat-attribute-changes-are-confusing"&gt;Caveat: attribute changes are confusing&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#solution-make-the-class-immutable"&gt;Solution: make the class immutable&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#counter-example-single-method"&gt;Counter-example: single method&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#try-it-out"&gt;Try it out&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;/details&gt;
+&lt;h2 id="the-heuristic"&gt;The heuristic&lt;span class="headerlink"&gt; &lt;a href="#the-heuristic" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;strong&gt;If you have functions that take the same set of arguments, consider using a class.&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;That's it.&lt;/p&gt;
+&lt;p&gt;In its most basic form,
+a class is when you group data with functions that operate on that data;
+it doesn't have to represent a real (&amp;quot;business&amp;quot;) object,
+it can be an &lt;em&gt;abstract object&lt;/em&gt; that exists only to make things easier to use / understand.&lt;/p&gt;
+&lt;h2 id="example-highlightedstring"&gt;Example: HighlightedString&lt;span class="headerlink"&gt; &lt;a href="#example-highlightedstring" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;a href="https://github.com/lemon24/reader/blob/8e46f5ddd9b8bc4c8c7c346c68f8abcd2d6ab441/src/reader/types.py#L280-L434"&gt;HighlightedString&lt;/a&gt; is a class
+I use in my feed reader library
+to wrap full-text search results,
+and highlight the matches when showing them on a web page.&lt;/p&gt;
+&lt;p&gt;At first, we need a function that takes a string and a list of slices&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;,
+and adds before/after markers to the parts inside the slices:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;water on mars&amp;#39;&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;highlights&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nb"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;9&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;13&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;apply_highlights&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;highlights&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;&amp;lt;b&amp;gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;&amp;lt;/b&amp;gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;water on &amp;lt;b&amp;gt;mars&amp;lt;/b&amp;gt;&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;While writing it,
+we pull part of the logic into a helper
+that splits the string such that highlights always have odd indices.
+We don't &lt;em&gt;have&lt;/em&gt; to, but it's easier to reason about problems one at a time.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;split_highlights&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;highlights&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+&lt;span class="go"&gt;[&amp;#39;water on &amp;#39;, &amp;#39;mars&amp;#39;, &amp;#39;&amp;#39;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;To make things easier,
+we only allow non-overlapping slices
+with positive start/stop and no step.
+We pull this logic into another function
+that raises an exception for bad slices.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;validate_highlights&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;highlights&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;  &lt;span class="c1"&gt;# no exception&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;validate_highlights&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nb"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;6&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="nb"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;9&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;13&lt;/span&gt;&lt;span class="p"&gt;)])&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+  &lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="gr"&gt;ValueError&lt;/span&gt;: &lt;span class="n"&gt;highlights must not overlap: slice(6, 10, None), slice(9, 13, None)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Quiz: Which function should call &lt;code&gt;validate_highlights()&lt;/code&gt;? Both? The user?&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;Instead of separate functions,
+we can make &lt;code&gt;apply()&lt;/code&gt; and &lt;code&gt;split()&lt;/code&gt; methods on a class,
+and do the validation in &lt;code&gt;__init__&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;string&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;HighlightedString&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;water on mars&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nb"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;9&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;13&lt;/span&gt;&lt;span class="p"&gt;)])&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;string&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;water on mars&amp;#39;&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;string&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;highlights&lt;/span&gt;
+&lt;span class="go"&gt;(slice(9, 13, None),)&lt;/span&gt;
+&lt;span class="go"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;string&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;apply&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&amp;lt;b&amp;gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;&amp;lt;/b&amp;gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;water on &amp;lt;b&amp;gt;mars&amp;lt;/b&amp;gt;&amp;#39;&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;string&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;split&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;
+&lt;span class="go"&gt;[&amp;#39;water on &amp;#39;, &amp;#39;mars&amp;#39;, &amp;#39;&amp;#39;]&lt;/span&gt;
+&lt;span class="go"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;HighlightedString&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;water on mars&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nb"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;13&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;9&lt;/span&gt;&lt;span class="p"&gt;)])&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+  &lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="gr"&gt;ValueError&lt;/span&gt;: &lt;span class="n"&gt;invalid highlight: start must be not be greater than stop: slice(13, 9, None)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Besides being shorter to use, this has a few additional benefits:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;it shows intent&lt;/strong&gt;:
+this isn't just a string and some slices,
+it's a &lt;em&gt;highlighted string&lt;/em&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;it makes it easier to discover&lt;/strong&gt; what actions are possible
+(&lt;a href="https://docs.python.org/3/library/functions.html#help"&gt;help()&lt;/a&gt;, code completion)&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;it makes code cleaner&lt;/strong&gt;;
+&lt;code&gt;__init__&lt;/code&gt; validation ensures invalid objects &lt;em&gt;cannot&lt;/em&gt; exist;
+thus, the methods don't have to validate anything themselves&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="caveat-attribute-changes-are-confusing"&gt;Caveat: attribute changes are confusing&lt;span class="headerlink"&gt; &lt;a href="#caveat-attribute-changes-are-confusing" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Let's say we pass a highlighted string to a function
+that writes the results in a text file,
+and after that we do some other stuff with it.&lt;/p&gt;
+&lt;p&gt;What would you think if this happened?&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;string&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;apply&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&amp;lt;b&amp;gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;&amp;lt;/b&amp;gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;water on &amp;lt;b&amp;gt;mars&amp;lt;/b&amp;gt;&amp;#39;&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;render_results_page&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;output.txt&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;titles&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;string&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;string&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;apply&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&amp;lt;b&amp;gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;&amp;lt;/b&amp;gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;&amp;#39;&amp;lt;b&amp;gt;water&amp;lt;/b&amp;gt; on mars&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;You may think it's quite unexpected; I know I would.
+Either intentionally or by mistake,
+&lt;code&gt;render_results_page()&lt;/code&gt; seems to have changed our highlights,
+when it was supposed to just render the results.&lt;/p&gt;
+&lt;p&gt;That's OK, mistakes happen.
+But how can we prevent it from happening in the future?&lt;/p&gt;
+&lt;h3 id="solution-make-the-class-immutable"&gt;Solution: make the class immutable&lt;span class="headerlink"&gt; &lt;a href="#solution-make-the-class-immutable" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Well, in the real implementation, &lt;em&gt;this mistake can't happen&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;HighlightedString is a &lt;a href="https://docs.python.org/3/library/dataclasses.html#frozen-instances"&gt;frozen dataclass&lt;/a&gt;,
+which makes its attributes read-only;
+also, &lt;code&gt;highlights&lt;/code&gt; is always stored as a &lt;a href="https://docs.python.org/3/library/stdtypes.html#tuple"&gt;tuple&lt;/a&gt;,
+which is immutable as well:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;string&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;highlights&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nb"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+  &lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="gr"&gt;dataclasses.FrozenInstanceError&lt;/span&gt;: &lt;span class="n"&gt;cannot assign to field &amp;#39;highlights&amp;#39;&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;string&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;highlights&lt;/span&gt;&lt;span class="p"&gt;[:]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nb"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+  &lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="gr"&gt;TypeError&lt;/span&gt;: &lt;span class="n"&gt;&amp;#39;tuple&amp;#39; object does not support item assignment&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;You can find this pattern in &lt;a href="https://werkzeug.palletsprojects.com/en/2.0.x/datastructures/"&gt;werkzeug.datastructures&lt;/a&gt;,
+which contains HTTP-flavored subclasses of common Python objects.
+For example, &lt;a href="https://werkzeug.palletsprojects.com/en/2.0.x/datastructures/#werkzeug.datastructures.Accept"&gt;Accept&lt;/a&gt;&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt; is an immutable &lt;a href="https://docs.python.org/3/library/stdtypes.html#list"&gt;list&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;accept&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;Accept&lt;/span&gt;&lt;span class="p"&gt;([(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;image/png&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)])&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;accept&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="go"&gt;(&amp;#39;image/png&amp;#39;, 1)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;accept&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;append&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;image/gif&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+  &lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="gr"&gt;TypeError&lt;/span&gt;: &lt;span class="n"&gt;&amp;#39;Accept&amp;#39; objects are immutable&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id="counter-example-single-method"&gt;Counter-example: single method&lt;span class="headerlink"&gt; &lt;a href="#counter-example-single-method" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;If you have a class with &lt;code&gt;__init__&lt;/code&gt; and one other method,
+&lt;strong&gt;consider not using a class&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;For example, you might implement a simple version of the &lt;a href="https://en.wikipedia.org/wiki/Command_pattern"&gt;command pattern&lt;/a&gt; like this:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;DoStuffCommand&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="fm"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;path&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;execute&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="o"&gt;...&lt;/span&gt;  &lt;span class="c1"&gt;# do stuff with path&lt;/span&gt;
+
+&lt;span class="n"&gt;commands&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;DoStuffCommand&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;some/path&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
+
+&lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;command&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;commands&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;command&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;execute&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Python supports &lt;a href="https://en.wikipedia.org/wiki/First-class_function"&gt;first-class functions&lt;/a&gt;, do this instead:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;functools&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;partial&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;do_stuff&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="o"&gt;...&lt;/span&gt;  &lt;span class="c1"&gt;# do stuff with self.path&lt;/span&gt;
+
+&lt;span class="n"&gt;commands&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;partial&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;do_stuff&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;some/path&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
+
+&lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;command&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;commands&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;command&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;section class="admonition note"&gt;
+&lt;div class="admonition-text"&gt;
+&lt;p&gt;If you you want more from your commands
+ (e.g. undo support, or to validate the arguments &lt;em&gt;before&lt;/em&gt; the command is executed),
+ a class is still the way to go.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/section&gt;
+&lt;h2 id="try-it-out"&gt;Try it out&lt;span class="headerlink"&gt; &lt;a href="#try-it-out" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;If you're doing something and you think you need a class,
+&lt;em&gt;do it and see how it looks&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;If you think it looks better, keep it;
+otherwise, revert the change.
+&lt;em&gt;You can always switch&lt;/em&gt; in either direction later.&lt;/p&gt;
+&lt;p&gt;If you got it right the first time, great!
+If not, &lt;strong&gt;by having to fix it you'll learn something&lt;/strong&gt;,
+and the next time you have a problem like this you'll know better.&lt;/p&gt;
+&lt;p&gt;Also, don't beat yourself up.
+Sure, there are nice libraries out there
+that use classes in &lt;em&gt;just the right way&lt;/em&gt;,
+after spending lots of time to find the right abstraction.
+But abstraction is difficult and time consuming,
+and in everyday code &lt;em&gt;good enough is just that&lt;/em&gt; – good enough –
+you don't need to go to the extreme.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;That's it for now.&lt;/p&gt;
+&lt;p&gt;Found this useful? Consider sharing it wherever you share stuff, it really helps! :)&lt;/p&gt;
+&lt;p&gt;There are a few more examples I didn't have time to make just right,
+and will likely include in another article.
+If you want to be notified when it comes out,
+you can get updates via &lt;a href="#subscribe"&gt;email&lt;/a&gt;
+or &lt;a href="https://death.andgravity.com/_feed/index.xml"&gt;Atom feed&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;a id="subscribe"&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;section class="footnotes"&gt;
+&lt;ol&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;A &lt;a href="https://docs.python.org/3/library/functions.html#slice"&gt;slice&lt;/a&gt; is an object Python uses internally
+for the extended indexing syntax;
+&lt;code&gt;thing[9:13]&lt;/code&gt; and &lt;code&gt;thing[slice(9, 13)]&lt;/code&gt; are equivalent. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-2"&gt;&lt;p&gt;You may have used Accept yourself:
+the &lt;a href="https://flask.palletsprojects.com/en/2.0.x/api/#flask.Request.accept_encodings"&gt;&lt;code&gt;request.accept_*&lt;/code&gt;&lt;/a&gt; attributes
+on Flask's &lt;a href="https://flask.palletsprojects.com/en/2.0.x/api/#flask.request"&gt;request&lt;/a&gt; global are all Accept instances. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+    <link href="https://death.andgravity.com/same-arguments" rel="alternate"/>
+    <published>2021-05-27T09:55:00+00:00</published>
+  </entry>
   <entry xml:base="https://death.andgravity.com/query-builder-why">
     <id>https://death.andgravity.com/query-builder-why</id>
     <title>Why use an SQL query builder in the first place?</title>
