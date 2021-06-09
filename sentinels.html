@@ -1,0 +1,460 @@
+<!doctype html>
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+
+
+
+
+
+
+
+
+
+
+<title>Python sentinel objects, type hints, and PEP 661 - death and gravity</title>
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1 class="heading-noindex">Python sentinel objects, type hints, and PEP 661</h1>
+
+<p class="text-gray"><small>
+<span>2021-06-10</span>
+
+
+
+∙ six minute read
+
+
+</small></p>
+
+
+
+
+
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<p><a href="https://www.python.org/dev/peps/pep-0661/">PEP 661</a> &quot;Sentinel Values&quot; (still in draft status as of this writing)
+recently [brought up] the sentinel object pattern.</p>
+<p>While by no means a new pattern
+(there are articles about it going back to <a href="https://web.archive.org/web/20201112004749/http://effbot.org/zone/default-values.htm">at least 2008</a>),
+this time it appears in the context of <a href="https://www.python.org/dev/peps/pep-0483/">typing</a>,
+so it's worth seeing how they interact.</p>
+<p>Contents:</p>
+<section class="toc">
+<ul>
+<li><a href="#what-s-a-sentinel-and-why-do-i-need-one">What's a sentinel, and why do I need one?</a>
+<ul>
+<li><a href="#some-real-world-examples">Some real world examples</a></li>
+</ul>
+</li>
+<li><a href="#what-s-it-got-to-do-with-typing">What's it got to do with typing</a></li>
+<li><a href="#what-s-with-pep-661">What's with PEP 661?</a>
+<ul>
+<li><a href="#how-does-this-affect-me">How does this affect me?</a></li>
+<li><a href="#is-this-worth-a-pep">Is this worth a PEP?</a></li>
+</ul>
+</li>
+</ul>
+</section>
+<h2 id="what-s-a-sentinel-and-why-do-i-need-one">What's a sentinel, and why do I need one?<span class="headerlink"> <a href="#what-s-a-sentinel-and-why-do-i-need-one" title="permalink">#</a></span></h2>
+<p>From the PEP 661 abstract:</p>
+<blockquote>
+<p>Unique placeholder values, widely known as &quot;sentinel values&quot;, are useful in Python programs for several things, such as default values for function arguments where None is a valid input value.</p>
+</blockquote>
+<p>The simplest use case I can think of is a function
+that returns a default value only if <em>explicitly</em> provided,
+otherwise raises an exception.</p>
+<p>The <a href="https://docs.python.org/3/library/functions.html#next">next()</a> built-in function is a good example of this:</p>
+<blockquote>
+<p><code>next(iterator[, default])</code></p>
+<p>Retrieve the next item from the <em>iterator</em> by calling its <code>__next__()</code> method.
+If <em>default</em> is given, it is returned if the iterator is exhausted,
+otherwise StopIteration is raised.</p>
+</blockquote>
+<p>Given the definition, let's try to implement it.</p>
+<p>The function essentially has two signatures:</p>
+<pre class="code code-container"><code>next(iterator) -&gt; item or raise exception
+next(iterator, default) -&gt; item or default
+</code></pre>
+<p>There's two main ways to write a function that can be called in <em>both</em> ways:</p>
+<ul>
+<li><code>next(*args, **kwargs)</code>;
+extract <em>iterator</em> and <em>default</em> from <em>args</em> and <em>kwargs</em>;
+if there are too many / too few / unexpected arguments, raise TypeError</li>
+<li><code>next(iterator, default=None)</code>;
+Python raises TypeError for bad arguments,
+you just need to check if <code>default is None</code></li>
+</ul>
+<p>To me, the second seems easier to implement than the first.</p>
+<p>But the second version has a problem:
+for some users, <code>None</code> is a valid default value –
+how can <code>next()</code> distinguish between
+<code>None</code>-as-in-raise-exception and
+<code>None</code>-as-in-default-value?</p>
+<p>Here's where a sentinel object helps:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span>
+<span class="normal">6</span>
+<span class="normal">7</span>
+<span class="normal">8</span>
+<span class="normal">9</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">_missing</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
+
+<span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="n">iterator</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">_missing</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">iterator</span><span class="o">.</span><span class="fm">__next__</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">default</span> <span class="ow">is</span> <span class="n">_missing</span><span class="p">:</span>
+            <span class="k">raise</span>
+        <span class="k">return</span> <span class="n">default</span>
+</code></pre></div>
+</td></tr></table><div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">it</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">next</span><span class="p">(</span><span class="n">it</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+<span class="go">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="n">it</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+<span class="go">None</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">next</span><span class="p">(</span><span class="n">it</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">StopIteration</span>
+</code></pre></div>
+<p>Now, next() knows that <code>default=_missing</code> means raise exception,
+and <code>default=None</code> is just a normal default value to be returned.</p>
+<p>As a user of next(), you never have to use <em>_missing</em> (or know about it);
+it's only for the use of next()'s author.
+You can think of it as <em>another None</em> for when
+the actual None is already taken / means something else –
+a &quot;higher-order&quot; None.</p>
+<section class="admonition tip">
+<div class="admonition-text">
+<p>For a more in-depth explanation of sentinel objects and related patterns,
+ see <a href="https://python-patterns.guide/python/sentinel-object/">The Sentinel Object Pattern</a>
+ by Brandon Rhodes.</p>
+</div>
+</section>
+<h3 id="some-real-world-examples">Some real world examples<span class="headerlink"> <a href="#some-real-world-examples" title="permalink">#</a></span></h3>
+<p>The real next() doesn't actually use sentinel values,
+because it's <a href="https://github.com/python/cpython/blob/5571cabf1b3385087aba2c7c10289bba77494e08/Python/bltinmodule.c#L1446-L1480">implemented in C</a>, and things are a bit different there.</p>
+<p>But there are plenty of examples in pure-Python code:</p>
+<ul>
+<li><p>The dataclasses module <a href="https://github.com/python/cpython/blob/c8353239eda0d05f7facd1a19acc2b836a057807/Lib/dataclasses.py#L158-L170">has two</a>.</p>
+<blockquote>
+<p>[...] the <em>MISSING</em> value is a sentinel object used to detect if the <em>default</em> and <em>default_factory</em> parameters are provided. This sentinel is used because <em>None</em> is a valid value for <em>default</em>. No code should directly use the <em>MISSING</em> value.</p>
+</blockquote>
+<p>The other one is used in the <em>__init__</em> of the generated classes
+to show a default value comes from a factory.</p>
+</li>
+<li><p>attrs <a href="https://github.com/python-attrs/attrs/blob/9709dd82e1cc0f5b783f4127e87498dfdd6a224a/src/attr/_make.py#L59-L92">also has two</a>.
+One of them (analogous to dataclasses.MISSING)
+is even included in the
+<a href="https://www.attrs.org/en/stable/api.html#attr.NOTHING">API documentation</a>.</p>
+</li>
+<li><p>Werkzeug <a href="https://github.com/pallets/werkzeug/blob/eff04478a83619b4d7f15e6eee16a99bd80ed879/src/werkzeug/_internal.py#L51-L59">has one</a>.</p>
+</li>
+<li><p>I <a href="https://github.com/lemon24/reader/blob/1.18/src/reader/types.py#L551-L557">have one</a>
+in my feed reader library (originally stolen from Werkzeug).
+I use it for methods like <code>get_feed(feed[, default])</code>,
+which either raises FeedNotFoundError or returns <em>default</em>.</p>
+</li>
+</ul>
+<p>In general, if you're using a sentinel as default argument of a public method/function,
+it's probably a good idea to expose it to facilitate inheritance and function wrappers
+(like attrs does).</p>
+<h2 id="what-s-it-got-to-do-with-typing">What's it got to do with typing<span class="headerlink"> <a href="#what-s-it-got-to-do-with-typing" title="permalink">#</a></span></h2>
+<p>Let's try and add type hints to our hand-rolled next():</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 1</span>
+<span class="normal"> 2</span>
+<span class="normal"> 3</span>
+<span class="normal"> 4</span>
+<span class="normal"> 5</span>
+<span class="normal"> 6</span>
+<span class="normal"> 7</span>
+<span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span>
+<span class="normal">39</span>
+<span class="normal">40</span>
+<span class="normal">41</span>
+<span class="normal">42</span>
+<span class="normal">43</span>
+<span class="normal">44</span>
+<span class="normal">45</span>
+<span class="normal">46</span>
+<span class="normal">47</span>
+<span class="normal">48</span>
+<span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span>
+<span class="normal">52</span>
+<span class="normal">53</span>
+<span class="normal">54</span>
+<span class="normal">55</span>
+<span class="normal">56</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">overload</span><span class="p">,</span> <span class="n">TypeVar</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Iterator</span>
+
+<span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s1">&#39;T&#39;</span><span class="p">)</span>
+<span class="n">U</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s1">&#39;U&#39;</span><span class="p">)</span>
+
+
+<span class="c1"># We define MissingType in one of two ways:</span>
+
+<span class="k">class</span> <span class="nc">MissingType</span><span class="p">:</span> <span class="k">pass</span>
+<span class="c1"># MissingType = object</span>
+
+<span class="c1"># The second one is equivalent to the original</span>
+<span class="c1"># `_missing = object()`, but the alias allows us</span>
+<span class="c1"># to keep the same type annotations.</span>
+
+<span class="n">_missing</span> <span class="o">=</span> <span class="n">MissingType</span><span class="p">()</span>
+
+
+<span class="c1"># As mentioned before, next() is actually two functions;</span>
+<span class="c1"># typing.overload allows us to express this.</span>
+<span class="c1">#</span>
+<span class="c1"># One that returns an item or raises an exception:</span>
+
+<span class="nd">@overload</span>
+<span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="n">iterator</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span> <span class="o">...</span>
+
+<span class="c1"># ... and one that takes a default value (of some type U),</span>
+<span class="c1"># and returns either an item, or that default value</span>
+<span class="c1"># (of the *same* type U):</span>
+
+<span class="nd">@overload</span>
+<span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="n">iterator</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">T</span><span class="p">],</span> <span class="n">default</span><span class="p">:</span> <span class="n">U</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">T</span><span class="p">,</span> <span class="n">U</span><span class="p">]:</span> <span class="o">...</span>
+
+<span class="c1"># The implementation takes all the arguments,</span>
+<span class="c1"># and returns a union of all the types:</span>
+
+<span class="k">def</span> <span class="nf">next</span><span class="p">(</span>
+    <span class="n">iterator</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">T</span><span class="p">],</span>
+    <span class="n">default</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">MissingType</span><span class="p">,</span> <span class="n">U</span><span class="p">]</span> <span class="o">=</span> <span class="n">_missing</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">T</span><span class="p">,</span> <span class="n">U</span><span class="p">]:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">iterator</span><span class="o">.</span><span class="fm">__next__</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
+
+        <span class="c1"># &quot;if default is _missing&quot; is idiomatic here,</span>
+        <span class="c1"># but Mypy doesn&#39;t understand it</span>
+        <span class="c1"># (&quot;var is None&quot; is a special case).</span>
+        <span class="c1"># It does understand isinstance(), though:</span>
+        <span class="c1"># https://mypy.readthedocs.io/en/stable/casts.html#casts</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">default</span><span class="p">,</span> <span class="n">MissingType</span><span class="p">):</span>
+            <span class="c1"># If MissingType is `object`, this is always true,</span>
+            <span class="c1"># since all types are a subclass of `object`.</span>
+            <span class="k">raise</span>
+
+        <span class="k">return</span> <span class="n">default</span>
+</code></pre></div>
+</td></tr></table><p>The <code>isinstance()</code> thing at the end is why a plain <code>object()</code> sentinel
+doesn't work in this case – you can't (easily) get Mypy to treat your own
+&quot;constants&quot; like it does a built-in constant like None.</p>
+<p>Also, if you use the <code>MissingType = object</code> alias instead, you get:</p>
+<pre class="code code-container"><code>next.py:37: error: Overloaded function implementation cannot produce return type of signature 2
+</code></pre>
+<p>To show overloading works, here's some examples of what Mypy infers the return types to be:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">it</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
+
+<span class="n">one</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">it</span><span class="p">)</span>
+<span class="n">reveal_type</span><span class="p">(</span><span class="n">one</span><span class="p">)</span>
+<span class="c1"># Revealed type is &#39;builtins.int&#39;</span>
+
+<span class="n">two</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">it</span><span class="p">,</span> <span class="s1">&#39;a string&#39;</span><span class="p">)</span>
+<span class="n">reveal_type</span><span class="p">(</span><span class="n">two</span><span class="p">)</span>
+<span class="c1"># Revealed type is &#39;Union[builtins.int*, builtins.str*]&#39;</span>
+</code></pre></div>
+<h2 id="what-s-with-pep-661">What's with PEP 661?<span class="headerlink"> <a href="#what-s-with-pep-661" title="permalink">#</a></span></h2>
+<p>There are many implementations of sentinel objects;
+the PEP links to a list of 15 different implementations <a href="https://mail.python.org/archives/list/python-dev@python.org/message/JBYXQH3NV3YBF7P2HLHB5CD6V3GVTY55/">in stdlib alone</a>.</p>
+<p>Many of these have at least some issues:</p>
+<ul>
+<li>non-descriptive / too long repr() (e.g. <code>&lt;object object at 0x7f99a355fc20&gt;</code>)</li>
+<li>don't work well with typing (see above)</li>
+<li>don't pickle correctly (e.g. after unpickling you get a different, new object)</li>
+</ul>
+<p>Thus:</p>
+<blockquote>
+<p>This PEP suggests adding a utility for defining sentinel values, to be used in the stdlib and made publicly available as part of the stdlib.</p>
+</blockquote>
+<p>This utility would address all the issues, saving developers
+(mostly, authors of the standard library or third party libraries)
+from reinventing the wheel.</p>
+<h3 id="how-does-this-affect-me">How does this affect me?<span class="headerlink"> <a href="#how-does-this-affect-me" title="permalink">#</a></span></h3>
+<p>Not at all.</p>
+<p>If the PEP gets accepted and implemented,
+you'll be able to create a &quot;correct&quot; sentinels with one line of code.</p>
+<p>Of course, you can keep using your own sentinel objects if you want to;
+the PEP doesn't even propose to change the <em>existing</em> sentinels in the standard library.</p>
+<h3 id="is-this-worth-a-pep">Is this worth a PEP?<span class="headerlink"> <a href="#is-this-worth-a-pep" title="permalink">#</a></span></h3>
+<p>PEPs exist to support discussions in cases where
+the &quot;correct&quot; way to go isn't obvious,
+consensus or coordination are required,
+or the changes have a big blast radius.
+A lot of PEPs get <a href="https://www.python.org/dev/peps/#abandoned-withdrawn-and-rejected-peps">abandoned or rejected</a>
+(which is fine, that's how the process is supposed to work).</p>
+<p>PEP 661 seems to fall under the &quot;requires consensus&quot; category;
+it follows a community <a href="https://discuss.python.org/t/sentinel-values-in-the-stdlib/8810">poll</a>
+where although the top pick was &quot;do nothing&quot;,
+most voters went for &quot;do <em>something</em>&quot;
+(but with no clear agreement on what that should be).</p>
+<p>The poll introduction states:</p>
+<blockquote>
+<p>This is a minor detail, so ISTM most important that we reach a reasonable decision quickly, even if that decision is that nothing should be done.</p>
+</blockquote>
+<p>It's worth remembering that <em>do nothing</em> is always an option :)</p>
+<p>If you're into this kind of thing,
+I highly recommend going through the <a href="https://discuss.python.org/t/sentinel-values-in-the-stdlib/8810">poll thread</a>
+and the (ongoing) <a href="https://discuss.python.org/t/pep-661-sentinel-values/9126">PEP discussion thread</a> –
+usually, these discussions are API design master classes.</p>
+
+
+
+
+
+
+
+
+
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661"
+    method="post"
+    id="mc-embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+
+
+
+</footer>
+
+
+</div>

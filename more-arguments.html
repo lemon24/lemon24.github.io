@@ -18,7 +18,7 @@
 
 
 
-<title>more-arguments - death and gravity</title>
+<title>When your functions take the same arguments, consider using a class: more examples - death and gravity</title>
 
 
 <script>
@@ -33,15 +33,6 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
-<!-- Global site tag (gtag.js) - Google Analytics -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', "G-4RY2QR580X");
-</script>
 
 
 
@@ -59,12 +50,14 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">more-arguments</h1>
+<h1 class="heading-noindex">When your functions take the same arguments, consider using a class: more examples</h1>
 
 <p class="text-gray"><small>
+<span>2021-06-05</span>
 
 
 
+∙ three minute read
 
 
 </small></p>
@@ -80,6 +73,103 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
+<h2 id="counter-example-two-sets-of-arguments">Counter-example: two sets of arguments<span class="headerlink"> <a href="#counter-example-two-sets-of-arguments" title="permalink">#</a></span></h2>
+<p>Consider the following scenario:</p>
+<p>We have a feed reader web app that can show a list of feeds,
+and a list of entries (articles), filtered in various ways.</p>
+<p>To decouple the web app logic from the code that actually queries the database
+(say, because we also want to have a command-line interface),
+we pull database-specific logic into functions
+that take a database connection and other arguments,
+do some queries on the database, and return the results.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span> <span class="o">...</span>
+<span class="k">def</span> <span class="nf">get_entry_counts</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span> <span class="o">...</span>
+<span class="k">def</span> <span class="nf">search_entries</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span> <span class="o">...</span>
+<span class="k">def</span> <span class="nf">get_feeds</span><span class="p">(</span><span class="n">db</span><span class="p">):</span> <span class="o">...</span>
+</code></pre></div>
+<p>The usage pattern is like this:
+the database connection is created once, at the start of the program;
+then, the functions functions are called repeatedly with the same database,
+but different options options.</p>
+<hr />
+<p>Taking this heuristic to the extreme, we'd end up with something like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Storage</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">db</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_db</span> <span class="o">=</span> <span class="n">db</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_feed</span> <span class="o">=</span> <span class="n">feed</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_read</span> <span class="o">=</span> <span class="n">read</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_important</span> <span class="o">=</span> <span class="n">important</span>
+
+    <span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">get_entry_counts</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">search_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">get_feeds</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+</code></pre></div>
+<p>This is clearly silly, and not very useful:
+<code>Storage</code> can only filter entries in exactly one way,
+and get_feeds() doesn't even use the options.</p>
+<p>What that approach misses is a bit of nuance:
+there isn't <em>one</em> set of arguments, there are <em>two</em>,
+and one of them changes more often than the other.</p>
+<p>It would be convenient to group these functions as methods on a <a href="https://en.wikipedia.org/wiki/Data_access_object">data access object</a>,
+so whoever calls <code>get_entries()</code> doesn't have to care if they're coming
+from a database, a flat file, or a list in memory.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Storage</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">db</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_db</span> <span class="o">=</span> <span class="n">db</span>
+
+    <span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">get_entry_counts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">search_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">get_feeds</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+</code></pre></div>
+<h2 id="counter-example-data-classes">Counter-example: data classes<span class="headerlink"> <a href="#counter-example-data-classes" title="permalink">#</a></span></h2>
+<p>OK, the above looks appropriate for the current state of the world.</p>
+<p>Let's add some more requirements:</p>
+<p>because there's richer behavior that we want provide to the user (web app, CLI)
+that implies more than just storing things,
+we leave Storage to do <em>only</em> storage,
+and wrap it in a Reader object that <em>has</em> a storage:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Reader</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="n">storage</span>
+
+    <span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="o">...</span>  <span class="c1"># just calls self._storage.get_entries()</span>
+
+    <span class="k">def</span> <span class="nf">update_feeds</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="o">...</span>  <span class="c1"># retrieves feeds from the internet; calls various storage methods multiple times</span>
+</code></pre></div>
+<p>Now, we know Storage.get_entries() only gets called by Reader.get_entries();
+furthermore, the arguments are rarely used directly by Storage.get_entries(),
+most of the time they're passed along to helper functions.</p>
+<p>Problem: when we add a new entry filter option, we have to change the reader methods, the storage methods, <em>and</em> the helpers.
+Also, we expect more new options to be added in the future.</p>
+<p>group arguments in a class that contains only <em>data</em>, no behavior.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">NamedTuple</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="k">class</span> <span class="nc">EntryFilterOptions</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="n">feed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">read</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">important</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="k">class</span> <span class="nc">Storage</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">db</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_db</span> <span class="o">=</span> <span class="n">db</span>
+
+    <span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filter_options</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">get_entry_counts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filter_options</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">search_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">filter_options</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">get_feeds</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+</code></pre></div>
+<p>classes in python, but not in oop</p>
+<p>Could have used nameduple as well (that's what I did, why in another article).</p>
+<p>Didn't have to use annotations, link to dataclasses typleess</p>
+<h3 id="why-not-dicts-and-or-kwargs">why not dicts and/or kwargs<span class="headerlink"> <a href="#why-not-dicts-and-or-kwargs" title="permalink">#</a></span></h3>
 <blockquote>
 <p>You can also keep using functions, and pass a data structure instead of many arguments. As long as it's readable, use whatever the hell you want.</p>
 </blockquote>
@@ -109,6 +199,61 @@ window.addEventListener('resize', set_vh);
 
 
 
+
+
+
+
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661"
+    method="post"
+    id="mc-embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 
 
 
