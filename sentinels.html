@@ -66,7 +66,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ six minute read
+∙ seven minute read
 
 
 </small></p>
@@ -82,17 +82,17 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p><a href="https://www.python.org/dev/peps/pep-0661/">PEP 661</a> &quot;Sentinel Values&quot;<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
-recently brought up the sentinel object pattern.</p>
+<p><a href="https://www.python.org/dev/peps/pep-0661/">PEP 661</a> &quot;Sentinel Values&quot;
+recently<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup> brought to attention the <strong>sentinel object</strong> pattern.</p>
 <p>While by no means new<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>,
 this time the pattern appears in the context of <a href="https://www.python.org/dev/peps/pep-0483/">typing</a>,
-so it's worth seeing how the two interact.</p>
+so it's worth taking a look how the two interact.</p>
 <p>Contents:</p>
 <section class="toc">
 <ul>
 <li><a href="#what-s-a-sentinel-and-why-do-i-need-one">What's a sentinel, and why do I need one?</a>
 <ul>
-<li><a href="#some-real-world-examples">Some real world examples</a></li>
+<li><a href="#real-world-examples">Real world examples</a></li>
 </ul>
 </li>
 <li><a href="#what-s-it-got-to-do-with-typing">What's it got to do with typing</a></li>
@@ -135,11 +135,20 @@ Python checks the arguments, you just need to check if <code>default is None</co
 </ul>
 <p>To me, the second seems easier to implement than the first.</p>
 <p>But the second version has a problem:
-for some users, <code>None</code> is a valid default value –
+for some users, <code>None</code> is a valid default –
 how can <code>next()</code> distinguish between
-<code>None</code>-as-in-raise-exception and
-<code>None</code>-as-in-default-value?</p>
-<p>Here's where a sentinel object helps:</p>
+<em>raise-exception-<code>None</code></em> and <em>default-value-<code>None</code></em>?</p>
+<p>In your own code,
+you may be able to guarantee <code>None</code> is never a valid value,
+making this a non-issue.</p>
+<p><em>In a library</em>, however, 
+you don't want to restrict users in this way,
+since you usually can't foresee all their use cases.
+Even if you did choose to restrict valid values like this,
+you'd have to document it,
+and the users would have to learn about it,
+and always remember the exception.<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup></p>
+<p>Here's where a private, <em>internal-use only</em> sentinel object helps:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">1</span>
 <span class="normal">2</span>
 <span class="normal">3</span>
@@ -158,23 +167,27 @@ how can <code>next()</code> distinguish between
             <span class="k">raise</span>
         <span class="k">return</span> <span class="n">default</span>
 </code></pre></div>
-</td></tr></table><div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">it</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">next</span><span class="p">(</span><span class="n">it</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+</td></tr></table><details>
+<summary>Example output:</summary>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">it</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="n">it</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
 <span class="go">1</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="n">it</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
 <span class="go">None</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">next</span><span class="p">(</span><span class="n">it</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="n">it</span><span class="p">))</span>
 <span class="gt">Traceback (most recent call last):</span>
   <span class="c">...</span>
 <span class="gr">StopIteration</span>
 </code></pre></div>
-<p>Now, next() knows that <code>default=_missing</code> means raise exception,
-and <code>default=None</code> is just a normal default value to be returned.</p>
-<p>As a user of next(), you never have to use <em>_missing</em> (or know about it);
-it's only for the use of next()'s author.
-You can think of it as <em>another None</em> for when
-the actual None is already taken / means something else –
-a &quot;higher-order&quot; None.</p>
+</details>
+<p>Now, next() knows that <code>default=_missing</code> means <em>raise exception</em>,
+and <code>default=None</code> is just a regular default value to be returned.</p>
+<p>You can think of <em>_missing</em> as of <em>another None</em>,
+for when the actual None is already taken
+– a &quot;higher-order&quot; None.
+Because it's private to the module,
+users can never (accidentally) use it as a default value,
+and never have know about it.</p>
 <section class="admonition tip">
 <div class="admonition-text">
 <p>For a more in-depth explanation of sentinel objects and related patterns,
@@ -182,17 +195,18 @@ a &quot;higher-order&quot; None.</p>
  by Brandon Rhodes.</p>
 </div>
 </section>
-<h3 id="some-real-world-examples">Some real world examples<span class="headerlink"> <a href="#some-real-world-examples" title="permalink">#</a></span></h3>
+<h3 id="real-world-examples">Real world examples<span class="headerlink"> <a href="#real-world-examples" title="permalink">#</a></span></h3>
 <p>The real next() doesn't actually use sentinel values,
 because it's <a href="https://github.com/python/cpython/blob/5571cabf1b3385087aba2c7c10289bba77494e08/Python/bltinmodule.c#L1446-L1480">implemented in C</a>, and things are a bit different there.</p>
 <p>But there are plenty of examples in pure-Python code:</p>
 <ul>
 <li><p>The dataclasses module <a href="https://github.com/python/cpython/blob/c8353239eda0d05f7facd1a19acc2b836a057807/Lib/dataclasses.py#L158-L170">has two</a>.</p>
+<p>The docs even explain what a sentinel value is:</p>
 <blockquote>
 <p>[...] the <em>MISSING</em> value is a sentinel object used to detect if the <em>default</em> and <em>default_factory</em> parameters are provided. This sentinel is used because <em>None</em> is a valid value for <em>default</em>. No code should directly use the <em>MISSING</em> value.</p>
 </blockquote>
-<p>The other one is used in the <em>__init__</em> of the generated classes
-to show a default value comes from a factory.</p>
+<p>(The other one is used in the <em>__init__</em> of the generated classes
+to show a default value comes from a factory.)</p>
 </li>
 <li><p>attrs <a href="https://github.com/python-attrs/attrs/blob/9709dd82e1cc0f5b783f4127e87498dfdd6a224a/src/attr/_make.py#L59-L92">also has two</a>.
 One of them (analogous to dataclasses.MISSING)
@@ -386,10 +400,20 @@ and the (ongoing) <a href="https://discuss.python.org/t/pep-661-sentinel-values/
 usually, these discussions are API design master classes.</p>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>Still a draft as of 2021-06-10. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-1"><p>The PEP is still in draft status as of 2021-06-10. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-2"><p>Here's a <a href="https://web.archive.org/web/20201112004749/http://effbot.org/zone/default-values.htm">2008 article</a> about it. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-3"><p>While Python <a href="https://www.reddit.com/r/Python/comments/nvt59p/why_doesnt_python_support_function_overloading/h15ayin">doesn't support overloading</a>,
 sometimes it's useful to think about functions in this way. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-4"><p>The same applies to using some other &quot;common&quot; value, 
+for example, a <code>&quot;&lt;NotGiven&gt;&quot;</code> string sentinel.</p>
+<p>For immutable values like strings, it's probably worse.
+Because of optimizations like <a href="https://docs.python.org/3/library/sys.html?highlight=intern#sys.intern">interning</a>,
+strings constructed at different times
+may actually result in the same object.
+The <a href="https://docs.python.org/3/reference/datamodel.html#objects-values-and-types">data model</a> <em>specifically</em> allows for this to happen (emphasis mine):</p>
+<p><blockquote>
+Types affect almost all aspects of object behavior. Even the importance of object identity is affected in some sense: <strong>for immutable types, operations that compute new values may actually return a reference to any existing object with the same type and value</strong>, while for mutable objects this is not allowed.
+</blockquote> <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 

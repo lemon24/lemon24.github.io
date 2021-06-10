@@ -13,17 +13,17 @@
     <id>https://death.andgravity.com/sentinels</id>
     <title>Python sentinel objects, type hints, and PEP 661</title>
     <updated>2021-06-10T07:50:00+00:00</updated>
-    <content type="html">&lt;p&gt;&lt;a href="https://www.python.org/dev/peps/pep-0661/"&gt;PEP 661&lt;/a&gt; &amp;quot;Sentinel Values&amp;quot;&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;
-recently brought up the sentinel object pattern.&lt;/p&gt;
+    <content type="html">&lt;p&gt;&lt;a href="https://www.python.org/dev/peps/pep-0661/"&gt;PEP 661&lt;/a&gt; &amp;quot;Sentinel Values&amp;quot;
+recently&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt; brought to attention the &lt;strong&gt;sentinel object&lt;/strong&gt; pattern.&lt;/p&gt;
 &lt;p&gt;While by no means new&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt;,
 this time the pattern appears in the context of &lt;a href="https://www.python.org/dev/peps/pep-0483/"&gt;typing&lt;/a&gt;,
-so it's worth seeing how the two interact.&lt;/p&gt;
+so it's worth taking a look how the two interact.&lt;/p&gt;
 &lt;p&gt;Contents:&lt;/p&gt;
 &lt;section class="toc"&gt;
 &lt;ul&gt;
 &lt;li&gt;&lt;a href="#what-s-a-sentinel-and-why-do-i-need-one"&gt;What's a sentinel, and why do I need one?&lt;/a&gt;
 &lt;ul&gt;
-&lt;li&gt;&lt;a href="#some-real-world-examples"&gt;Some real world examples&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#real-world-examples"&gt;Real world examples&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 &lt;/li&gt;
 &lt;li&gt;&lt;a href="#what-s-it-got-to-do-with-typing"&gt;What's it got to do with typing&lt;/a&gt;&lt;/li&gt;
@@ -66,11 +66,20 @@ Python checks the arguments, you just need to check if &lt;code&gt;default is No
 &lt;/ul&gt;
 &lt;p&gt;To me, the second seems easier to implement than the first.&lt;/p&gt;
 &lt;p&gt;But the second version has a problem:
-for some users, &lt;code&gt;None&lt;/code&gt; is a valid default value –
+for some users, &lt;code&gt;None&lt;/code&gt; is a valid default –
 how can &lt;code&gt;next()&lt;/code&gt; distinguish between
-&lt;code&gt;None&lt;/code&gt;-as-in-raise-exception and
-&lt;code&gt;None&lt;/code&gt;-as-in-default-value?&lt;/p&gt;
-&lt;p&gt;Here's where a sentinel object helps:&lt;/p&gt;
+&lt;em&gt;raise-exception-&lt;code&gt;None&lt;/code&gt;&lt;/em&gt; and &lt;em&gt;default-value-&lt;code&gt;None&lt;/code&gt;&lt;/em&gt;?&lt;/p&gt;
+&lt;p&gt;In your own code,
+you may be able to guarantee &lt;code&gt;None&lt;/code&gt; is never a valid value,
+making this a non-issue.&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;In a library&lt;/em&gt;, however, 
+you don't want to restrict users in this way,
+since you usually can't foresee all their use cases.
+Even if you did choose to restrict valid values like this,
+you'd have to document it,
+and the users would have to learn about it,
+and always remember the exception.&lt;sup class="footnote-ref" id="fnref-4"&gt;&lt;a href="#fn-4"&gt;4&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;Here's where a private, &lt;em&gt;internal-use only&lt;/em&gt; sentinel object helps:&lt;/p&gt;
 &lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;1&lt;/span&gt;
 &lt;span class="normal"&gt;2&lt;/span&gt;
 &lt;span class="normal"&gt;3&lt;/span&gt;
@@ -89,23 +98,27 @@ how can &lt;code&gt;next()&lt;/code&gt; distinguish between
             &lt;span class="k"&gt;raise&lt;/span&gt;
         &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;default&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
-&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;details&gt;
+&lt;summary&gt;Example output:&lt;/summary&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
 &lt;span class="go"&gt;1&lt;/span&gt;
 &lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
 &lt;span class="go"&gt;None&lt;/span&gt;
-&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
 &lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
   &lt;span class="c"&gt;...&lt;/span&gt;
 &lt;span class="gr"&gt;StopIteration&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;Now, next() knows that &lt;code&gt;default=_missing&lt;/code&gt; means raise exception,
-and &lt;code&gt;default=None&lt;/code&gt; is just a normal default value to be returned.&lt;/p&gt;
-&lt;p&gt;As a user of next(), you never have to use &lt;em&gt;_missing&lt;/em&gt; (or know about it);
-it's only for the use of next()'s author.
-You can think of it as &lt;em&gt;another None&lt;/em&gt; for when
-the actual None is already taken / means something else –
-a &amp;quot;higher-order&amp;quot; None.&lt;/p&gt;
+&lt;/details&gt;
+&lt;p&gt;Now, next() knows that &lt;code&gt;default=_missing&lt;/code&gt; means &lt;em&gt;raise exception&lt;/em&gt;,
+and &lt;code&gt;default=None&lt;/code&gt; is just a regular default value to be returned.&lt;/p&gt;
+&lt;p&gt;You can think of &lt;em&gt;_missing&lt;/em&gt; as of &lt;em&gt;another None&lt;/em&gt;,
+for when the actual None is already taken
+– a &amp;quot;higher-order&amp;quot; None.
+Because it's private to the module,
+users can never (accidentally) use it as a default value,
+and never have know about it.&lt;/p&gt;
 &lt;section class="admonition tip"&gt;
 &lt;div class="admonition-text"&gt;
 &lt;p&gt;For a more in-depth explanation of sentinel objects and related patterns,
@@ -113,17 +126,18 @@ a &amp;quot;higher-order&amp;quot; None.&lt;/p&gt;
  by Brandon Rhodes.&lt;/p&gt;
 &lt;/div&gt;
 &lt;/section&gt;
-&lt;h3 id="some-real-world-examples"&gt;Some real world examples&lt;span class="headerlink"&gt; &lt;a href="#some-real-world-examples" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;h3 id="real-world-examples"&gt;Real world examples&lt;span class="headerlink"&gt; &lt;a href="#real-world-examples" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
 &lt;p&gt;The real next() doesn't actually use sentinel values,
 because it's &lt;a href="https://github.com/python/cpython/blob/5571cabf1b3385087aba2c7c10289bba77494e08/Python/bltinmodule.c#L1446-L1480"&gt;implemented in C&lt;/a&gt;, and things are a bit different there.&lt;/p&gt;
 &lt;p&gt;But there are plenty of examples in pure-Python code:&lt;/p&gt;
 &lt;ul&gt;
 &lt;li&gt;&lt;p&gt;The dataclasses module &lt;a href="https://github.com/python/cpython/blob/c8353239eda0d05f7facd1a19acc2b836a057807/Lib/dataclasses.py#L158-L170"&gt;has two&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;The docs even explain what a sentinel value is:&lt;/p&gt;
 &lt;blockquote&gt;
 &lt;p&gt;[...] the &lt;em&gt;MISSING&lt;/em&gt; value is a sentinel object used to detect if the &lt;em&gt;default&lt;/em&gt; and &lt;em&gt;default_factory&lt;/em&gt; parameters are provided. This sentinel is used because &lt;em&gt;None&lt;/em&gt; is a valid value for &lt;em&gt;default&lt;/em&gt;. No code should directly use the &lt;em&gt;MISSING&lt;/em&gt; value.&lt;/p&gt;
 &lt;/blockquote&gt;
-&lt;p&gt;The other one is used in the &lt;em&gt;__init__&lt;/em&gt; of the generated classes
-to show a default value comes from a factory.&lt;/p&gt;
+&lt;p&gt;(The other one is used in the &lt;em&gt;__init__&lt;/em&gt; of the generated classes
+to show a default value comes from a factory.)&lt;/p&gt;
 &lt;/li&gt;
 &lt;li&gt;&lt;p&gt;attrs &lt;a href="https://github.com/python-attrs/attrs/blob/9709dd82e1cc0f5b783f4127e87498dfdd6a224a/src/attr/_make.py#L59-L92"&gt;also has two&lt;/a&gt;.
 One of them (analogous to dataclasses.MISSING)
@@ -317,10 +331,20 @@ and the (ongoing) &lt;a href="https://discuss.python.org/t/pep-661-sentinel-valu
 usually, these discussions are API design master classes.&lt;/p&gt;
 &lt;section class="footnotes"&gt;
 &lt;ol&gt;
-&lt;li id="fn-1"&gt;&lt;p&gt;Still a draft as of 2021-06-10. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;The PEP is still in draft status as of 2021-06-10. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;li id="fn-2"&gt;&lt;p&gt;Here's a &lt;a href="https://web.archive.org/web/20201112004749/http://effbot.org/zone/default-values.htm"&gt;2008 article&lt;/a&gt; about it. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;li id="fn-3"&gt;&lt;p&gt;While Python &lt;a href="https://www.reddit.com/r/Python/comments/nvt59p/why_doesnt_python_support_function_overloading/h15ayin"&gt;doesn't support overloading&lt;/a&gt;,
 sometimes it's useful to think about functions in this way. &lt;a href="#fnref-3" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-4"&gt;&lt;p&gt;The same applies to using some other &amp;quot;common&amp;quot; value, 
+for example, a &lt;code&gt;&amp;quot;&amp;lt;NotGiven&amp;gt;&amp;quot;&lt;/code&gt; string sentinel.&lt;/p&gt;
+&lt;p&gt;For immutable values like strings, it's probably worse.
+Because of optimizations like &lt;a href="https://docs.python.org/3/library/sys.html?highlight=intern#sys.intern"&gt;interning&lt;/a&gt;,
+strings constructed at different times
+may actually result in the same object.
+The &lt;a href="https://docs.python.org/3/reference/datamodel.html#objects-values-and-types"&gt;data model&lt;/a&gt; &lt;em&gt;specifically&lt;/em&gt; allows for this to happen (emphasis mine):&lt;/p&gt;
+&lt;p&gt;&lt;blockquote&gt;
+Types affect almost all aspects of object behavior. Even the importance of object identity is affected in some sense: &lt;strong&gt;for immutable types, operations that compute new values may actually return a reference to any existing object with the same type and value&lt;/strong&gt;, while for mutable objects this is not allowed.
+&lt;/blockquote&gt; &lt;a href="#fnref-4" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;/ol&gt;
 &lt;/section&gt;
 </content>
