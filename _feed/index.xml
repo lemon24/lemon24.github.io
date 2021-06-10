@@ -165,7 +165,7 @@ people can still extend your code
 by using &lt;em&gt;their own&lt;/em&gt; sentinel,
 and then calling either form of your function.)&lt;/p&gt;
 &lt;h2 id="what-s-this-got-to-do-with-typing"&gt;What's this got to do with typing?&lt;span class="headerlink"&gt; &lt;a href="#what-s-this-got-to-do-with-typing" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
-&lt;p&gt;Let's try adding type hints to our 
+&lt;p&gt;Let's try to add type hints to our 
 &lt;a href="#what-s-a-sentinel-and-why-do-i-need-one"&gt;hand-rolled next()&lt;/a&gt;:&lt;/p&gt;
 &lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt; 1&lt;/span&gt;
 &lt;span class="normal"&gt; 2&lt;/span&gt;
@@ -280,23 +280,33 @@ and then calling either form of your function.)&lt;/p&gt;
         &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;default&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;p&gt;The &lt;code&gt;isinstance()&lt;/code&gt; thing at the end is why a plain &lt;code&gt;object()&lt;/code&gt; sentinel
-doesn't work in this case – you can't (easily) get Mypy to treat your own
-&amp;quot;constants&amp;quot; like it does a built-in constant like None.&lt;/p&gt;
-&lt;p&gt;Also, if you use the &lt;code&gt;MissingType = object&lt;/code&gt; alias instead, you get:&lt;/p&gt;
+doesn't work – you can't (easily) get Mypy to treat your own
+&amp;quot;constants&amp;quot; the way it does a &lt;a href="https://docs.python.org/3/library/constants.html"&gt;built-in constant&lt;/a&gt; like None,
+and the sentinel doesn't have a &lt;em&gt;distinct&lt;/em&gt; type.&lt;/p&gt;
+&lt;p&gt;Also, if you use the &lt;code&gt;MissingType = object&lt;/code&gt; version, Mypy complains:&lt;/p&gt;
 &lt;pre class="code code-container"&gt;&lt;code&gt;next.py:37: error: Overloaded function implementation cannot produce return type of signature 2
 &lt;/code&gt;&lt;/pre&gt;
-&lt;p&gt;To show overloading works, here's some examples of what Mypy infers the return types to be:&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;it&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+&lt;p&gt;If you're wondering if this actually worked, 
+here's what Mypy says of the good version:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;59&lt;/span&gt;
+&lt;span class="normal"&gt;60&lt;/span&gt;
+&lt;span class="normal"&gt;61&lt;/span&gt;
+&lt;span class="normal"&gt;62&lt;/span&gt;
+&lt;span class="normal"&gt;63&lt;/span&gt;
+&lt;span class="normal"&gt;64&lt;/span&gt;
+&lt;span class="normal"&gt;65&lt;/span&gt;
+&lt;span class="normal"&gt;66&lt;/span&gt;
+&lt;span class="normal"&gt;67&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;it&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
 
 &lt;span class="n"&gt;one&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;span class="n"&gt;reveal_type&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;one&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="c1"&gt;# Revealed type is &amp;#39;builtins.int&amp;#39;&lt;/span&gt;
+&lt;span class="c1"&gt;# next.py:62: note: Revealed type is &amp;#39;builtins.int*&amp;#39;&lt;/span&gt;
 
 &lt;span class="n"&gt;two&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;a string&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;span class="n"&gt;reveal_type&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;two&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="c1"&gt;# Revealed type is &amp;#39;Union[builtins.int*, builtins.str*]&amp;#39;&lt;/span&gt;
+&lt;span class="c1"&gt;# next.py:66: note: Revealed type is &amp;#39;Union[builtins.int*, builtins.str*]&amp;#39;&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;h2 id="what-s-with-pep-661"&gt;What's with PEP 661?&lt;span class="headerlink"&gt; &lt;a href="#what-s-with-pep-661" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;h2 id="what-s-with-pep-661"&gt;What's with PEP 661?&lt;span class="headerlink"&gt; &lt;a href="#what-s-with-pep-661" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
 &lt;p&gt;There are many implementations of sentinel objects;
 the PEP links to a list of 15 different implementations &lt;a href="https://mail.python.org/archives/list/python-dev@python.org/message/JBYXQH3NV3YBF7P2HLHB5CD6V3GVTY55/"&gt;in stdlib alone&lt;/a&gt;.&lt;/p&gt;
 &lt;p&gt;Many of these have at least some issues:&lt;/p&gt;

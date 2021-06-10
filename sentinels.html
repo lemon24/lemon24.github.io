@@ -234,7 +234,7 @@ people can still extend your code
 by using <em>their own</em> sentinel,
 and then calling either form of your function.)</p>
 <h2 id="what-s-this-got-to-do-with-typing">What's this got to do with typing?<span class="headerlink"> <a href="#what-s-this-got-to-do-with-typing" title="permalink">#</a></span></h2>
-<p>Let's try adding type hints to our 
+<p>Let's try to add type hints to our 
 <a href="#what-s-a-sentinel-and-why-do-i-need-one">hand-rolled next()</a>:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 1</span>
 <span class="normal"> 2</span>
@@ -349,23 +349,33 @@ and then calling either form of your function.)</p>
         <span class="k">return</span> <span class="n">default</span>
 </code></pre></div>
 </td></tr></table><p>The <code>isinstance()</code> thing at the end is why a plain <code>object()</code> sentinel
-doesn't work in this case – you can't (easily) get Mypy to treat your own
-&quot;constants&quot; like it does a built-in constant like None.</p>
-<p>Also, if you use the <code>MissingType = object</code> alias instead, you get:</p>
+doesn't work – you can't (easily) get Mypy to treat your own
+&quot;constants&quot; the way it does a <a href="https://docs.python.org/3/library/constants.html">built-in constant</a> like None,
+and the sentinel doesn't have a <em>distinct</em> type.</p>
+<p>Also, if you use the <code>MissingType = object</code> version, Mypy complains:</p>
 <pre class="code code-container"><code>next.py:37: error: Overloaded function implementation cannot produce return type of signature 2
 </code></pre>
-<p>To show overloading works, here's some examples of what Mypy infers the return types to be:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">it</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
+<p>If you're wondering if this actually worked, 
+here's what Mypy says of the good version:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span>
+<span class="normal">62</span>
+<span class="normal">63</span>
+<span class="normal">64</span>
+<span class="normal">65</span>
+<span class="normal">66</span>
+<span class="normal">67</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">it</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
 
 <span class="n">one</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">it</span><span class="p">)</span>
 <span class="n">reveal_type</span><span class="p">(</span><span class="n">one</span><span class="p">)</span>
-<span class="c1"># Revealed type is &#39;builtins.int&#39;</span>
+<span class="c1"># next.py:62: note: Revealed type is &#39;builtins.int*&#39;</span>
 
 <span class="n">two</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">it</span><span class="p">,</span> <span class="s1">&#39;a string&#39;</span><span class="p">)</span>
 <span class="n">reveal_type</span><span class="p">(</span><span class="n">two</span><span class="p">)</span>
-<span class="c1"># Revealed type is &#39;Union[builtins.int*, builtins.str*]&#39;</span>
+<span class="c1"># next.py:66: note: Revealed type is &#39;Union[builtins.int*, builtins.str*]&#39;</span>
 </code></pre></div>
-<h2 id="what-s-with-pep-661">What's with PEP 661?<span class="headerlink"> <a href="#what-s-with-pep-661" title="permalink">#</a></span></h2>
+</td></tr></table><h2 id="what-s-with-pep-661">What's with PEP 661?<span class="headerlink"> <a href="#what-s-with-pep-661" title="permalink">#</a></span></h2>
 <p>There are many implementations of sentinel objects;
 the PEP links to a list of 15 different implementations <a href="https://mail.python.org/archives/list/python-dev@python.org/message/JBYXQH3NV3YBF7P2HLHB5CD6V3GVTY55/">in stdlib alone</a>.</p>
 <p>Many of these have at least some issues:</p>
