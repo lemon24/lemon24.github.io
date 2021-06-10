@@ -2,13 +2,385 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #python</title>
-  <updated>2021-06-04T12:35:00+00:00</updated>
+  <updated>2021-06-10T11:10:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
   </author>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index/_tags/python.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/sentinels">
+    <id>https://death.andgravity.com/sentinels</id>
+    <title>Python sentinel objects, type hints, and PEP 661</title>
+    <updated>2021-06-10T11:10:00+00:00</updated>
+    <content type="html">&lt;p&gt;&lt;a href="https://www.python.org/dev/peps/pep-0661/"&gt;PEP 661&lt;/a&gt; &amp;quot;Sentinel Values&amp;quot;
+recently brought to attention the &lt;strong&gt;sentinel object&lt;/strong&gt; pattern.&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;While by no means new&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt;,
+this time the pattern appears in the context of &lt;strong&gt;&lt;a href="https://www.python.org/dev/peps/pep-0483/"&gt;typing&lt;/a&gt;&lt;/strong&gt;,
+so it's worth taking a look at how the two interact.&lt;/p&gt;
+&lt;p&gt;Contents:&lt;/p&gt;
+&lt;section class="toc"&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#what-s-a-sentinel-and-why-do-i-need-one"&gt;What's a sentinel, and why do I need one?&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#real-world-examples"&gt;Real world examples&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#non-private-sentinels"&gt;Non-private sentinels&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#what-s-this-got-to-do-with-typing"&gt;What's this got to do with typing?&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#what-s-with-pep-661"&gt;What's with PEP 661?&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#how-does-this-affect-me"&gt;How does this affect me?&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#is-this-worth-a-pep"&gt;Is this worth a PEP?&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h2 id="what-s-a-sentinel-and-why-do-i-need-one"&gt;What's a sentinel, and why do I need one?&lt;span class="headerlink"&gt; &lt;a href="#what-s-a-sentinel-and-why-do-i-need-one" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;The PEP 661 abstract summarizes it best:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Unique placeholder values, widely known as &amp;quot;sentinel values&amp;quot;, are useful in Python programs for several things, such as default values for function arguments where None is a valid input value.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;The simplest use case I can think of is
+a function that returns a default value only if &lt;em&gt;explicitly&lt;/em&gt; provided,
+otherwise raises an exception.&lt;/p&gt;
+&lt;p&gt;The &lt;a href="https://docs.python.org/3/library/functions.html#next"&gt;next()&lt;/a&gt; built-in function is a good example:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;code&gt;next(iterator[, default])&lt;/code&gt;&lt;/p&gt;
+&lt;p&gt;Retrieve the next item from the &lt;em&gt;iterator&lt;/em&gt; by calling its &lt;code&gt;__next__()&lt;/code&gt; method.
+If &lt;em&gt;default&lt;/em&gt; is given, it is returned if the iterator is exhausted,
+otherwise StopIteration is raised.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Given this definition, let's try to re-implement it.&lt;/p&gt;
+&lt;p&gt;next() essentially has two signatures&lt;sup class="footnote-ref" id="fnref-3"&gt;&lt;a href="#fn-3"&gt;3&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;next(iterator)&lt;/code&gt; -&amp;gt; item or raise exception&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;next(iterator, default)&lt;/code&gt; -&amp;gt; item or default&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;There are two main ways to write a function that supports both:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;next(*args, **kwargs)&lt;/code&gt;;
+you have to extract &lt;em&gt;iterator&lt;/em&gt; and &lt;em&gt;default&lt;/em&gt; from &lt;em&gt;args&lt;/em&gt; and &lt;em&gt;kwargs&lt;/em&gt;,
+and raise TypeError if there are too many / too few / unexpected arguments&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;next(iterator, default=None)&lt;/code&gt;;
+Python checks the arguments, you just need to check if &lt;code&gt;default is None&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;To me, the second seems easier to implement than the first.&lt;/p&gt;
+&lt;p&gt;But the second version has a problem:
+for some users, &lt;code&gt;None&lt;/code&gt; is a valid default –
+how can &lt;code&gt;next()&lt;/code&gt; distinguish between
+&lt;em&gt;raise-exception-&lt;code&gt;None&lt;/code&gt;&lt;/em&gt; and &lt;em&gt;default-value-&lt;code&gt;None&lt;/code&gt;&lt;/em&gt;?&lt;/p&gt;
+&lt;p&gt;In your own code,
+you may be able to guarantee &lt;code&gt;None&lt;/code&gt; is never a valid value,
+making this a non-issue.&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;In a library&lt;/em&gt;, however,
+you don't want to restrict users in this way,
+since you usually can't foresee all their use cases.
+Even if you did choose to restrict valid values like this,
+you'd have to document it,
+and the users would have to learn about it,
+and always remember the exception.&lt;sup class="footnote-ref" id="fnref-4"&gt;&lt;a href="#fn-4"&gt;4&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;Here's where a private, &lt;em&gt;internal-use only&lt;/em&gt; sentinel object helps:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;1&lt;/span&gt;
+&lt;span class="normal"&gt;2&lt;/span&gt;
+&lt;span class="normal"&gt;3&lt;/span&gt;
+&lt;span class="normal"&gt;4&lt;/span&gt;
+&lt;span class="normal"&gt;5&lt;/span&gt;
+&lt;span class="normal"&gt;6&lt;/span&gt;
+&lt;span class="normal"&gt;7&lt;/span&gt;
+&lt;span class="normal"&gt;8&lt;/span&gt;
+&lt;span class="normal"&gt;9&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;_missing&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;object&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;iterator&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;default&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;_missing&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;iterator&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="fm"&gt;__next__&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+    &lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="ne"&gt;StopIteration&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;default&lt;/span&gt; &lt;span class="ow"&gt;is&lt;/span&gt; &lt;span class="n"&gt;_missing&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;raise&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;default&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;details&gt;
+&lt;summary&gt;Example output:&lt;/summary&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+&lt;span class="go"&gt;1&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+&lt;span class="go"&gt;None&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+  &lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="gr"&gt;StopIteration&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/details&gt;
+&lt;p&gt;Now, next() knows that &lt;code&gt;default=_missing&lt;/code&gt; means &lt;em&gt;raise exception&lt;/em&gt;,
+and &lt;code&gt;default=None&lt;/code&gt; is just a regular default value to be returned.&lt;/p&gt;
+&lt;p&gt;You can think of &lt;em&gt;_missing&lt;/em&gt; as of &lt;em&gt;another None&lt;/em&gt;,
+for when the actual None is already taken
+– a &amp;quot;higher-order&amp;quot; None.
+Because it's private to the module,
+users can never (accidentally) use it as a default value,
+and never have know about it.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;div class="admonition-text"&gt;
+&lt;p&gt;For a more in-depth explanation of sentinel objects and related patterns,
+ see &lt;a href="https://python-patterns.guide/python/sentinel-object/"&gt;The Sentinel Object Pattern&lt;/a&gt;
+ by Brandon Rhodes.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/section&gt;
+&lt;h3 id="real-world-examples"&gt;Real world examples&lt;span class="headerlink"&gt; &lt;a href="#real-world-examples" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;The real next() doesn't actually use sentinel values,
+because it's &lt;a href="https://github.com/python/cpython/blob/5571cabf1b3385087aba2c7c10289bba77494e08/Python/bltinmodule.c#L1446-L1480"&gt;implemented in C&lt;/a&gt;, and things are sometimes different there.&lt;/p&gt;
+&lt;p&gt;But there are plenty of examples in pure-Python code:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;p&gt;The dataclasses module &lt;a href="https://github.com/python/cpython/blob/c8353239eda0d05f7facd1a19acc2b836a057807/Lib/dataclasses.py#L158-L170"&gt;has two&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;The docs even explain what a sentinel is:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;[...] the &lt;em&gt;MISSING&lt;/em&gt; value is a sentinel object used to detect if the &lt;em&gt;default&lt;/em&gt; and &lt;em&gt;default_factory&lt;/em&gt; parameters are provided. This sentinel is used because &lt;em&gt;None&lt;/em&gt; is a valid value for &lt;em&gt;default&lt;/em&gt;. No code should directly use the &lt;em&gt;MISSING&lt;/em&gt; value.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;(The other one is used in the &lt;em&gt;__init__&lt;/em&gt; of the generated classes
+to show a default value comes from a factory.)&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;attrs &lt;a href="https://github.com/python-attrs/attrs/blob/9709dd82e1cc0f5b783f4127e87498dfdd6a224a/src/attr/_make.py#L59-L92"&gt;also has two&lt;/a&gt;.
+One of them (analogous to dataclasses.MISSING)
+is even included in the
+&lt;a href="https://www.attrs.org/en/stable/api.html#attr.NOTHING"&gt;API documentation&lt;/a&gt;.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Werkzeug &lt;a href="https://github.com/pallets/werkzeug/blob/eff04478a83619b4d7f15e6eee16a99bd80ed879/src/werkzeug/_internal.py#L51-L59"&gt;has one&lt;/a&gt;.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;I &lt;a href="https://github.com/lemon24/reader/blob/1.18/src/reader/types.py#L551-L557"&gt;have one&lt;/a&gt;
+in my feed reader library (originally stolen from Werkzeug).
+I use it for methods like &lt;code&gt;get_feed(feed[, default])&lt;/code&gt;,
+which either raises FeedNotFoundError or returns &lt;em&gt;default&lt;/em&gt;.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="non-private-sentinels"&gt;Non-private sentinels&lt;span class="headerlink"&gt; &lt;a href="#non-private-sentinels" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;I mentioned before sentinels are private;
+that's not always the case.&lt;/p&gt;
+&lt;p&gt;If the sentinel is the default argument of a public method or function,
+it may be a good idea to expose / document it,
+to facilitate inheritance and function wrappers.&lt;sup class="footnote-ref" id="fnref-5"&gt;&lt;a href="#fn-5"&gt;5&lt;/a&gt;&lt;/sup&gt;
+&lt;a href="https://www.attrs.org/en/stable/api.html#attr.NOTHING"&gt;attrs&lt;/a&gt; is a good example of this.&lt;/p&gt;
+&lt;p&gt;(If you don't expose it,
+people can still extend your code
+by using &lt;em&gt;their own&lt;/em&gt; sentinel,
+and then calling either form of your function.)&lt;/p&gt;
+&lt;h2 id="what-s-this-got-to-do-with-typing"&gt;What's this got to do with typing?&lt;span class="headerlink"&gt; &lt;a href="#what-s-this-got-to-do-with-typing" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Let's try to add type hints to our
+&lt;a href="#what-s-a-sentinel-and-why-do-i-need-one"&gt;hand-rolled next()&lt;/a&gt;:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt; 1&lt;/span&gt;
+&lt;span class="normal"&gt; 2&lt;/span&gt;
+&lt;span class="normal"&gt; 3&lt;/span&gt;
+&lt;span class="normal"&gt; 4&lt;/span&gt;
+&lt;span class="normal"&gt; 5&lt;/span&gt;
+&lt;span class="normal"&gt; 6&lt;/span&gt;
+&lt;span class="normal"&gt; 7&lt;/span&gt;
+&lt;span class="normal"&gt; 8&lt;/span&gt;
+&lt;span class="normal"&gt; 9&lt;/span&gt;
+&lt;span class="normal"&gt;10&lt;/span&gt;
+&lt;span class="normal"&gt;11&lt;/span&gt;
+&lt;span class="normal"&gt;12&lt;/span&gt;
+&lt;span class="normal"&gt;13&lt;/span&gt;
+&lt;span class="normal"&gt;14&lt;/span&gt;
+&lt;span class="normal"&gt;15&lt;/span&gt;
+&lt;span class="normal"&gt;16&lt;/span&gt;
+&lt;span class="normal"&gt;17&lt;/span&gt;
+&lt;span class="normal"&gt;18&lt;/span&gt;
+&lt;span class="normal"&gt;19&lt;/span&gt;
+&lt;span class="normal"&gt;20&lt;/span&gt;
+&lt;span class="normal"&gt;21&lt;/span&gt;
+&lt;span class="normal"&gt;22&lt;/span&gt;
+&lt;span class="normal"&gt;23&lt;/span&gt;
+&lt;span class="normal"&gt;24&lt;/span&gt;
+&lt;span class="normal"&gt;25&lt;/span&gt;
+&lt;span class="normal"&gt;26&lt;/span&gt;
+&lt;span class="normal"&gt;27&lt;/span&gt;
+&lt;span class="normal"&gt;28&lt;/span&gt;
+&lt;span class="normal"&gt;29&lt;/span&gt;
+&lt;span class="normal"&gt;30&lt;/span&gt;
+&lt;span class="normal"&gt;31&lt;/span&gt;
+&lt;span class="normal"&gt;32&lt;/span&gt;
+&lt;span class="normal"&gt;33&lt;/span&gt;
+&lt;span class="normal"&gt;34&lt;/span&gt;
+&lt;span class="normal"&gt;35&lt;/span&gt;
+&lt;span class="normal"&gt;36&lt;/span&gt;
+&lt;span class="normal"&gt;37&lt;/span&gt;
+&lt;span class="normal"&gt;38&lt;/span&gt;
+&lt;span class="normal"&gt;39&lt;/span&gt;
+&lt;span class="normal"&gt;40&lt;/span&gt;
+&lt;span class="normal"&gt;41&lt;/span&gt;
+&lt;span class="normal"&gt;42&lt;/span&gt;
+&lt;span class="normal"&gt;43&lt;/span&gt;
+&lt;span class="normal"&gt;44&lt;/span&gt;
+&lt;span class="normal"&gt;45&lt;/span&gt;
+&lt;span class="normal"&gt;46&lt;/span&gt;
+&lt;span class="normal"&gt;47&lt;/span&gt;
+&lt;span class="normal"&gt;48&lt;/span&gt;
+&lt;span class="normal"&gt;49&lt;/span&gt;
+&lt;span class="normal"&gt;50&lt;/span&gt;
+&lt;span class="normal"&gt;51&lt;/span&gt;
+&lt;span class="normal"&gt;52&lt;/span&gt;
+&lt;span class="normal"&gt;53&lt;/span&gt;
+&lt;span class="normal"&gt;54&lt;/span&gt;
+&lt;span class="normal"&gt;55&lt;/span&gt;
+&lt;span class="normal"&gt;56&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;typing&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;overload&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;TypeVar&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Union&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Iterator&lt;/span&gt;
+
+&lt;span class="n"&gt;T&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;TypeVar&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;T&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;U&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;TypeVar&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;U&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+
+&lt;span class="c1"&gt;# We define MissingType in one of two ways:&lt;/span&gt;
+
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;MissingType&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="k"&gt;pass&lt;/span&gt;
+&lt;span class="c1"&gt;# MissingType = object&lt;/span&gt;
+
+&lt;span class="c1"&gt;# The second one is equivalent to the original&lt;/span&gt;
+&lt;span class="c1"&gt;# `_missing = object()`, but the alias allows us&lt;/span&gt;
+&lt;span class="c1"&gt;# to keep the same type annotations.&lt;/span&gt;
+
+&lt;span class="n"&gt;_missing&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;MissingType&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+
+
+&lt;span class="c1"&gt;# As mentioned before, next() is actually two functions;&lt;/span&gt;
+&lt;span class="c1"&gt;# typing.overload allows us to express this.&lt;/span&gt;
+&lt;span class="c1"&gt;#&lt;/span&gt;
+&lt;span class="c1"&gt;# One that returns an item or raises an exception:&lt;/span&gt;
+
+&lt;span class="nd"&gt;@overload&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;iterator&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Iterator&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt; &lt;span class="o"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
+
+&lt;span class="c1"&gt;# ... and one that takes a default value (of some type U),&lt;/span&gt;
+&lt;span class="c1"&gt;# and returns either an item, or that default value&lt;/span&gt;
+&lt;span class="c1"&gt;# (of the *same* type U):&lt;/span&gt;
+
+&lt;span class="nd"&gt;@overload&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;iterator&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Iterator&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt; &lt;span class="n"&gt;default&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;U&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;Union&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;U&lt;/span&gt;&lt;span class="p"&gt;]:&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
+
+&lt;span class="c1"&gt;# The implementation takes all the arguments,&lt;/span&gt;
+&lt;span class="c1"&gt;# and returns a union of all the types:&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="n"&gt;iterator&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Iterator&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;
+    &lt;span class="n"&gt;default&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Union&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;MissingType&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;U&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;_missing&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;Union&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;U&lt;/span&gt;&lt;span class="p"&gt;]:&lt;/span&gt;
+    &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;iterator&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="fm"&gt;__next__&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+    &lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="ne"&gt;StopIteration&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+
+        &lt;span class="c1"&gt;# &amp;quot;if default is _missing&amp;quot; is idiomatic here,&lt;/span&gt;
+        &lt;span class="c1"&gt;# but Mypy doesn&amp;#39;t understand it&lt;/span&gt;
+        &lt;span class="c1"&gt;# (&amp;quot;var is None&amp;quot; is a special case).&lt;/span&gt;
+        &lt;span class="c1"&gt;# It does understand isinstance(), though:&lt;/span&gt;
+        &lt;span class="c1"&gt;# https://mypy.readthedocs.io/en/stable/casts.html#casts&lt;/span&gt;
+
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;isinstance&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;default&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;MissingType&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+            &lt;span class="c1"&gt;# If MissingType is `object`, this is always true,&lt;/span&gt;
+            &lt;span class="c1"&gt;# since all types are a subclass of `object`.&lt;/span&gt;
+            &lt;span class="k"&gt;raise&lt;/span&gt;
+
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;default&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;p&gt;The &lt;code&gt;isinstance()&lt;/code&gt; thing at the end is why a plain &lt;code&gt;object()&lt;/code&gt; sentinel
+doesn't work – you can't (easily) get Mypy to treat your own
+&amp;quot;constants&amp;quot; the way it does a &lt;a href="https://docs.python.org/3/library/constants.html"&gt;built-in constant&lt;/a&gt; like None,
+and the sentinel doesn't have a &lt;em&gt;distinct&lt;/em&gt; type.&lt;/p&gt;
+&lt;p&gt;Also, if you use the &lt;code&gt;MissingType = object&lt;/code&gt; version, Mypy complains:&lt;/p&gt;
+&lt;pre class="code code-container"&gt;&lt;code&gt;next.py:37: error: Overloaded function implementation cannot produce return type of signature 2
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;If you're wondering if the good version actually worked,
+here's what Mypy says:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;59&lt;/span&gt;
+&lt;span class="normal"&gt;60&lt;/span&gt;
+&lt;span class="normal"&gt;61&lt;/span&gt;
+&lt;span class="normal"&gt;62&lt;/span&gt;
+&lt;span class="normal"&gt;63&lt;/span&gt;
+&lt;span class="normal"&gt;64&lt;/span&gt;
+&lt;span class="normal"&gt;65&lt;/span&gt;
+&lt;span class="normal"&gt;66&lt;/span&gt;
+&lt;span class="normal"&gt;67&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;it&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+
+&lt;span class="n"&gt;one&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;reveal_type&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;one&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="c1"&gt;# next.py:62: note: Revealed type is &amp;#39;builtins.int*&amp;#39;&lt;/span&gt;
+
+&lt;span class="n"&gt;two&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;it&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;a string&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;reveal_type&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;two&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="c1"&gt;# next.py:66: note: Revealed type is &amp;#39;Union[builtins.int*, builtins.str*]&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;h2 id="what-s-with-pep-661"&gt;What's with PEP 661?&lt;span class="headerlink"&gt; &lt;a href="#what-s-with-pep-661" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;There are many sentinel implementations out there;
+there are &lt;em&gt;15 different ones&lt;/em&gt; &lt;a href="https://mail.python.org/archives/list/python-dev@python.org/message/JBYXQH3NV3YBF7P2HLHB5CD6V3GVTY55/"&gt;in the standard library alone&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Many of them have at least one of these issues:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;non-descriptive / too long repr() (e.g. &lt;code&gt;&amp;lt;object object at 0x7f99a355fc20&amp;gt;&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;don't pickle correctly (e.g. after unpickling you get a different, new object)&lt;/li&gt;
+&lt;li&gt;&lt;a href="#what-s-this-got-to-do-with-typing"&gt;don't work well with typing&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Thus, &lt;a href="https://www.python.org/dev/peps/pep-0661/"&gt;PEP 661&lt;/a&gt;
+&amp;quot;suggests adding a utility for defining sentinel values,
+to be used in the stdlib and made publicly available as part of the stdlib&amp;quot;.&lt;/p&gt;
+&lt;p&gt;This utility would address all the known issues,
+saving developers
+(mostly, stdlib and third party library authors)
+from reinventing the wheel (again).&lt;/p&gt;
+&lt;h3 id="how-does-this-affect-me"&gt;How does this affect me?&lt;span class="headerlink"&gt; &lt;a href="#how-does-this-affect-me" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Not at all.&lt;/p&gt;
+&lt;p&gt;If the PEP gets accepted and implemented,
+you'll be able to create an issue-free sentinel with one line of code.&lt;/p&gt;
+&lt;p&gt;Of course, you can keep using your own sentinel objects if you want to;
+the PEP doesn't even propose to change
+the &lt;em&gt;existing&lt;/em&gt; sentinels in the standard library.&lt;/p&gt;
+&lt;h3 id="is-this-worth-a-pep"&gt;Is this worth a PEP?&lt;span class="headerlink"&gt; &lt;a href="#is-this-worth-a-pep" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;PEPs exist to support discussions in cases where
+the &amp;quot;correct&amp;quot; way to go isn't obvious,
+consensus or coordination are required,
+or the changes have a big blast radius.
+A lot of PEPs get &lt;a href="https://www.python.org/dev/peps/#abandoned-withdrawn-and-rejected-peps"&gt;abandoned or rejected&lt;/a&gt;
+(that's fine, it's how the process is supposed to work).&lt;/p&gt;
+&lt;p&gt;PEP 661 seems to fall under the &amp;quot;requires consensus&amp;quot; category;
+it follows a &lt;a href="https://discuss.python.org/t/sentinel-values-in-the-stdlib/8810"&gt;community poll&lt;/a&gt;
+where although the top pick was &amp;quot;do nothing&amp;quot;,
+most voters went for &amp;quot;do &lt;em&gt;something&lt;/em&gt;&amp;quot;
+(but with no clear agreement on what that should be).&lt;/p&gt;
+&lt;p&gt;The poll introduction states:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;This is a minor detail, so ISTM most important that we reach a reasonable decision quickly, even if that decision is that nothing should be done.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;It's worth remembering that &lt;em&gt;doing nothing&lt;/em&gt; is always an option. :)&lt;/p&gt;
+&lt;p&gt;If you're into this kind of thing,
+I highly recommend going through the &lt;a href="https://discuss.python.org/t/sentinel-values-in-the-stdlib/8810"&gt;poll thread&lt;/a&gt;
+and the (ongoing) &lt;a href="https://discuss.python.org/t/pep-661-sentinel-values/9126"&gt;PEP discussion thread&lt;/a&gt; –
+usually, these discussions are API design master classes.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;That's all I have for now.&lt;/p&gt;
+&lt;p&gt;If you learned something new, please consider sharing this, it really helps! :)&lt;/p&gt;
+&lt;p&gt;If you want more stuff like this,
+you can check out my &lt;a href="/"&gt;older articles&lt;/a&gt;,
+or get updates on future ones via &lt;a href="#embedded-subscribe-form"&gt;email&lt;/a&gt;
+or &lt;a href="https://death.andgravity.com/_feed/index.xml"&gt;Atom feed&lt;/a&gt;.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;section class="footnotes"&gt;
+&lt;ol&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;The PEP is still in draft status as of 2021-06-10. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-2"&gt;&lt;p&gt;Here's a &lt;a href="https://web.archive.org/web/20201112004749/http://effbot.org/zone/default-values.htm"&gt;2008 article&lt;/a&gt; about it. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-3"&gt;&lt;p&gt;While Python &lt;a href="https://www.reddit.com/r/Python/comments/nvt59p/why_doesnt_python_support_function_overloading/h15ayin"&gt;doesn't support overloading&lt;/a&gt;,
+sometimes it's useful to think about functions in this way. &lt;a href="#fnref-3" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-4"&gt;&lt;p&gt;The same applies to using some other &amp;quot;common&amp;quot; value,
+for example, a &lt;code&gt;&amp;quot;&amp;lt;NotGiven&amp;gt;&amp;quot;&lt;/code&gt; string sentinel.&lt;/p&gt;
+&lt;p&gt;For immutable values like strings, it's probably worse.
+Because of optimizations like &lt;a href="https://docs.python.org/3/library/sys.html?highlight=intern#sys.intern"&gt;interning&lt;/a&gt;,
+strings constructed at different times
+may actually result in the same object.
+The &lt;a href="https://docs.python.org/3/reference/datamodel.html#objects-values-and-types"&gt;data model&lt;/a&gt; &lt;em&gt;specifically&lt;/em&gt; allows for this to happen (emphasis mine):&lt;/p&gt;
+&lt;p&gt;&lt;blockquote&gt;
+Types affect almost all aspects of object behavior. Even the importance of object identity is affected in some sense: &lt;strong&gt;for immutable types, operations that compute new values may actually return a reference to any existing object with the same type and value&lt;/strong&gt;, while for mutable objects this is not allowed.
+&lt;/blockquote&gt; &lt;a href="#fnref-4" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-5"&gt;&lt;p&gt;Thanks to &lt;a href="https://www.reddit.com/r/Python/comments/ntipjq/x/h0u7k35"&gt;u/energybased&lt;/a&gt; for reminding me of this! &lt;a href="#fnref-5" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+    <link href="https://death.andgravity.com/sentinels" rel="alternate"/>
+    <published>2021-06-10T07:50:00+00:00</published>
+  </entry>
   <entry xml:base="https://death.andgravity.com/same-arguments">
     <id>https://death.andgravity.com/same-arguments</id>
     <title>When to use classes in Python? When your functions take the same arguments</title>
