@@ -59,7 +59,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ four minute read
+∙ five minute read
 
 
 </small></p>
@@ -127,6 +127,7 @@ from a database, a flat file, or a list in memory.</p>
     <span class="k">def</span> <span class="nf">search_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span> <span class="o">...</span>
     <span class="k">def</span> <span class="nf">get_feeds</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
 </code></pre></div>
+<p>The database connection is state, and Storage <em>encapsulates</em> that state.</p>
 <h2 id="counter-example-data-classes">Counter-example: data classes<span class="headerlink"> <a href="#counter-example-data-classes" title="permalink">#</a></span></h2>
 <p>OK, the above looks appropriate for the current state of the world.</p>
 <p>Let's add some more requirements.</p>
@@ -193,27 +194,55 @@ Ted Kaminski's <a href="https://www.tedinski.com/2018/01/23/data-objects-and-bei
  but <a href="/dataclasses#aside-named-tuples">you don't have to</a>.</p>
 </div>
 </section>
-<h3 id="why-not-dicts-and-or-kwargs">why not dicts and/or kwargs<span class="headerlink"> <a href="#why-not-dicts-and-or-kwargs" title="permalink">#</a></span></h3>
-<blockquote>
-<p>You can also keep using functions, and pass a data structure instead of many arguments. As long as it's readable, use whatever the hell you want.</p>
-</blockquote>
-<blockquote>
-<blockquote>
-<p>nameduple, dataclasses</p>
-</blockquote>
-</blockquote>
-<blockquote>
-<blockquote>
-<p>I had an example that did the functions + data structure thing, but I left it out because the post was getting too long.</p>
-</blockquote>
-</blockquote>
-<blockquote>
-<p>You shouldn't use a dict. Dicts aren't type-checked.</p>
-</blockquote>
-<blockquote>
-<p>I do not want to expose the tracking logic or the parameters to the end user. So this is when I use classes. A dictionary is instantiated as a class object that stores the parameters and does the needful.</p>
-<p>This way it is easier for me to code it, because I don't need to pass large number of arguments in between functions and at the same time the user gets a nice interface to work with.</p>
-</blockquote>
+<p>TODO: example links</p>
+<p>EntryFilterOptions: https://github.com/lemon24/reader/blob/1.18/src/reader/_types.py#L290
+reader.get_entries: https://github.com/lemon24/reader/blob/1.18/src/reader/core.py#L880
+storage.get_entries: https://github.com/lemon24/reader/blob/1.18/src/reader/_storage.py#L949</p>
+<p>TODO: requests does it too</p>
+<h3 id="why-not-a-dict">Why not a dict?<span class="headerlink"> <a href="#why-not-a-dict" title="permalink">#</a></span></h3>
+<p>Instead of defining a whole new class,
+we could've just used a dict like:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="p">{</span><span class="s1">&#39;feed&#39;</span><span class="p">:</span> <span class="o">...</span><span class="p">,</span> <span class="s1">&#39;read&#39;</span><span class="p">:</span> <span class="o">...</span><span class="p">,</span> <span class="s1">&#39;important&#39;</span><span class="p">:</span> <span class="o">...</span><span class="p">}</span>
+</code></pre></div>
+<p>But this has a number of drawbacks:</p>
+<ul>
+<li>Dicts are not type-checked.
+<a href="https://docs.python.org/3/library/typing.html#typing.TypedDict">TypedDict</a> helps, but still doesn't prevent using the wrong keys <em>at runtime</em>.</li>
+<li>Dicts don't work well with code completion.
+Again, TypedDict can help smarter tools like PyCharm,
+but doesn't in interactive mode or in IPython.</li>
+<li>Dicts are mutable.
+For our use case, immutability is a plus:
+the options don't have much reason to change,
+and it would be quite unexpected,
+so it's useful to disallow it from happening.</li>
+</ul>
+<h3 id="why-not-take-kwargs">Why not take <code>**kwargs</code>?<span class="headerlink"> <a href="#why-not-take-kwargs" title="permalink">#</a></span></h3>
+<p>Since we're talking about dicts,
+why not make Reader.get_entries() etc.
+take and pass <code>**kwargs</code> directly to EntryFilterOptions?</p>
+<p>While shorter, this also breaks completion.</p>
+<p>Furthermore, it makes the code less self-documenting:
+even if you look at the Reader.get_entries() source,
+you still don't immediately know what arguments it takes.
+This doesn't matter as much for internal code,
+but for the user-facing part of the API,
+we don't mind making the code more verbose if it makes it easier to use.</p>
+<p>Also, if we later introduce another data object
+(say, to hangle pagination options),
+we'll still have to write code to split the kwargs between the two.</p>
+<h3 id="why-not-take-entryfilteroptions">Why not take EntryFilterOptions?<span class="headerlink"> <a href="#why-not-take-entryfilteroptions" title="permalink">#</a></span></h3>
+<p>Why not make reader.get_entries() take an EntryFilterOptions, then?</p>
+<p>Because that'd make things <em>too</em> verbose for the user:
+they'd would have to import EntryFilterOptions,
+build it, and <em>then</em> pass it to get_entries().
+And frankly, it's not very idiomatic.</p>
+<p>This difference between the Reader and Storage method signatures exists
+because they're used differently:</p>
+<ul>
+<li>Reader methods are mostly called by external users in varied ways</li>
+<li>Storage methods are mostly called by internal users (Reader) in a few ways</li>
+</ul>
 
 
 
