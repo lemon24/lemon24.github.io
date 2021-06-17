@@ -86,24 +86,24 @@ I talk about this heuristic for using classes:</p>
 where functions that take the same arguments <strong>don't make a class</strong>.</p>
 <h2 id="counter-example-two-sets-of-arguments">Counter-example: two sets of arguments<span class="headerlink"> <a href="#counter-example-two-sets-of-arguments" title="permalink">#</a></span></h2>
 <p>Consider the following scenario:</p>
-<p>We have a feed reader web app that can show a list of feeds,
-and a list of entries (articles), filtered in various ways.</p>
-<p>To decouple the web app logic from the code that actually queries the database
-(say, because we also want to have a command-line interface),
-we pull database-specific logic into functions
-that take a database connection and other arguments,
-do some queries on the database, and return the results.</p>
+<p>We have a feed reader web application.
+It shows a list of feeds and a list of entries (articles),
+filtered in various ways.</p>
+<p>Because we want to do the same thing from the command-line,
+we pull database-specific logic into functions in a separate module.
+The functions take a database connection and other arguments,
+query the database, and return the results.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span> <span class="o">...</span>
 <span class="k">def</span> <span class="nf">get_entry_counts</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span> <span class="o">...</span>
 <span class="k">def</span> <span class="nf">search_entries</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span> <span class="o">...</span>
 <span class="k">def</span> <span class="nf">get_feeds</span><span class="p">(</span><span class="n">db</span><span class="p">):</span> <span class="o">...</span>
 </code></pre></div>
-<p>The usage pattern is like this:
-the database connection is created once, at the start of the program;
-then, the functions functions are called repeatedly with the same database,
-but different options options.</p>
+<p>The main usage pattern is:
+at the start of the program, connect to the database;
+depending on user input,
+repeatedly call the functions with the same connection, but different options.</p>
 <hr />
-<p>Taking this heuristic to the extreme, we'd end up with something like this:</p>
+<p>Taking the heuristic to the extreme, we end up with this:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Storage</span><span class="p">:</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">db</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -117,15 +117,19 @@ but different options options.</p>
     <span class="k">def</span> <span class="nf">search_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">):</span> <span class="o">...</span>
     <span class="k">def</span> <span class="nf">get_feeds</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
 </code></pre></div>
-<p>This is clearly silly, and not very useful:
-<code>Storage</code> can only filter entries in exactly one way,
-and get_feeds() doesn't even use the options.</p>
-<p>What that approach misses is a bit of nuance:
+<p>This is not very useful:
+every time we change the options, we need to create a new <code>Storage</code> object
+(or worse, have a single one and
+<a href="/same-arguments#caveat-attribute-changes-are-confusing">change its attributes</a>).
+Also, <code>get_feeds()</code> doesn't even use them –
+but somehow leaving it out seems just as bad.</p>
+<p>What's missing is a bit of nuance:
 there isn't <em>one</em> set of arguments, there are <em>two</em>,
 and one of them changes more often than the other.</p>
-<p>It would be convenient to group these functions as methods on a <a href="https://en.wikipedia.org/wiki/Data_access_object">data access object</a>,
-so whoever calls <code>get_entries()</code> doesn't have to care if they're coming
-from a database, a flat file, or a list in memory.</p>
+<p>Let's take care of the obvious one first.</p>
+<p>The database connection changes least often,
+so it makes sense to keep it on the storage,
+and pass a storage object around:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Storage</span><span class="p">:</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">db</span><span class="p">):</span>
@@ -136,7 +140,24 @@ from a database, a flat file, or a list in memory.</p>
     <span class="k">def</span> <span class="nf">search_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span> <span class="o">...</span>
     <span class="k">def</span> <span class="nf">get_feeds</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
 </code></pre></div>
-<p>The database connection is state, and Storage <em>encapsulates</em> that state.</p>
+<p>The most important benefit of this is that
+<em>it abstracts the database from the code using it</em>,
+allowing you to have more than one kind of storage.</p>
+<p>Want to store entries as files on disk?
+Write a FileStorage class that reads them from there.
+Want to test your application with a known set of entries?
+Write a MockStorage class that keeps the entries in in a list, in memory.
+Whoever calls <code>get_entries()</code> or <code>search_entries()</code>
+doesn't have to know <em>or care</em> where the entries are coming from
+or how the search is implemented.</p>
+<section class="admonition tip">
+<div class="admonition-text">
+<p>This is the <a href="https://en.wikipedia.org/wiki/Data_access_object">data access object</a> design pattern.
+ In object-oriented programming terminology,
+ a DAO provides an abstract interface that
+ <em>encapsulates</em> a persistence mechanism.</p>
+</div>
+</section>
 <h2 id="counter-example-data-classes">Counter-example: data classes<span class="headerlink"> <a href="#counter-example-data-classes" title="permalink">#</a></span></h2>
 <p>OK, the above looks appropriate for the current state of the world.</p>
 <p>Let's add some more requirements.</p>
