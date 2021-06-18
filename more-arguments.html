@@ -59,7 +59,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ five minute read
+∙ six minute read
 
 
 </small></p>
@@ -83,7 +83,8 @@ I talk about this heuristic for using classes:</p>
 <p>Thing is, <a href="/same-arguments#the-heuristic">heuristics don't always work</a>.</p>
 <p>To make the most out of them, it helps to know what the exceptions are.</p>
 <p>So, let's look at a few real-world examples
-where functions that take the same arguments <strong>don't make a class</strong>.</p>
+where functions that take the same arguments
+<strong>don't necessarily make a class</strong>.</p>
 <h2 id="counter-example-two-sets-of-arguments">Counter-example: two sets of arguments<span class="headerlink"> <a href="#counter-example-two-sets-of-arguments" title="permalink">#</a></span></h2>
 <p>Consider the following scenario:</p>
 <p>We have a feed reader web application.
@@ -145,7 +146,7 @@ and pass a storage object around:</p>
 allowing you to have more than one kind of storage.</p>
 <p>Want to store entries as files on disk?
 Write a FileStorage class that reads them from there.
-Want to test your application with a known set of entries?
+Want to test your application with various combinations of made-up entries?
 Write a MockStorage class that keeps the entries in in a list, in memory.
 Whoever calls <code>get_entries()</code> or <code>search_entries()</code>
 doesn't have to know <em>or care</em> where the entries are coming from
@@ -158,23 +159,37 @@ or how the search is implemented.</p>
  <em>encapsulates</em> a persistence mechanism.</p>
 </div>
 </section>
+<hr />
+<p>OK, the above looks just about right to me –
+I wouldn't really change anything else.</p>
+<p>Some arguments are still repeating, but it is <em>useful repetition:</em>
+once a user learns to filter entries with one method,
+they can do it with any of them.
+Also, people use different arguments at different times;
+from their perspective, it's not repetition.</p>
+<p>And anyway, we're already using a class...</p>
 <h2 id="counter-example-data-classes">Counter-example: data classes<span class="headerlink"> <a href="#counter-example-data-classes" title="permalink">#</a></span></h2>
-<p>OK, the above looks appropriate for the current state of the world.</p>
-<p>Let's add some more requirements.</p>
-<p>Because there's richer behavior that we want provide to the user (web app, CLI)
-that implies more than just storing things,
-we leave Storage to do <em>only</em> storage,
-and wrap it in a Reader object that <em>has</em> a storage:</p>
+<p>Let's add more requirements.</p>
+<p>There's more functionality beyond storing things,
+and we have multiple users for that as well 
+(web app, CLI, someone using our code as a library).
+So we leave <code>Storage</code> to do <em>only</em> storage,
+and wrap it in a <code>Reader</code> object that <em>has</em> a storage:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Reader</span><span class="p">:</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="n">storage</span>
 
     <span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="o">...</span>  <span class="c1"># just calls self._storage.get_entries()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">get_entries</span><span class="p">(</span><span class="n">feed</span><span class="o">=</span><span class="n">feed</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="n">read</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="n">important</span><span class="p">)</span>
+
+    <span class="o">...</span>
 
     <span class="k">def</span> <span class="nf">update_feeds</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="o">...</span>  <span class="c1"># retrieves feeds from the internet; calls various storage methods multiple times</span>
+        <span class="c1"># calls various storage methods multiple times:</span>
+        <span class="c1"># get feeds to be retrieved from storage,</span>
+        <span class="c1"># store new/modified entries</span>
+        <span class="o">...</span>  
 </code></pre></div>
 <p>We also know Storage.get_entries() only gets called by Reader.get_entries();
 furthermore, the arguments are rarely used directly by Storage.get_entries(),
