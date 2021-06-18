@@ -211,51 +211,54 @@ and &lt;a href="/same-arguments#try-it-out"&gt;that you can always change your m
 and why I didn't go that way.&lt;/p&gt;
 &lt;h3 id="why-not-a-dict"&gt;Why not a dict?&lt;span class="headerlink"&gt; &lt;a href="#why-not-a-dict" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
 &lt;p&gt;Instead of defining a whole new class,
-we could've just used a dict like:&lt;/p&gt;
+we could've used a dict:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;feed&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;read&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;important&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;But this has a number of drawbacks:&lt;/p&gt;
 &lt;ul&gt;
 &lt;li&gt;Dicts are not type-checked.
-&lt;a href="https://docs.python.org/3/library/typing.html#typing.TypedDict"&gt;TypedDict&lt;/a&gt; helps, but still doesn't prevent using the wrong keys &lt;em&gt;at runtime&lt;/em&gt;.&lt;/li&gt;
-&lt;li&gt;Dicts don't work well with code completion.
-Again, TypedDict can help smarter tools like PyCharm,
-but doesn't in interactive mode or in IPython.&lt;/li&gt;
-&lt;li&gt;Dicts are mutable.
+&lt;a href="https://docs.python.org/3/library/typing.html#typing.TypedDict"&gt;TypedDict&lt;/a&gt; helps, but doesn't prevent using the wrong keys &lt;em&gt;at runtime&lt;/em&gt;.&lt;/li&gt;
+&lt;li&gt;Dicts break code completion.
+TypedDict may help with smarter tools like PyCharm,
+but doesn't in interactive mode or IPython.&lt;/li&gt;
+&lt;li&gt;Dicts are &lt;em&gt;mutable&lt;/em&gt;.
 For our use case, immutability is a plus:
 the options don't have much reason to change,
-and it would be quite unexpected,
-so it's useful to disallow it from happening.&lt;/li&gt;
+so it's useful to disallow it.&lt;/li&gt;
 &lt;/ul&gt;
-&lt;h3 id="why-not-take-kwargs"&gt;Why not take &lt;code&gt;**kwargs&lt;/code&gt;?&lt;span class="headerlink"&gt; &lt;a href="#why-not-take-kwargs" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
-&lt;p&gt;Since we're talking about dicts,
-why not make Reader.get_entries() etc.
-take and pass &lt;code&gt;**kwargs&lt;/code&gt; directly to EntryFilterOptions?&lt;/p&gt;
-&lt;p&gt;While shorter, this also breaks completion.&lt;/p&gt;
-&lt;p&gt;Furthermore, it makes the code less self-documenting:
-even if you look at the Reader.get_entries() source,
-you still don't immediately know what arguments it takes.
-This doesn't matter as much for internal code,
-but for the user-facing part of the API,
-we don't mind making the code more verbose if it makes it easier to use.&lt;/p&gt;
-&lt;p&gt;Also, if we later introduce another data object
-(say, to hangle pagination options),
-we'll still have to write code to split the kwargs between the two.&lt;/p&gt;
-&lt;h3 id="why-not-take-entryfilteroptions"&gt;Why not take EntryFilterOptions?&lt;span class="headerlink"&gt; &lt;a href="#why-not-take-entryfilteroptions" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
-&lt;p&gt;Why not make reader.get_entries() take an EntryFilterOptions, then?&lt;/p&gt;
-&lt;p&gt;Because that'd make things &lt;em&gt;too&lt;/em&gt; verbose for the user:
+&lt;h3 id="why-not-kwargs"&gt;Why not **kwargs?&lt;span class="headerlink"&gt; &lt;a href="#why-not-kwargs" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Why not pass &lt;code&gt;**kwargs&lt;/code&gt; directly to EntryFilterOptions?&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Reader&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;get_entries&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;_storage&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get_entries&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;ul&gt;
+&lt;li&gt;It also breaks code completion.&lt;/li&gt;
+&lt;li&gt;It makes the code less self-documenting:
+you don't know what arguments &lt;code&gt;get_entries()&lt;/code&gt; takes,
+even if you read the source.
+Presumably, they're in the docstring,
+but not everybody writes one all the time.&lt;/li&gt;
+&lt;li&gt;If we introduce another options object (say, for pagination),
+we still have to write code to split the kwargs between the two.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="why-not-entryfilteroptions"&gt;Why not EntryFilterOptions?&lt;span class="headerlink"&gt; &lt;a href="#why-not-entryfilteroptions" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Why not take an EntryFilterOptions directly, then?&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;reader&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;make_reader&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;EntryFilterOptions&lt;/span&gt;
+&lt;span class="n"&gt;reader&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;make_reader&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;...&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;options&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;EntryFilterOptions&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;read&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;entries&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;reader&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get_entries&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Because it would make things verbose for the user:
 they'd would have to import EntryFilterOptions,
 build it, and &lt;em&gt;then&lt;/em&gt; pass it to get_entries().
-And frankly, it's not very idiomatic.&lt;/p&gt;
+Frankly, that's not very idiomatic.&lt;/p&gt;
 &lt;p&gt;This difference between the Reader and Storage method signatures exists
 because they're used differently:&lt;/p&gt;
 &lt;ul&gt;
 &lt;li&gt;Reader methods are mostly called by external users in varied ways&lt;/li&gt;
 &lt;li&gt;Storage methods are mostly called by internal users (Reader) in a few ways&lt;/li&gt;
 &lt;/ul&gt;
-&lt;hr /&gt;
-&lt;p&gt;That's all for now.&lt;/p&gt;
-&lt;p&gt;Learned something new today? Share this article with others, it really helps! :)&lt;/p&gt;
 &lt;hr /&gt;
 &lt;section class="footnotes"&gt;
 &lt;ol&gt;

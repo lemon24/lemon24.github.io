@@ -282,51 +282,54 @@ and <a href="/same-arguments#try-it-out">that you can always change your mind la
 and why I didn't go that way.</p>
 <h3 id="why-not-a-dict">Why not a dict?<span class="headerlink"> <a href="#why-not-a-dict" title="permalink">#</a></span></h3>
 <p>Instead of defining a whole new class,
-we could've just used a dict like:</p>
+we could've used a dict:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="p">{</span><span class="s1">&#39;feed&#39;</span><span class="p">:</span> <span class="o">...</span><span class="p">,</span> <span class="s1">&#39;read&#39;</span><span class="p">:</span> <span class="o">...</span><span class="p">,</span> <span class="s1">&#39;important&#39;</span><span class="p">:</span> <span class="o">...</span><span class="p">}</span>
 </code></pre></div>
 <p>But this has a number of drawbacks:</p>
 <ul>
 <li>Dicts are not type-checked.
-<a href="https://docs.python.org/3/library/typing.html#typing.TypedDict">TypedDict</a> helps, but still doesn't prevent using the wrong keys <em>at runtime</em>.</li>
-<li>Dicts don't work well with code completion.
-Again, TypedDict can help smarter tools like PyCharm,
-but doesn't in interactive mode or in IPython.</li>
-<li>Dicts are mutable.
+<a href="https://docs.python.org/3/library/typing.html#typing.TypedDict">TypedDict</a> helps, but doesn't prevent using the wrong keys <em>at runtime</em>.</li>
+<li>Dicts break code completion.
+TypedDict may help with smarter tools like PyCharm,
+but doesn't in interactive mode or IPython.</li>
+<li>Dicts are <em>mutable</em>.
 For our use case, immutability is a plus:
 the options don't have much reason to change,
-and it would be quite unexpected,
-so it's useful to disallow it from happening.</li>
+so it's useful to disallow it.</li>
 </ul>
-<h3 id="why-not-take-kwargs">Why not take <code>**kwargs</code>?<span class="headerlink"> <a href="#why-not-take-kwargs" title="permalink">#</a></span></h3>
-<p>Since we're talking about dicts,
-why not make Reader.get_entries() etc.
-take and pass <code>**kwargs</code> directly to EntryFilterOptions?</p>
-<p>While shorter, this also breaks completion.</p>
-<p>Furthermore, it makes the code less self-documenting:
-even if you look at the Reader.get_entries() source,
-you still don't immediately know what arguments it takes.
-This doesn't matter as much for internal code,
-but for the user-facing part of the API,
-we don't mind making the code more verbose if it makes it easier to use.</p>
-<p>Also, if we later introduce another data object
-(say, to hangle pagination options),
-we'll still have to write code to split the kwargs between the two.</p>
-<h3 id="why-not-take-entryfilteroptions">Why not take EntryFilterOptions?<span class="headerlink"> <a href="#why-not-take-entryfilteroptions" title="permalink">#</a></span></h3>
-<p>Why not make reader.get_entries() take an EntryFilterOptions, then?</p>
-<p>Because that'd make things <em>too</em> verbose for the user:
+<h3 id="why-not-kwargs">Why not **kwargs?<span class="headerlink"> <a href="#why-not-kwargs" title="permalink">#</a></span></h3>
+<p>Why not pass <code>**kwargs</code> directly to EntryFilterOptions?</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Reader</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">get_entries</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</code></pre></div>
+<ul>
+<li>It also breaks code completion.</li>
+<li>It makes the code less self-documenting:
+you don't know what arguments <code>get_entries()</code> takes,
+even if you read the source.
+Presumably, they're in the docstring,
+but not everybody writes one all the time.</li>
+<li>If we introduce another options object (say, for pagination),
+we still have to write code to split the kwargs between the two.</li>
+</ul>
+<h3 id="why-not-entryfilteroptions">Why not EntryFilterOptions?<span class="headerlink"> <a href="#why-not-entryfilteroptions" title="permalink">#</a></span></h3>
+<p>Why not take an EntryFilterOptions directly, then?</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">reader</span> <span class="kn">import</span> <span class="n">make_reader</span><span class="p">,</span> <span class="n">EntryFilterOptions</span>
+<span class="n">reader</span> <span class="o">=</span> <span class="n">make_reader</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="n">options</span> <span class="o">=</span> <span class="n">EntryFilterOptions</span><span class="p">(</span><span class="n">read</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">entries</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">get_entries</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+</code></pre></div>
+<p>Because it would make things verbose for the user:
 they'd would have to import EntryFilterOptions,
 build it, and <em>then</em> pass it to get_entries().
-And frankly, it's not very idiomatic.</p>
+Frankly, that's not very idiomatic.</p>
 <p>This difference between the Reader and Storage method signatures exists
 because they're used differently:</p>
 <ul>
 <li>Reader methods are mostly called by external users in varied ways</li>
 <li>Storage methods are mostly called by internal users (Reader) in a few ways</li>
 </ul>
-<hr />
-<p>That's all for now.</p>
-<p>Learned something new today? Share this article with others, it really helps! :)</p>
 <hr />
 <section class="footnotes">
 <ol>
