@@ -55,7 +55,7 @@ window.addEventListener('resize', set_vh);
 <h1 class="heading-noindex">When your functions take the same arguments, consider using a class: counter-examples</h1>
 
 <p class="text-gray"><small>
-<span>2021-06-05</span>
+<span>2021-06-18</span>
 
 
 
@@ -76,14 +76,14 @@ window.addEventListener('resize', set_vh);
 <div class="column col-sm-12 col-md-10 col-8">
 
 <p>In <a href="/same-arguments">a previous article</a>,
-I talk about this heuristic for using classes:</p>
+I talk about this heuristic for using classes in Python:</p>
 <blockquote>
 <p><strong>If you have functions that take the same set of arguments, consider using a class.</strong></p>
 </blockquote>
 <p>Thing is, <a href="/same-arguments#the-heuristic">heuristics don't always work</a>.</p>
 <p>To make the most out of them, it helps to know what the exceptions are.</p>
 <p>So, let's look at a few real-world examples
-where functions that take the same arguments
+where functions taking the same arguments
 <strong>don't necessarily make a class</strong>.</p>
 <h2 id="counter-example-two-sets-of-arguments">Counter-example: two sets of arguments<span class="headerlink"> <a href="#counter-example-two-sets-of-arguments" title="permalink">#</a></span></h2>
 <p>Consider the following scenario:</p>
@@ -142,7 +142,7 @@ and pass a storage object around:</p>
     <span class="k">def</span> <span class="nf">get_feeds</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
 </code></pre></div>
 <p>The most important benefit of this is that
-<em>it abstracts the database from the code using it</em>,
+it <strong>abstracts the database from the code using it</strong>,
 allowing you to have more than one kind of storage.</p>
 <p>Want to store entries as files on disk?
 Write a FileStorage class that reads them from there.
@@ -162,11 +162,11 @@ or how the search is implemented.</p>
 <hr />
 <p>OK, the above looks just about right to me –
 I wouldn't really change anything else.</p>
-<p>Some arguments are still repeating, but it is <em>useful repetition:</em>
+<p>Some arguments are still repeating, but it's <em>useful repetition:</em>
 once a user learns to filter entries with one method,
 they can do it with any of them.
 Also, people use different arguments at different times;
-from their perspective, it's not repetition.</p>
+from their perspective, it's not really repetition.</p>
 <p>And anyway, we're already using a class...</p>
 <h2 id="counter-example-data-classes">Counter-example: data classes<span class="headerlink"> <a href="#counter-example-data-classes" title="permalink">#</a></span></h2>
 <p>Let's add more requirements.</p>
@@ -191,14 +191,22 @@ and wrap it in a <code>Reader</code> object that <em>has</em> a storage:</p>
         <span class="c1"># store new/modified entries</span>
         <span class="o">...</span>  
 </code></pre></div>
-<p>We also know Storage.get_entries() only gets called by Reader.get_entries();
-furthermore, the arguments are rarely used directly by Storage.get_entries(),
-most of the time they're passed along to helper functions.</p>
+<p>Now, the main caller of <code>Storage.get_entries()</code> is <code>Reader.get_entries()</code>.
+Furthermore, the filter arguments are rarely used directly by storage methods,
+most of the time they're passed to helper functions:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Storage</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">feed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="n">make_get_entries_query</span><span class="p">(</span><span class="n">feed</span><span class="o">=</span><span class="n">feed</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="n">read</span><span class="p">,</span> <span class="n">important</span><span class="o">=</span><span class="n">important</span><span class="p">)</span>
+        <span class="o">...</span>
+</code></pre></div>
+<hr />
 <p>Problem:
-When we add a new entry filter option, we have to change the reader methods,
-the storage methods, <em>and</em> the helpers.
-And we expect more options to be added in the future.</p>
-<p>So, we group the arguments in a class that contains only <em>data</em>, no behavior:</p>
+When we add a new entry filter option,
+we have to change the Reader methods,
+the Storage methods, <em>and</em> the helpers.
+And it's likely we'll do so in the future.</p>
+<p>Solution: Group the arguments in <strong>a class that contains only data</strong>.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">NamedTuple</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="k">class</span> <span class="nc">EntryFilterOptions</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
@@ -208,42 +216,44 @@ And we expect more options to be added in the future.</p>
 
 <span class="k">class</span> <span class="nc">Storage</span><span class="p">:</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">db</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_db</span> <span class="o">=</span> <span class="n">db</span>
+    <span class="o">...</span>
 
-    <span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filter_options</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span> <span class="nf">get_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filter_options</span><span class="p">):</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="n">make_get_entries_query</span><span class="p">(</span><span class="n">filter_options</span><span class="p">)</span>
+        <span class="o">...</span>
+
     <span class="k">def</span> <span class="nf">get_entry_counts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filter_options</span><span class="p">):</span> <span class="o">...</span>
     <span class="k">def</span> <span class="nf">search_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">filter_options</span><span class="p">):</span> <span class="o">...</span>
     <span class="k">def</span> <span class="nf">get_feeds</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
 </code></pre></div>
-<p>Now, regardless of how many places the options need to pass through,
-there are only two where it matters what they are:
-in the Reader method, which builds the filter options object,
-and where they get used (either a Storage method, or a helper).</p>
-<p>It's important to stress that while we used the Python class <em>syntax</em>,
-EntryFilterOptions is not a class/object in the traditional object-oriented programming sense,
-since it has no behavior (sometimes, these are known as &quot;<a href="https://en.wikipedia.org/wiki/Passive_data_structure">passive data structures</a>&quot; or &quot;plain old data&quot;).
-Ted Kaminski's <a href="https://www.tedinski.com/2018/01/23/data-objects-and-being-railroaded-into-misdesign.html">Data, objects, and how we're railroaded into poor design</a> discusses this distinction in more detail.</p>
-<section class="admonition note">
-<div class="admonition-text">
-<p>In this example, we could have also used a plain class
- (setting the attributes in __init__ etc.),
- or <a href="https://docs.python.org/3/library/dataclasses.html">dataclass</a> (to take care of the boilerplate for us).
- Why I chose a named tuple is a discussion for another article.</p>
-</div>
-</section>
+<p>Now, regardless of how much they're passed around,
+there are only two places where it matters what the options are:</p>
+<ul>
+<li>in a Reader method, which builds the EntryFilterOptions object</li>
+<li>where they get used, either a helper or a Storage method</li>
+</ul>
+<p>Note that while we're using the Python class <em>syntax</em>,
+EntryFilterOptions is <em>not a class</em>
+in the traditional object-oriented programming sense,
+since it has no behavior.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
+Sometimes, these are known as &quot;<a href="https://en.wikipedia.org/wiki/Passive_data_structure">passive data structures</a>&quot; or &quot;plain old data&quot;.</p>
 <section class="admonition tip">
 <div class="admonition-text">
-<p>I used type annotations with NamedTuple
- because it's an easy way of documenting what each options means,
- but <a href="/dataclasses#aside-named-tuples">you don't have to</a>.</p>
+<p>A plain class or a <a href="https://docs.python.org/3/library/dataclasses.html">dataclass</a> would have been a decent choice as well.
+ Why I chose a <a href="https://docs.python.org/3/library/typing.html#typing.NamedTuple">named tuple</a> is a discussion for another article.</p>
+<p>I used type hints because it's a cheap way of documenting the options,
+ but you don't have to, <a href="/dataclasses">not even for dataclasses</a>.</p>
 </div>
 </section>
-<p>TODO: example links</p>
-<p>EntryFilterOptions: https://github.com/lemon24/reader/blob/1.18/src/reader/_types.py#L290
-reader.get_entries: https://github.com/lemon24/reader/blob/1.18/src/reader/core.py#L880
-storage.get_entries: https://github.com/lemon24/reader/blob/1.18/src/reader/_storage.py#L949</p>
-<p>TODO: requests does it too</p>
+<p>The example above is a simplified version of the code in my feed reader library.
+In the real world, <a href="https://github.com/lemon24/reader/blob/1.18/src/reader/_types.py#L290">EntryFilterOptions</a> groups six options, with more on the way,
+and the <a href="https://github.com/lemon24/reader/blob/1.18/src/reader/core.py#L880">Reader</a> and <a href="https://github.com/lemon24/reader/blob/1.18/src/reader/_storage.py#L949">Storage</a> get_entries() are a bit more complicated.</p>
+<!--
+TODO: requests does it too
+
+request() constructs a Request, which gets turned into a PreparedRequest, which ends up being sent by an adapter
+
+-->
 <h3 id="why-not-a-dict">Why not a dict?<span class="headerlink"> <a href="#why-not-a-dict" title="permalink">#</a></span></h3>
 <p>Instead of defining a whole new class,
 we could've just used a dict like:</p>
@@ -288,6 +298,16 @@ because they're used differently:</p>
 <li>Reader methods are mostly called by external users in varied ways</li>
 <li>Storage methods are mostly called by internal users (Reader) in a few ways</li>
 </ul>
+<hr />
+<p>That's all for now.</p>
+<p>Learned something new today? Share this article with others, it really helps! :)</p>
+<hr />
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>Ted Kaminski discusses this distinction in more detail in 
+<a href="https://www.tedinski.com/2018/01/23/data-objects-and-being-railroaded-into-misdesign.html">Data, objects, and how we're railroaded into poor design</a>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
 
 
 
