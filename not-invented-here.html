@@ -1,0 +1,232 @@
+<!doctype html>
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+
+
+
+
+
+
+
+
+
+
+<title>why was it the right choice for my project - death and gravity</title>
+
+
+<meta name="description" content="This is the third article in a series about writing an SQL query builder in 150 lines of Python, why I wrote it, how I thought about it, and the decisions I had to make. In this article, I talk about why I decided to write my own, what alternatives I considered, why I didn&#39;t use an existing library, and how I knew it wouldn&#39;t become a maintenance burden.
+" />
+
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1 class="heading-noindex">why was it the right choice for my project</h1>
+
+<p class="text-gray"><small>
+<span>2021-06-23</span>
+
+
+
+∙ two minute read
+
+
+</small></p>
+
+
+
+
+
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<p>This is the second article <a href="/query-builder">in a series</a> about
+writing an SQL query builder in 150 lines of Python,
+<strong>why I wrote it</strong>, <strong>how I thought about it</strong>, and <strong>the decisions I had to make</strong>.</p>
+<p>Today, we'll talk about:</p>
+<ul>
+<li>why I decided to write my own</li>
+<li>what alternatives I considered</li>
+<li>why I didn't use an existing library</li>
+<li>how I knew it wouldn't become a maintenance burden</li>
+</ul>
+<hr />
+<p>Timeline:</p>
+<ul>
+<li>2019-05 - &quot;this needs some sort of query builder so badly&quot; comment</li>
+<li>2019-07 - #123 query builder cut, prototype for fun (150 lines); at this point I probably already knew about sqlbuilder.mini</li>
+<li>2019-09 - #134 indexes issue cut</li>
+<li>2019-07 - &quot;don't build the query, disable parts through boolean parameters&quot;</li>
+<li>2020-02 - summary of possibilities (including libs), decided to do nothing</li>
+<li>2020-05 - second prototype (110 lines + 30 lines); WITH, JOIN, and UNION, various other fixes</li>
+<li>2020-05 - integration; removed nested query and union support</li>
+<li>2020-10 - removed to_str()</li>
+<li>2020-11 - #134 indexes</li>
+<li>2021-04 - refactoring for article</li>
+</ul>
+<hr />
+<ul>
+<li>no dependencies (reader is library, deps get passed down to users)</li>
+<li>already high test coverage, could rely on existing higher level tests</li>
+<li>already had the initial insight</li>
+<li>didn't know it would be small<ul>
+<li>did two prototypes before deciding to start</li>
+<li>had a relatively clear list of requirements</li>
+<li>more time was spent on adding annotations, and even more on refactoring for this article</li>
+</ul>
+</li>
+<li>didn't know it would be easy to understand (again, prototypes)</li>
+<li>alternatives considered (TODO: include details from lemon24/reader#123)<ul>
+<li>do nothing</li>
+<li>disable bits of the query with booleans and hope the optimizer sorts it out</li>
+<li>sqlbuilder.mini</li>
+<li>JinjaSQL</li>
+<li>SQLAlchemy</li>
+<li>sqlpy (found it too late)</li>
+</ul>
+</li>
+<li>needed something that works with plain strings as well</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+<hr>
+<p>This is part of a series:</p>
+
+<ul>
+
+
+<li>
+    <a href="/query-builder">SQL query builder in 150 lines of Python</a>
+
+
+
+<li>
+    <a href="/query-builder-why">Why use an SQL query builder in the first place?</a>
+
+
+</ul>
+
+
+
+
+
+
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=not-invented-here"
+    method="post"
+    id="embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+
+
+
+</footer>
+
+
+</div>
