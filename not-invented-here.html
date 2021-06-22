@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ two minute read
+∙ three minute read
 
 
 </small></p>
@@ -88,57 +88,39 @@ writing an SQL query builder in 150 lines of Python,
 <li>why I didn't use an existing library</li>
 <li>how I knew it wouldn't become a maintenance burden</li>
 </ul>
-<hr />
-<blockquote>
-<p>Let's say you have a <a href="https://github.com/lemon24/reader">feed reader library</a>;</p>
-</blockquote>
-<p>one of its main features is retrieving and storing <a href="https://en.wikipedia.org/wiki/Web_feed">web feeds</a>
-(Atom, RSS, and so on).</p>
-<p>Timeline:</p>
-<ul>
-<li>2019-05 - sort by random issue</li>
-<li>2019-07 - search issue</li>
-<li>2019-05 - &quot;this needs some sort of query builder so badly&quot; comment</li>
-<li>2019-07 - #123 query builder cut, prototype for fun (150 lines); at this point I probably already knew about sqlbuilder.mini</li>
-<li>2019-09 - #134 indexes issue cut</li>
-<li>2019-07 - &quot;don't build the query, disable parts through boolean parameters&quot;</li>
-<li>2020-02 - summary of possibilities (including libs), decided to do nothing</li>
-<li>2020-03 - search implemented</li>
-<li>2020-05 - sort by random implemented</li>
-<li>2020-05 - second prototype (110 lines + 30 lines); WITH, JOIN, and UNION, various other fixes</li>
-<li>2020-05 - integration; removed nested query and union support</li>
-<li>2020-10 - removed to_str()</li>
-<li>2020-11 - #134 indexes</li>
-<li>2021-04 - refactoring for article</li>
-</ul>
-<hr />
-<ul>
-<li>no dependencies (reader is library, deps get passed down to users)</li>
-<li>already high test coverage, could rely on existing higher level tests</li>
-<li>already had the initial insight</li>
-<li>didn't know it would be small<ul>
-<li>did two prototypes before deciding to start</li>
-<li>had a relatively clear list of requirements</li>
-<li>more time was spent on adding annotations, and even more on refactoring for this article</li>
-</ul>
-</li>
-<li>didn't know it would be easy to understand (again, prototypes)</li>
-<li>alternatives considered (TODO: include details from lemon24/reader#123)<ul>
-<li>do nothing</li>
-<li>disable bits of the query with booleans and hope the optimizer sorts it out</li>
-<li>sqlbuilder.mini</li>
-<li>JinjaSQL</li>
-<li>SQLAlchemy</li>
-<li>sqlpy (found it too late)</li>
-</ul>
-</li>
-<li>needed something that works with plain strings as well</li>
-</ul>
-<hr />
-<ul>
-<li><p>background: reader, timeline, high test coverage, internal only</p>
-</li>
-<li><p>requirements</p>
+<h2 id="background-and-a-brief-timeline">background and a brief timeline<span class="headerlink"> <a href="#background-and-a-brief-timeline" title="permalink">#</a></span></h2>
+<p><em><a href="https://github.com/lemon24/reader">reader</a></em> is a Python feed reader library –
+it exposes a high-level API for building feed readers,
+allowing users to retrieve, store, and manage Atom, RSS, and JSON feeds
+without having to deal with feed-related details.</p>
+<p>One of the main features is filtering articles in a number of ways:
+by article metadata,
+by user-set metadata (<em>read</em>, <em>important</em>, feeds tags),
+by full-text search matches;
+all these with various sort orders, and pagination support.</p>
+<p>In May 2019,
+less than half of the facets were implemented,
+and <a href="/query-builder-why#separation-of-concerns">the function</a> doing it was 100 lines long;
+at this point there's already <a href="https://github.com/lemon24/reader/blob/7b47c88bb4e1388e7c5af1c269fb4a78e227120a/src/reader/_storage.py#L621">a comment</a> saying
+&quot;this needs some sort of query builder so badly&quot;.</p>
+<p>So I opened an issue for it,
+did some research and a query builder prototype for fun
+(that is, with no intention of using it, just to gauge how easy it is to do),
+and shelved it for half a year.</p>
+<p>At the beginning of 2020,
+I did a more serious survey of possible solutions (including lots of libraries),
+came up with a list requirements (which by now covered all the features mentioned above),
+and ... decided to wait until the features would actually be implemented.</p>
+<p>By May 2020, the function building the query was 150 lines,
+with another half of that duplicated for search.
+Due to the size and complexity, I ended up abandoning an attempt to use indexes,
+because trying various things simply took too long.</p>
+<p>So I did a second, more detailed prototype,
+aiming to support all the current use cases and a few future ones.
+I integrated it, and that was that.
+After doing this, the code went from 1400 to 1300 lines (excluding the 136 lines of the query builder itself).
+I'd call this a win, since for the price of 36 lines I was able to reuse lots of logic, and enable future reuse and performance improvements (which did happen since).</p>
+<h2 id="requirements">requirements<span class="headerlink"> <a href="#requirements" title="permalink">#</a></span></h2>
 <ul>
 <li>no deps?</li>
 <li>easy to maintain, easy to understand, some extensibilty</li>
@@ -151,27 +133,22 @@ writing an SQL query builder in 150 lines of Python,
 </li>
 <li>work with strings as well (only wanted to convert some / parts of the queries)</li>
 </ul>
-</li>
-<li><p>why i decided to write my own</p>
+<h2 id="why-i-decided-to-write-my-own">why i decided to write my own<span class="headerlink"> <a href="#why-i-decided-to-write-my-own" title="permalink">#</a></span></h2>
 <ul>
+<li>did survey of libraries, didn't like them (details below)</li>
+<li>did two prototypes before deciding to start (had an estimate of size, complexity, knew I could add more features); crucial to know it'd be easy to maintain, easy to undertand</li>
 <li>already high test coverage, could rely on existing higher level tests</li>
 <li>already had the initial insight</li>
-<li>did two prototypes before deciding to start (had an estimate of size, complexity, knew I could add more features); crucial to know it'd be easy to maintain, easy to undertand</li>
-<li>did survey of libraries, didn't like them (details below)</li>
 </ul>
-</li>
-<li><p>alternatives</p>
+<h2 id="alternatives">alternatives<span class="headerlink"> <a href="#alternatives" title="permalink">#</a></span></h2>
 <ul>
 <li>from bullets above / #123</li>
 <li>if this wasn't a library, or if i had time / needed to implement multi-db support, what would I use? SQLAlchemy, all the time! https://reader.readthedocs.io/en/latest/dev.html#why-use-sqlite-and-not-sqlalchemy</li>
 </ul>
-</li>
-<li><p>lessons learned</p>
+<h2 id="lessons-learned">lessons learned<span class="headerlink"> <a href="#lessons-learned" title="permalink">#</a></span></h2>
 <ul>
 <li>doing nothing is sometimes the best option; wait until there's more info</li>
 <li>prototyping!</li>
-</ul>
-</li>
 </ul>
 
 
