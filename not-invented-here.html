@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ four minute read
+∙ five minute read
 
 
 </small></p>
@@ -88,57 +88,103 @@ writing an SQL query builder in 150 lines of Python,
 <li>why I didn't use an existing library</li>
 <li>how I knew it wouldn't become a maintenance burden</li>
 </ul>
-<h2 id="background">background<span class="headerlink"> <a href="#background" title="permalink">#</a></span></h2>
+<!-- TODO: this is in chronological order, list of libraries at the end -->
+<h2 id="background">Background<span class="headerlink"> <a href="#background" title="permalink">#</a></span></h2>
 <p><em><a href="https://github.com/lemon24/reader">reader</a></em> is a Python feed reader library –
-it exposes a high-level API for building feed readers,
-allowing users to retrieve, store, and manage Atom, RSS, and JSON feeds
+it provides a high-level API for building feed readers,
+allowing users to retrieve, store, and manage <a href="https://en.wikipedia.org/wiki/Web_feed">web feeds</a>
 without having to deal with feed-related details.</p>
-<p>One of the main features is filtering articles in a number of ways:
+<p>One of the main features is filtering articles:
 by article metadata,
-by user-set metadata (<em>read</em>, <em>important</em>, feeds tags),
-by full-text search matches;
-all these with various sort orders, and pagination support.</p>
+by user-set metadata (read, important, feeds tags),
+and by full-text search,
+sorted in different ways,
+and with cursor pagination.</p>
 <p>In May 2019,
-less than half of the features above were implemented,
-<a href="/query-builder-why#separation-of-concerns">the function</a> building the query was 100 lines long,
-and there already was <a href="https://github.com/lemon24/reader/blob/7b47c88bb4e1388e7c5af1c269fb4a78e227120a/src/reader/_storage.py#L621">a comment</a> saying
-&quot;this needs some sort of query builder so badly&quot;.</p>
-<h2 id="the-first-prototype">the first prototype<span class="headerlink"> <a href="#the-first-prototype" title="permalink">#</a></span></h2>
-<p>So I opened an issue, and did some research.</p>
-<p>At some point I must have stumbled upon <a href="https://sqlbuilder.readthedocs.io/en/latest/#short-manual-for-sqlbuilder-mini">sqlbuilder.mini</a>,
-which was built around an interesting insight:
-you can represent a query as a relatively simple datastructure.</p>
-<p>It used a hierarchical list of SQL strings, like so:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">sql</span> <span class="o">=</span> <span class="p">[</span>
-<span class="gp">... </span>    <span class="s1">&#39;SELECT&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;author.first_name&#39;</span><span class="p">],</span>
-<span class="gp">... </span>    <span class="s1">&#39;FROM&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;author&#39;</span><span class="p">],</span>
-<span class="gp">... </span>    <span class="s1">&#39;WHERE&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;b.status&#39;</span><span class="p">,</span> <span class="s1">&#39;==&#39;</span><span class="p">,</span> <span class="n">P</span><span class="p">(</span><span class="s1">&#39;new&#39;</span><span class="p">)],</span>
-<span class="gp">... </span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># modify the query</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">sql</span><span class="p">[</span><span class="n">sql</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s1">&#39;SELECT&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;author.age&#39;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">compile</span><span class="p">(</span><span class="n">sql</span><span class="p">)</span>
-<span class="go">(&#39;SELECT author.first_name, author.age FROM author WHERE b.status == %s&#39;, [&#39;new&#39;])</span>
+with less than half of the above implemented,
+the function building the SQL query was over 100 lines,
+and I had already added <a href="https://github.com/lemon24/reader/blob/7b47c88bb4e1388e7c5af1c269fb4a78e227120a/src/reader/_storage.py#L621">this comment</a>:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">612</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>        <span class="c1"># TODO: This needs some sort of query builder so badly.</span>
 </code></pre></div>
-<p>I didn't really like this way of modifying queries, because it was a bit too verbose.
-But it should be possible to wrap this in a class that can express it
-in something more like what SQLAlchemy etc. would do, <code>sql.SELECT('author.age')</code>, right?</p>
-<p>So I took this query builder prototype for fun
-– with no intention of using it, just to gauge how easy it is to do;
-the result was about 80 lines.</p>
-<p>I then proceeded to shelve it for half a year.</p>
-<h2 id="requirements">requirements<span class="headerlink"> <a href="#requirements" title="permalink">#</a></span></h2>
-<p>Whatever I used, it had to support the following SQL features:</p>
+</td></tr></table><h2 id="the-first-prototype">The first prototype<span class="headerlink"> <a href="#the-first-prototype" title="permalink">#</a></span></h2>
+<p>So I opened <a href="https://github.com/lemon24/reader/issues/123">an issue</a>, and did some research.</p>
+<p>At some point I stumbled upon <a href="https://sqlbuilder.readthedocs.io/en/latest/#short-manual-for-sqlbuilder-mini">sqlbuilder.mini</a>,
+which was built around an interesting insight –
+<em>queries can be represented as plain datastructures</em>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">sql</span> <span class="o">=</span> <span class="p">[</span>
+<span class="gp">... </span>    <span class="s1">&#39;SELECT&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;first_name&#39;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="s1">&#39;FROM&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;author&#39;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="s1">&#39;WHERE&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;status&#39;</span><span class="p">,</span> <span class="s1">&#39;==&#39;</span><span class="p">,</span> <span class="n">P</span><span class="p">(</span><span class="s1">&#39;new&#39;</span><span class="p">)],</span>
+<span class="gp">... </span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">compile</span><span class="p">(</span><span class="n">sql</span><span class="p">)</span>
+<span class="go">(&#39;SELECT first_name FROM author WHERE status == %s&#39;, [&#39;new&#39;])</span>
+</code></pre></div>
+<p>You can then modify the query directly:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">sql</span><span class="p">[</span><span class="n">sql</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s1">&#39;SELECT&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;last_name&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">compile</span><span class="p">(</span><span class="n">sql</span><span class="p">)</span>
+<span class="go">(&#39;SELECT first_name, last_name FROM author WHERE status == %s&#39;, [&#39;new&#39;])</span>
+</code></pre></div>
+<p>Or via a wrapper that simplifies navigation:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">sql</span> <span class="o">=</span> <span class="n">Q</span><span class="p">(</span><span class="n">sql</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sql</span><span class="o">.</span><span class="n">append_child</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">[</span><span class="s1">&#39;SELECT&#39;</span><span class="p">],</span>  <span class="c1"># path</span>
+<span class="gp">... </span>    <span class="p">[</span><span class="s1">&#39;age&#39;</span><span class="p">]</span>
+<span class="gp">... </span><span class="p">)</span>  <span class="c1"># returns self to allow method chaining</span>
+<span class="go">&lt;sqlbuilder.mini.Q object&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">compile</span><span class="p">(</span><span class="n">sql</span><span class="p">)</span>
+<span class="go">(&#39;SELECT first_name, last_name, age FROM author WHERE status == %s&#39;, [&#39;new&#39;])</span>
+</code></pre></div>
+<!--
+
+sql = [
+    'SELECT', ['first_name'],
+    'FROM', ['author'],
+    'WHERE', ['status', '==', P('new')],
+]
+compile(sql)
+sql[sql.index('SELECT') + 1].append('last_name')
+compile(sql)
+sql = Q(sql)
+sql.append_child(
+    ['SELECT'],  # path
+    ['age']
+)  # returns self to allow method chaining
+compile(sql)
+
+-->
+<p>I really liked how simple and flexible this is,
+and the choice of not dealing with SQL correctness or dialects –
+a middle ground between build-your-own-string
+and &quot;proper&quot; query builders.
+On the other hand,
+modifying things seemed too verbose (even with the wrapper),
+and the output SQL didn't look very readable either.</p>
+<p>Surely, it would be possible to take this idea
+and make it look like <code>sql.SELECT('age')</code>, right?</p>
+<p>So I made a prototype,
+with no real intention of using it, just to see how easy it is to do.
+The result was about 80 lines, and I was quite happy with it;
+my thoughts at the time:</p>
+<blockquote>
+<p>The end result looks nice, but using it would add ~150 lines of code (that need to be tested), and it's less useful for simpler queries.</p>
+<p>Also, it looks nice <em>now</em>, when I just wrote it; 6 months from now it may be hard to understand.</p>
+</blockquote>
+<p>Afraid that I'm <em>too</em> happy with it, and with my curiosity satisfied,
+I proceeded to do just that: wait six months.</p>
+<h2 id="requirements">Requirements<span class="headerlink"> <a href="#requirements" title="permalink">#</a></span></h2>
+<p>Whatever I ended up using, it had to support the following SQL features:</p>
 <ul>
-<li>SELECTs with conditional WHERE, ORDER BY, JOIN etc.</li>
+<li>SELECTs with conditional WHERE, ORDER BY, JOIN etc.
+(<a href="/query-builder-why#separation-of-concerns">example</a>)</li>
 <li><a href="/query-builder-why#intermission-scrolling-window-queries">scrolling window queries</a></li>
 <li>common table expressions (WITH)</li>
 <li>arbitrary SQL (so I don't have to use the query builder for everything)</li>
 </ul>
 <p>Because <em>reader</em> is a library,
-the number of (transitive) dependencies should be as small as possible,
+I wanted to keep the  number of (transitive) dependencies as small as possible,
 since any extra dependency gets passed down to the users.</p>
 <p>Also, the solution should be easy to understand and maintain,
-and it should be possible to extend it to support additional SQL features, if needed.</p>
+and it should be possible to support additional SQL features, if needed.</p>
 <p>At this point, I wasn't really sold on abstraction layer like SQLAlchemy Core.
 Initially, raw SQL allowed me to move quicker, and I only needed to support SQLite anyway.
 Now, SQLAlchemy core would be useful, but I still only need SQLite,
@@ -164,24 +210,60 @@ with another half of that duplicated for search.
 Due to the size and complexity, I ended up abandoning an attempt to use indexes,
 because trying various things simply took too long.</p>
 <p>So I did a second, more detailed prototype,
-aiming to support all the current use cases and a few future ones.
-I integrated it, and that was that.
-After doing this, the code went from 1400 to 1300 lines (excluding the 136 lines of the query builder itself).
-I'd call this a win, since for the price of 36 lines I was able to reuse lots of logic, and enable future reuse and performance improvements (which did happen since).</p>
+aiming to support all the current use cases and a few future ones.</p>
+<p>- OR -</p>
 <p>I did a more detailed prototype,
-with all the features I'd need and some I didn't,
+with all the features I'd need and some I didn't (nested queries etc.),
 using the exact queries I needed as tests.
 This remained at around 110 lines.</p>
+<p>I integrated it, and that was that.
+After doing this, the code went from 1400 to 1300 lines (excluding the 136 lines of the query builder itself).
+I'd call this a win, since for the price of 36 lines I was able to reuse lots of logic, and enable future reuse and performance improvements (which did happen since).</p>
 <ul>
 <li>none of the existing libraries seemed appropriate</li>
 <li>two prototypes offered an estimate of size, complexity, knew I could add more features; crucial to know it'd be easy to maintain, easy to undertand</li>
 <li>already high test coverage, could rely on existing higher level tests</li>
 </ul>
 <h2 id="alternatives">alternatives<span class="headerlink"> <a href="#alternatives" title="permalink">#</a></span></h2>
+<h3 id="do-nothing">do nothing<span class="headerlink"> <a href="#do-nothing" title="permalink">#</a></span></h3>
+<p>do nothing</p>
+<h3 id="disable-bits-of-the-query-with-booleans-and-hope-the-optimizer-sorts-it-out">disable bits of the query with booleans and hope the optimizer sorts it out<span class="headerlink"> <a href="#disable-bits-of-the-query-with-booleans-and-hope-the-optimizer-sorts-it-out" title="permalink">#</a></span></h3>
+<p>Don't &quot;build&quot; the query; always shove everything into it and disable various bits through boolean parameters, and let the optimizer sort it out.</p>
+<p>Cons:</p>
 <ul>
-<li>from bullets above / #123</li>
-<li>if this wasn't a library, or if i had time / needed to implement multi-db support, what would I use? SQLAlchemy, all the time!</li>
+<li>The optimizer may not be able to optimize everything away, especially if the query is optimized before the parameters are passed in (so it doesn't get a change to remove stuff).</li>
+<li>Some things we may not be able to turn off at all.</li>
+<li>Do we still need to provide values for parameters used in the disabled bits? Probably yes.</li>
+<li>Passing more parameters may be more expensive. Would it be more expensive than the string building, though?</li>
 </ul>
+<p>lots of cons, not doing it</p>
+<h3 id="sqlalchemy-core-peewee-query-builder">SQLAlchemy Core, Peewee query builder<span class="headerlink"> <a href="#sqlalchemy-core-peewee-query-builder" title="permalink">#</a></span></h3>
+<p>https://docs.sqlalchemy.org/en/13/orm/query.html</p>
+<ul>
+<li>may be overkill</li>
+<li>if we are to use an existing query builder, this is likely it (maintained, stable, tested, used, extensible, portable)</li>
+<li>sqlakeyset for scrolling window https://github.com/djrobstep/sqlakeyset</li>
+</ul>
+<p>http://docs.peewee-orm.com/en/latest/peewee/query_builder.html</p>
+<ul>
+<li>if this wasn't a library, or if i had time / needed to implement multi-db support, what would I use? one of those, all the time!</li>
+</ul>
+<h3 id="sqlbuilder-pypika">sqlbuilder, pypika<span class="headerlink"> <a href="#sqlbuilder-pypika" title="permalink">#</a></span></h3>
+<p>https://sqlbuilder.readthedocs.io/en/latest/</p>
+<p>https://github.com/kayak/pypika looks like it follows the same philosophy as my prototype, but it's way more comprehensive; and it did exist when I first worked on this</p>
+<h3 id="sqlbuilder-mini">sqlbuilder.mini<span class="headerlink"> <a href="#sqlbuilder-mini" title="permalink">#</a></span></h3>
+<p><a href="https://sqlbuilder.readthedocs.io/en/latest/#short-manual-for-sqlbuilder-mini">sqlbuilder.mini</a></p>
+<ul>
+<li>seems very extensible while preserving some of the readability</li>
+</ul>
+<h3 id="jinjasql-sqlpy">JinjaSQL, sqlpy<span class="headerlink"> <a href="#jinjasql-sqlpy" title="permalink">#</a></span></h3>
+<p>https://github.com/sripathikrishnan/jinjasql</p>
+<p>JinjaSQL</p>
+<ul>
+<li>seems like overkill</li>
+<li>I'm not convinced it improves readability</li>
+</ul>
+<p>https://github.com/9fin/sqlpy looks like a novel way of building queries</p>
 <h2 id="lessons-learned">lessons learned<span class="headerlink"> <a href="#lessons-learned" title="permalink">#</a></span></h2>
 <ul>
 <li>doing nothing is sometimes the best option; wait until there's more info</li>
