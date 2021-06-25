@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ five minute read
+∙ six minute read
 
 
 </small></p>
@@ -88,13 +88,17 @@ writing an SQL query builder in 150 lines of Python,
 <li>why I didn't use an existing library</li>
 <li>how I knew it wouldn't become a maintenance burden</li>
 </ul>
-<!-- TODO: this is in chronological order, list of libraries at the end -->
+<p>This goes through the whole story in rough chronological order;
+if you're only interested in the list of libraries I looked at,
+you can find it <a href="#alternatives">at the end</a>.</p>
 <h2 id="background">Background<span class="headerlink"> <a href="#background" title="permalink">#</a></span></h2>
 <p><em><a href="https://github.com/lemon24/reader">reader</a></em> is a Python feed reader library –
 it provides a high-level API for building feed readers,
 allowing users to retrieve, store, and manage <a href="https://en.wikipedia.org/wiki/Web_feed">web feeds</a>
 without having to deal with feed-related details.</p>
-<p>One of the main features is filtering articles:
+<p>It's mostly a passion and learning project,
+so the time I can spend on it is limited.</p>
+<p>One of <em>reader's</em> main features is filtering articles:
 by article metadata,
 by user-set metadata (read, important, feeds tags),
 and by full-text search,
@@ -171,60 +175,83 @@ my thoughts at the time:</p>
 </blockquote>
 <p>Afraid that I'm <em>too</em> happy with it, and with my curiosity satisfied,
 I proceeded to do just that: wait six months.</p>
-<h2 id="requirements">Requirements<span class="headerlink"> <a href="#requirements" title="permalink">#</a></span></h2>
+<h2 id="requirements-and-existing-libraries">Requirements, and existing libraries<span class="headerlink"> <a href="#requirements-and-existing-libraries" title="permalink">#</a></span></h2>
+<p>My main concern with making my own was that over time,
+with various additions and fixes,
+the effort spent on it would be <em>greater</em> than
+getting an existing library to do what I needed.</p>
+<p>To deal with it, I did two things.</p>
+<hr />
+<p>First, I came up with detailed requirements.</p>
 <p>Whatever I ended up using, it had to support the following SQL features:</p>
 <ul>
-<li>SELECTs with conditional WHERE, ORDER BY, JOIN etc.
+<li>SELECT with conditional WHERE, ORDER BY, JOIN etc.
 (<a href="/query-builder-why#separation-of-concerns">example</a>)</li>
 <li><a href="/query-builder-why#intermission-scrolling-window-queries">scrolling window queries</a></li>
 <li>common table expressions (WITH)</li>
 <li>arbitrary SQL (so I don't have to use the query builder for everything)</li>
 </ul>
 <p>Because <em>reader</em> is a library,
-I wanted to keep the  number of (transitive) dependencies as small as possible,
+I wanted to keep the number of (transitive) dependencies as small as possible,
 since any extra dependency gets passed down to the users.</p>
 <p>Also, the solution should be easy to understand and maintain,
 and it should be possible to support additional SQL features, if needed.</p>
-<p>At this point, I wasn't really sold on abstraction layer like SQLAlchemy Core.
-Initially, raw SQL allowed me to move quicker, and I only needed to support SQLite anyway.
-Now, SQLAlchemy core would be useful, but I still only need SQLite,
-and don't really have time to make sure other datases work.
-(It should be possible to switch to it relatively easily,
-since all storage stuff happens through a DAO-style interface.)</p>
-<h2 id="other-libraries">other libraries<span class="headerlink"> <a href="#other-libraries" title="permalink">#</a></span></h2>
-<p>Because I was worried the temptation
-to actually use my own query builder would be too great,
-and would spiral into a project of its own with a huge maintenance burden,
-I came up with the requirements above,
-and did a more serious survey of existing libraries.</p>
-<p>In the end, I didn't really like the existing libraries:</p>
+<p>Both to keep things simple and due to <a href="https://reader.readthedocs.io/en/latest/dev.html#why-use-sqlite-and-not-sqlalchemy">historical reasons</a>,
+I didn't want to switch to an abstraction layer like SQLAlchemy Core
+<em>just</em> for query building –
+I needed (and still need) only SQLite support,
+and already had code to deal with stuff like migrations.</p>
+<hr />
+<p>Second, I did a slightly more serious survey of existing libraries.</p>
+<p>I didn't feel any of the ones I looked at was ideal,
+for at least one of the following reasons.</p>
 <ul>
-<li>they either came with a full-blown ORM,</li>
-<li>either were an SQL builder with too many features,</li>
-<li>either dind't really help with readability.</li>
+<li>They came with a full abstraction layer.
+This isn't bad in itself,
+but meant I had to switch <em>everything</em>, eventually –
+using a mix would make things worse long-term.</li>
+<li>They had too many features.
+Usually this is good, but it means there's more of everything:
+more features, more documentation to go through,
+more concepts to keep in your head,
+more things contributors need to know/learn.</li>
+<li>They didn't make things more readable or
+more <a href="/query-builder-why#composition-and-reuse">composable</a>.</li>
 </ul>
-<p>So I decided to wait until the features would actually be implemented.</p>
-<h2 id="deciding-to-write-my-own-the-second-prototype">deciding to write my own (the second prototype)<span class="headerlink"> <a href="#deciding-to-write-my-own-the-second-prototype" title="permalink">#</a></span></h2>
-<p>By May 2020, the function building the query was 150 lines,
-with another half of that duplicated for search.
-Due to the size and complexity, I ended up abandoning an attempt to use indexes,
-because trying various things simply took too long.</p>
-<p>So I did a second, more detailed prototype,
-aiming to support all the current use cases and a few future ones.</p>
-<p>- OR -</p>
-<p>I did a more detailed prototype,
-with all the features I'd need and some I didn't (nested queries etc.),
-using the exact queries I needed as tests.
-This remained at around 110 lines.</p>
-<p>I integrated it, and that was that.
-After doing this, the code went from 1400 to 1300 lines (excluding the 136 lines of the query builder itself).
-I'd call this a win, since for the price of 36 lines I was able to reuse lots of logic, and enable future reuse and performance improvements (which did happen since).</p>
+<hr />
+<p>So I chose to do nothing, and wait until more features are implemented.</p>
+<h2 id="the-second-prototype">The second prototype<span class="headerlink"> <a href="#the-second-prototype" title="permalink">#</a></span></h2>
+<p>By May 2020, most of the features were implemented.
+The function building the query was 150 lines,
+with part that duplicated for the search query.
+At some point, I tried to optimize the query by using indexes,
+but gave up because trying various things simply took too long.</p>
+<p>So, <em>a full year later</em>,
+I made the prototype support all the required features
+and a few extra (UNION, nested queries),
+and tried it out on the full real-world queries.</p>
+<p>It didn't take all that long,
+and the whole thing remained around 100 lines.</p>
+<h2 id="deciding-to-use-my-own">Deciding to use my own<span class="headerlink"> <a href="#deciding-to-use-my-own" title="permalink">#</a></span></h2>
+<p>At this point, most of the work was already done, and integrating it took less than an hour.</p>
+<p>Excluding the 136 lines of the builder itself with scrolling window query support,
+the code went from 1400 to 1300 lines.
+I took that as a win, since for the price of 36 lines I was able to reuse the filtering logic.
+(Now, one year later, it enabled a lot more reuse, without growing significantly.)</p>
+<p>I ended up keeping it, because:</p>
 <ul>
-<li>none of the existing libraries seemed appropriate</li>
-<li>two prototypes offered an estimate of size, complexity, knew I could add more features; crucial to know it'd be easy to maintain, easy to undertand</li>
-<li>already high test coverage, could rely on existing higher level tests</li>
+<li>Using an existing library would take too much effort.
+(I'll reconsider when the requirements change, though.)</li>
+<li>It is tiny, which makes it relatively easy to understand and modify.
+The two prototypes made me quite confident it's likely to stay that way.
+Because it's only used internally,
+I can leave out a lot of nice things that aren't actually needed.</li>
+<li>It has 0 dependencies. That's even better than 1.</li>
+<li><em>reader</em> already great test coverage,
+so very little additional testing was required.</li>
 </ul>
 <h2 id="alternatives">alternatives<span class="headerlink"> <a href="#alternatives" title="permalink">#</a></span></h2>
+<p>TBD; non-exhaustive</p>
 <h3 id="do-nothing">do nothing<span class="headerlink"> <a href="#do-nothing" title="permalink">#</a></span></h3>
 <p>do nothing</p>
 <h3 id="disable-bits-of-the-query-with-booleans-and-hope-the-optimizer-sorts-it-out">disable bits of the query with booleans and hope the optimizer sorts it out<span class="headerlink"> <a href="#disable-bits-of-the-query-with-booleans-and-hope-the-optimizer-sorts-it-out" title="permalink">#</a></span></h3>
@@ -267,7 +294,7 @@ I'd call this a win, since for the price of 36 lines I was able to reuse lots of
 <h2 id="lessons-learned">lessons learned<span class="headerlink"> <a href="#lessons-learned" title="permalink">#</a></span></h2>
 <ul>
 <li>doing nothing is sometimes the best option; wait until there's more info</li>
-<li>prototyping!</li>
+<li>research, requirements, prototyping!</li>
 </ul>
 
 
