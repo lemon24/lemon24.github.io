@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ six minute read
+∙ seven minute read
 
 
 </small></p>
@@ -183,11 +183,12 @@ getting an existing library to do what I needed.</p>
 <p>To deal with it, I did two things.</p>
 <hr />
 <p>First, I came up with detailed requirements.</p>
-<p>Whatever I ended up using, it had to support the following SQL features:</p>
+<p>Whatever I ended up using, it had to support the following features:</p>
 <ul>
 <li>SELECT with conditional WHERE, ORDER BY, JOIN etc.
 (<a href="/query-builder-why#separation-of-concerns">example</a>)</li>
-<li><a href="/query-builder-why#intermission-scrolling-window-queries">scrolling window queries</a></li>
+<li><a href="/query-builder-why#intermission-scrolling-window-queries">scrolling window queries</a>
+(should be possible to implement)</li>
 <li>common table expressions (WITH)</li>
 <li>arbitrary SQL (so I don't have to use the query builder for everything)</li>
 <li>the order in which you add clauses shouldn't matter</li>
@@ -268,28 +269,54 @@ some I simply missed.</p>
 and <em>active</em>, where you explore options,
 but don't commit to anything just yet.</p>
 <p>I ended up doing both, to a point.</p>
-<h3 id="disable-bits-of-the-query-with-booleans-and-hope-the-optimizer-sorts-it-out">disable bits of the query with booleans and hope the optimizer sorts it out<span class="headerlink"> <a href="#disable-bits-of-the-query-with-booleans-and-hope-the-optimizer-sorts-it-out" title="permalink">#</a></span></h3>
-<p>TBD</p>
-<p>Don't &quot;build&quot; the query; always shove everything into it and disable various bits through boolean parameters, and let the optimizer sort it out.</p>
-<p>Cons:</p>
+<h3 id="disable-parts-of-the-query">Disable parts of the query<span class="headerlink"> <a href="#disable-parts-of-the-query" title="permalink">#</a></span></h3>
+<p>An interesting (but quickly abandoned) idea was to not build queries;
+instead, have just one query,
+and disable parts of it with boolean or optional parameters,
+and hope the <a href="https://www.sqlite.org/queryplanner.html">query planner</a> optimizes it:</p>
+<div class="highlight code-container"><pre class="code" data-lang="SQL"><span></span><code><span class="k">SELECT</span> <span class="p">...</span>
+<span class="k">FROM</span> <span class="n">entries</span>
+<span class="k">WHERE</span>
+    <span class="p">(:</span><span class="k">read</span> <span class="k">IS</span> <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">AND</span> <span class="n">entries</span><span class="p">.</span><span class="k">read</span> <span class="o">=</span> <span class="p">:</span><span class="k">read</span><span class="p">)</span> <span class="k">AND</span>
+    <span class="p">...</span>  <span class="c1">-- 7 more expressions like this</span>
+</code></pre></div>
+<p>There are two huge issues with this:</p>
 <ul>
-<li>The optimizer may not be able to optimize everything away, especially if the query is optimized before the parameters are passed in (so it doesn't get a change to remove stuff).</li>
-<li>Some things we may not be able to turn off at all.</li>
-<li>Do we still need to provide values for parameters used in the disabled bits? Probably yes.</li>
-<li>Passing more parameters may be more expensive. Would it be more expensive than the string building, though?</li>
+<li>I'm not sure <em>any</em> optimizer is that smart
+(also, the query might be optimized before the parameters are passed in).
+Even if it were, I'm not smart enough to design indexes for a query like this.</li>
+<li>It doesn't seem possible to do it for JOIN, different ORDER BY terms,
+or even WHERE conditions dealing an arbitrary number of parameters
+(e.g. for tags).</li>
 </ul>
-<p>lots of cons, not doing it</p>
+<p>Even if all of these were possible, the result would be impossible to understand.</p>
 <h3 id="sqlalchemy-core-peewee-query-builder">SQLAlchemy Core, Peewee query builder<span class="headerlink"> <a href="#sqlalchemy-core-peewee-query-builder" title="permalink">#</a></span></h3>
-<p>https://docs.sqlalchemy.org/en/13/orm/query.html</p>
-<ul>
-<li>may be overkill</li>
-<li>if we are to use an existing query builder, this is likely it (maintained, stable, tested, used, extensible, portable)</li>
-<li>sqlakeyset for scrolling window https://github.com/djrobstep/sqlakeyset</li>
-</ul>
-<p>http://docs.peewee-orm.com/en/latest/peewee/query_builder.html</p>
-<ul>
-<li>if this wasn't a library, or if i had time / needed to implement multi-db support, what would I use? one of those, all the time!</li>
-</ul>
+<p><a href="https://www.sqlalchemy.org/">SQLAlchemy</a> is <em>the</em> database toolkit for Python.</p>
+<p>With over 15 years of history,
+and out of the box support for all the common databases
+(plus 20 others externally),
+it rightfully deserves this title.
+Hell, there's even an Architecture of Open Source Applications
+<a href="http://aosabook.org/en/sqlalchemy.html">chapter</a> about it.</p>
+<p>It can be used without the ORM through <a href="https://docs.sqlalchemy.org/en/14/orm/query.html">SQLAlchemy Core</a>.</p>
+<p>A benefit of being around for so long is that there are <em>other</em> projects
+that build upon yours, like <a href="https://github.com/djrobstep/sqlakeyset">sqlakeyset</a> for scrolling window queries,
+and <a href="https://alembic.sqlalchemy.org/">Alembic</a> for migrations (also from the author of SQLAlchemy).</p>
+<hr />
+<p><a href="http://docs.peewee-orm.com/">Peewee</a> is a &quot;simple and small&quot; ORM, by design.</p>
+<p>It's almost 10 years old, and again supports most of the common databases.</p>
+<p>Like SQLAlchemy, it can be used without the ORM.
+Like SQLBuilder and PyPika below,
+<a href="http://docs.peewee-orm.com/en/latest/peewee/query_builder.html">it can even be used</a> without the connection management stuff
+(you can just get some SQL text).</p>
+<p>Peewee also has a separate optional package, Playhouse,
+which provides various extensions,
+from migration helpers to database-specific functionality
+(there's lots of SQLite stuff in there).</p>
+<hr />
+<p>In the end, both of these seemed too complicated for what I needed,
+but if I ever add support for multiple databases,
+I'll likely use one of them.</p>
 <h3 id="sqlbuilder-pypika">sqlbuilder, pypika<span class="headerlink"> <a href="#sqlbuilder-pypika" title="permalink">#</a></span></h3>
 <p>https://sqlbuilder.readthedocs.io/en/latest/</p>
 <p>https://github.com/kayak/pypika looks like it follows the same philosophy as my prototype, but it's way more comprehensive; and it did exist when I first worked on this</p>
@@ -306,6 +333,8 @@ but don't commit to anything just yet.</p>
 <li>I'm not convinced it improves readability</li>
 </ul>
 <p>https://github.com/9fin/sqlpy looks like a novel way of building queries</p>
+<h3 id="ponyorm">ponyorm<span class="headerlink"> <a href="#ponyorm" title="permalink">#</a></span></h3>
+<p>https://ponyorm.org/</p>
 <h2 id="lessons-learned">lessons learned<span class="headerlink"> <a href="#lessons-learned" title="permalink">#</a></span></h2>
 <ul>
 <li>doing nothing is sometimes the best option; wait until there's more info</li>
