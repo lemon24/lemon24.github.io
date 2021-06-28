@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ seven minute read
+∙ eight minute read
 
 
 </small></p>
@@ -186,7 +186,7 @@ a middle ground between build-your-own-string
 and &quot;proper&quot; query builders.
 On the other hand,
 modifying things seemed too verbose (even with the wrapper),
-and the output SQL didn't look very readable either.</p>
+and the generated SQL is all on one line.</p>
 <p>Surely, it would be possible to take this idea
 and make it look like <code>sql.SELECT('age')</code>, right?</p>
 <p>So I made a prototype,
@@ -320,42 +320,59 @@ or even WHERE conditions dealing an arbitrary number of parameters
 and is probably <em>the</em> database toolkit for Python.
 Hell, there's even an Architecture of Open Source Applications
 <a href="http://aosabook.org/en/sqlalchemy.html">chapter</a> about it.</p>
-<p>Peewee is a bit younger, and simple and small by design.</p>
+<p>Peewee is a bit younger (~10 years), and simple and small by design.</p>
 <p>Both have a lot of extensions<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
 and can be used without the ORM part;
 Peewee can even generate <a href="http://docs.peewee-orm.com/en/latest/peewee/query_builder.html">plain SQL</a> without defining models and so on.</p>
 <p>In the end, both seemed too complicated,
 and meant I had to switch to them eventually,
-adding the burden of researching a use case I don't have yet. 
+adding the burden of researching a use case I don't have yet.
 However, if I ever need multi-database support,
 it's likely I'll use one of them.</p>
+<!-- TODO: for work project too -->
 <h3 id="sqlbuilder-pypika">SQLBuilder, PyPika<span class="headerlink"> <a href="#sqlbuilder-pypika" title="permalink">#</a></span></h3>
-<p><a href="https://sqlbuilder.readthedocs.io/en/latest/">SQLBuilder</a> (SmartSQL) and <a href="https://github.com/kayak/pypika">PyPika</a> are standalone query builders
-– no ORM, no connection management, just SQL generation.</p>
-<p>https://github.com/kayak/pypika looks like it follows the same philosophy as my prototype, but it's way more comprehensive; and it did exist when I first worked on this</p>
+<p><a href="https://sqlbuilder.readthedocs.io/en/latest/">SQLBuilder</a> (SmartSQL) and <a href="https://pypika.readthedocs.io/en/latest/">PyPika</a> are standalone query builders
+– no ORM, no connection management, just SQL generation;
+they are similar to the Peewee query builder.</p>
+<p>SQLBuilder doesn't seem actively maintained since 2017.
+Aside from this, I didn't use it because it would make
+a potential migration to SQLAlchemy or Peewee more difficult.</p>
+<p>PyPika I discovered while writing this article;
+it is actively maintained, and has somewhat better documentation.</p>
 <h3 id="sqlbuilder-mini">sqlbuilder.mini<span class="headerlink"> <a href="#sqlbuilder-mini" title="permalink">#</a></span></h3>
-<p><a href="https://sqlbuilder.readthedocs.io/en/latest/#short-manual-for-sqlbuilder-mini">sqlbuilder.mini</a></p>
-<ul>
-<li>seems very extensible while preserving some of the readability</li>
-</ul>
-<h3 id="jinjasql-sqlpy">JinjaSQL, sqlpy<span class="headerlink"> <a href="#jinjasql-sqlpy" title="permalink">#</a></span></h3>
-<p>https://github.com/sripathikrishnan/jinjasql</p>
-<p>JinjaSQL</p>
-<ul>
-<li>seems like overkill</li>
-<li>I'm not convinced it improves readability</li>
-</ul>
-<p>https://github.com/9fin/sqlpy looks like a novel way of building queries</p>
-<h3 id="ponyorm">ponyorm<span class="headerlink"> <a href="#ponyorm" title="permalink">#</a></span></h3>
-<p>https://ponyorm.org/</p>
-<h2 id="lessons-learned">lessons learned<span class="headerlink"> <a href="#lessons-learned" title="permalink">#</a></span></h2>
-<ul>
-<li>doing nothing is sometimes the best option; wait until there's more info</li>
-<li>research, requirements, prototyping!</li>
-</ul>
+<p>SQLBuilder comes with another, extremely lightweight SQL builder, <a href="https://sqlbuilder.readthedocs.io/en/latest/#short-manual-for-sqlbuilder-mini">sqlbuilder.mini</a>.</p>
+<p>As dicussed <a href="#the-first-prototype">at the beginning of the article</a>,
+I like the overall approach
+(and at ~500 lines, it's small enough to vendor),
+but it still seems verbose, and the generated SQL isn't very readable.</p>
+<h3 id="jinjasql-sqlpy">JinjaSQL, SQLpy<span class="headerlink"> <a href="#jinjasql-sqlpy" title="permalink">#</a></span></h3>
+<p>These two are interesting because they use templating.</p>
+<p><a href="https://github.com/sripathikrishnan/jinjasql">JinjaSQL</a> is exactly what you'd expect:
+generate SQL using Jinja templates.
+I didn't use it because composition
+through macros would still be verbose,
+and a bit tricky (careful with the comma after that last column).</p>
+<p><a href="https://github.com/9fin/sqlpy">SQLpy</a> is similar, but different.
+You put your named queries in a separate file,
+and access them from Python as functions.
+Query building happens via named parameters:
+if you don't pass a parameter when executing the query,
+the lines using that parameter aren't included in the query
+(as you'd expect, this comes with a lot of <a href="https://sqlpy.readthedocs.io/en/latest/readme.html#built-sql">caveats</a>).</p>
+<h3 id="pony">Pony<span class="headerlink"> <a href="#pony" title="permalink">#</a></span></h3>
+<p>I don't think I considered <a href="https://ponyorm.org/">Pony</a> at the time,
+but it's worth mentioning:
+it is an ORM that's been around since 2012,
+is actively maintained, and has commercial support.</p>
+<p>And it can translate this into an SQL query:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">select</span><span class="p">(</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">Customer</span> <span class="k">if</span> <span class="nb">sum</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">orders</span><span class="o">.</span><span class="n">price</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1000</span><span class="p">)</span>
+</code></pre></div>
+<p>For <em>reader</em> this is overkill,
+but it does look really interesting
+(maybe <a href="http://boringtechnology.club/">too interesting</a>?).</p>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>That's one of the benefits of using libraries 
+<li id="fn-1"><p>That's one of the benefits of using libraries
 that have been around for a while.
 Some extensions relevant to my project:
 SQLAlchemy has <a href="https://alembic.sqlalchemy.org/">Alembic</a> for migrations (from the same author) and
