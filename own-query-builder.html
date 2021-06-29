@@ -66,7 +66,7 @@ window.addEventListener('resize', set_vh);
 <h1 class="heading-noindex">Why I wrote my own SQL query builder</h1>
 
 <p class="text-gray"><small>
-<span>2021-06-28</span>
+<span class="tooltip" data-tooltip="updated on 2021-06-29">2021-06-28</span>
 
 
 
@@ -139,7 +139,7 @@ what would it look like?</em></p>
 <div class="admonition-text">
 <p>Because of this,
  the conclusions of this article, if any,
- may not be <em>directly</em> applicable to regular work projects.
+ may not be <em>directly</em> applicable to regular &quot;work&quot; projects.
  With <em>reader</em>, I have different constraints over different time scales,
  a somewhat different definition of success,
  and more freedom in some aspects.</p>
@@ -148,25 +148,24 @@ what would it look like?</em></p>
  Sometimes, this kind of long-term thinking can be useful,
  and it can actually be achieved
  through a combination of planning,
- saying no to or postponing some features,
- and strategical technical debt.</p>
+ strategical technical debt,
+ and saying no to, reducing the scope of, or postponing features.</p>
 </div>
 </section>
-<p>One of <em>reader's</em> main features is filtering articles:
-by article metadata,
-by user-set metadata (read, important, feeds tags),
-and by full-text search,
-sorted in different ways,
-and with cursor pagination.</p>
+<p>One of <em>reader's</em> main features is filtering articles by
+article metadata,
+user-set metadata (read, important, feeds tags),
+and full-text search;
+the results can be sorted in various ways and paginated.</p>
 <p>In May 2019,
 with less than half of the above implemented,
-the function building the SQL query was over 100 lines,
-and I had already added <a href="https://github.com/lemon24/reader/blob/7b47c88bb4e1388e7c5af1c269fb4a78e227120a/src/reader/_storage.py#L621">this comment</a>:</p>
+the function building the SQL query for was over 100 lines,
+and I had already felt the need to add <a href="https://github.com/lemon24/reader/blob/7b47c88bb4e1388e7c5af1c269fb4a78e227120a/src/reader/_storage.py#L621">this comment</a>:</p>
 <blockquote>
 <p>This needs some sort of query builder so badly.</p>
 </blockquote>
 <h2 id="the-first-prototype">The first prototype<span class="headerlink"> <a href="#the-first-prototype" title="permalink">#</a></span></h2>
-<p>So I opened <a href="https://github.com/lemon24/reader/issues/123">an issue</a>, and did some research.</p>
+<p>I opened <a href="https://github.com/lemon24/reader/issues/123">an issue</a>, and did some research.</p>
 <p>At some point I stumbled upon <a href="https://sqlbuilder.readthedocs.io/en/latest/#short-manual-for-sqlbuilder-mini">sqlbuilder.mini</a>,
 which was built around an interesting insight –
 <em>queries can be represented as plain datastructures</em>:</p>
@@ -213,82 +212,81 @@ compile(sql)
 -->
 <p>I really liked how simple and flexible this is,
 and the choice of not dealing with SQL correctness or dialects –
-a middle ground between build-your-own-string
+a middle ground between building strings by hand
 and &quot;proper&quot; query builders.
 On the other hand,
-modifying things seemed too verbose (even with the wrapper),
-and the generated SQL is all on one line.</p>
-<p>Surely, it would be possible to take this idea
-and make it look like <code>sql.SELECT('age')</code>, right?</p>
-<p>So I made a prototype,
+it seemed too verbose (even with the wrapper),
+and the generated SQL wasn't very readable.</p>
+<p>Surely, it would be possible to make this look like <code>sql.SELECT('age')</code>, right?</p>
+<p>So I made a prototype –
 with no real intention of using it, just to see how easy it is to do.
-The result was about 80 lines, and I was quite happy with it;
-my thoughts at the time:</p>
+The core was quite short, about 80 lines; my thoughts at the time:</p>
 <blockquote>
 <p>The end result looks nice, but using it would add ~150 lines of code (that need to be tested), and it's less useful for simpler queries.</p>
 <p>Also, it looks nice <em>now</em>, when I just wrote it; 6 months from now it may be hard to understand.</p>
 </blockquote>
-<p>Afraid that I'm <em>too</em> happy with it, and with my curiosity satisfied,
-I proceeded to do just that: wait six months.</p>
+<p>Afraid I'm <em>too</em> happy with it, and with my curiosity satisfied,
+I did just that: postponed for six months.</p>
 <h2 id="requirements-and-existing-libraries">Requirements, and existing libraries<span class="headerlink"> <a href="#requirements-and-existing-libraries" title="permalink">#</a></span></h2>
-<p>My main concern with making my own was that over time,
-with various additions and fixes,
-the effort spent on it would be <em>greater</em> than
-getting an existing library to do what I needed.</p>
-<p>To deal with it, I did two things.</p>
+<p>My main concern with building my own was that over time,
+with additions and fixes,
+the effort would be <em>greater</em> than
+that of getting an existing library to do what I needed.</p>
+<p>I did two things to deal with this.</p>
 <hr />
-<p>First, I came up with detailed requirements.</p>
-<p>Whatever I ended up using, it had to support the following features:</p>
+<p>First, I wrote down detailed requirements.</p>
+<p>Whatever I used had to support the following:</p>
 <ul>
 <li>SELECT with conditional WHERE, ORDER BY, JOIN etc.
 (<a href="/query-builder-why#separation-of-concerns">example</a>)</li>
-<li><a href="/query-builder-why#intermission-scrolling-window-queries">scrolling window queries</a>
-(should be possible to implement)</li>
 <li>common table expressions (WITH)</li>
+<li><a href="/query-builder-why#intermission-scrolling-window-queries">scrolling window queries</a>
+(or be possible to build on top)</li>
 <li>arbitrary SQL (so I don't have to use the query builder for everything)</li>
 <li>the order in which you add clauses shouldn't matter</li>
 </ul>
+<p>Also, it should be easy to understand and maintain,
+and it should be possible to support additional SQL features.</p>
 <p>Because <em>reader</em> is a library,
 I wanted to keep the number of (transitive) dependencies as small as possible,
 since any extra dependency gets passed down to the users.</p>
-<p>Also, the solution should be easy to understand and maintain,
-and it should be possible to support additional SQL features, if needed.</p>
 <p>Both to keep things simple and due to <a href="https://reader.readthedocs.io/en/latest/dev.html#why-use-sqlite-and-not-sqlalchemy">historical reasons</a>,
-I didn't want to switch to an abstraction layer like SQLAlchemy Core
+I did not want to switch to an abstraction layer like SQLAlchemy Core
 <em>just</em> for query building –
 I needed (and still need) only SQLite support,
 and already had code to deal with stuff like migrations.</p>
 <hr />
 <p>Second, I did a slightly more serious survey of existing libraries.</p>
 <p>I didn't feel any of the ones I looked at was ideal,
-for at least one of the following reasons.</p>
+for at least one of these reasons:</p>
 <ul>
 <li>They came with a full abstraction layer.
 This isn't bad in itself,
 but meant I had to switch <em>everything</em>, eventually –
-using a mix would make things worse long-term.</li>
+using a mix would make things worse.</li>
 <li>They had too many features.
 Usually this is good, but it means there's more of everything:
 more features, more documentation to go through,
 more concepts to keep in your head,
-more things contributors need to know/learn.</li>
+more things contributors need to know or learn.</li>
 <li>They didn't make things more readable or
 more <a href="/query-builder-why#composition-and-reuse">composable</a>.</li>
+<li>They weren't actively maintained.</li>
 </ul>
 <hr />
-<p>So I chose to do nothing, and wait until more features are implemented.</p>
+<p>Again, I chose to wait until more features are implemented.</p>
 <h2 id="the-second-prototype">The second prototype<span class="headerlink"> <a href="#the-second-prototype" title="permalink">#</a></span></h2>
-<p>By May 2020, most of the features were implemented.
+<p>By May 2020, most of the features <em>were</em> implemented.
 The function building the query was 150 lines,
-with part that duplicated for the search query.
-At some point, I tried to optimize the query by using indexes,
-but gave up because trying various things simply took too long.</p>
+with part of it duplicated for search.
+At some point, I tried to optimize it to use indexes,
+but gave up because trying things simply took too long.</p>
 <p>So, <em>a full year later</em>,
 I made the prototype support all the required features
 and a few extra (UNION, nested queries),
-and tried it out on the full real-world queries.</p>
+and tried it out on the full real queries.</p>
 <p>It didn't take all that long,
-and the whole thing remained around 100 lines.</p>
+and it remained around 100 lines.</p>
 <h2 id="deciding-to-use-my-own">Deciding to use my own<span class="headerlink"> <a href="#deciding-to-use-my-own" title="permalink">#</a></span></h2>
 <p>At this point, most of the work was already done, and integrating it took less than an hour.</p>
 <p>Excluding the 136 lines of the builder itself with scrolling window query support,
@@ -299,10 +297,11 @@ I took that as a win, since for the price of 36 lines I was able to reuse the fi
 <ul>
 <li>Using an existing library would take too much effort.
 (I'll reconsider when the requirements change, though.)</li>
-<li>It is tiny, which makes it relatively easy to understand and modify.
-The two prototypes made me quite confident it's likely to stay that way.
-Because it's only used internally,
-I can leave out a lot of nice things that aren't actually needed.</li>
+<li>It is tiny, which makes it relatively easy to understand and modify;
+the prototypes made me quite confident it's likely to stay that way.
+Because it is only used internally,
+I can leave out a lot of nice things that aren't actually needed
+(including the extra features).</li>
 <li>It has 0 dependencies. That's even better than 1.</li>
 <li><em>reader</em> already great test coverage,
 so very little additional testing was required.</li>
@@ -317,7 +316,7 @@ some I simply missed.</p>
 <h3 id="do-nothing">Do nothing<span class="headerlink"> <a href="#do-nothing" title="permalink">#</a></span></h3>
 <p>It's worth keeping in mind that &quot;do nothing&quot;
 <a href="/sentinels#is-this-worth-a-pep">is always an option</a>
-– probably the first option to consider, in most cases.</p>
+– probably the first option to consider, in many cases.</p>
 <p>There's two kinds of doing nothing:
 <em>passive</em>, where you wait for new requirements to come up
 – for the problem to reveal itself –,
@@ -335,51 +334,49 @@ and hope the <a href="https://www.sqlite.org/queryplanner.html">query planner</a
     <span class="p">(:</span><span class="k">read</span> <span class="k">IS</span> <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">AND</span> <span class="n">entries</span><span class="p">.</span><span class="k">read</span> <span class="o">=</span> <span class="p">:</span><span class="k">read</span><span class="p">)</span> <span class="k">AND</span>
     <span class="p">...</span>  <span class="c1">-- 7 more expressions like this</span>
 </code></pre></div>
-<p>There are two huge issues with this:</p>
+<p>There are two huge issues:</p>
 <ul>
 <li>I'm not sure <em>any</em> optimizer is that smart
 (also, the query might be optimized before the parameters are passed in).
 Even if it were, I'm not smart enough to design indexes for a query like this.</li>
 <li>It doesn't seem possible to do it for JOIN, different ORDER BY terms,
-or even WHERE conditions dealing an arbitrary number of parameters
-(e.g. for tags).</li>
+or even an arbitrary number of WHERE conditions (e.g. for tags).</li>
 </ul>
-<p>Even if all of these were possible, the result would be impossible to understand.</p>
+<p>Even if they were all possible, the result would be almost impossible to understand.</p>
 <h3 id="sqlalchemy-core-peewee-query-builder">SQLAlchemy Core, Peewee query builder<span class="headerlink"> <a href="#sqlalchemy-core-peewee-query-builder" title="permalink">#</a></span></h3>
-<p><a href="https://www.sqlalchemy.org/">SQLAlchemy</a> and <a href="http://docs.peewee-orm.com/">Peewee</a> are both SQL toolkits / ORMs.</p>
+<p><a href="https://www.sqlalchemy.org/">SQLAlchemy</a> and <a href="http://docs.peewee-orm.com/">Peewee</a> are both SQL toolkits / object-relational mappers.</p>
 <p>SQLAlchemy has over 15 years of history,
 and is probably <em>the</em> database toolkit for Python.
 Hell, there's even an Architecture of Open Source Applications
 <a href="http://aosabook.org/en/sqlalchemy.html">chapter</a> about it.</p>
-<p>Peewee is a bit younger (~10 years), and simple and small by design.</p>
+<p>Peewee is a bit younger (~10 years), simple and small by design.</p>
 <p>Both have a lot of extensions<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
 and can be used without the ORM part;
-Peewee can even generate <a href="http://docs.peewee-orm.com/en/latest/peewee/query_builder.html">plain SQL</a> without defining models and so on.</p>
+Peewee can even generate <a href="http://docs.peewee-orm.com/en/latest/peewee/query_builder.html">plain SQL</a> without defining models.</p>
 <p>In the end, both seemed too complicated,
 and meant I had to switch to them eventually,
 adding the burden of researching a use case I don't have yet.
 However, if I ever need multi-database support,
-it's likely I'll use one of them.</p>
-<!-- TODO: for work project too -->
+it's likely I'll use one of them.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
 <h3 id="sqlbuilder-pypika">SQLBuilder, PyPika<span class="headerlink"> <a href="#sqlbuilder-pypika" title="permalink">#</a></span></h3>
-<p><a href="https://sqlbuilder.readthedocs.io/en/latest/">SQLBuilder</a> (SmartSQL) and <a href="https://pypika.readthedocs.io/en/latest/">PyPika</a> are standalone query builders
+<p><a href="https://sqlbuilder.readthedocs.io/en/latest/">SQLBuilder</a> and <a href="https://pypika.readthedocs.io/en/latest/">PyPika</a> are standalone query builders
 – no ORM, no connection management, just SQL generation;
 they are similar to the Peewee query builder.</p>
-<p>SQLBuilder doesn't seem actively maintained since 2017.
-Aside from this, I didn't use it because it would make
+<p>SQLBuilder doesn't seem actively maintained.
+Aside from that, I didn't use it because it would make
 a potential migration to SQLAlchemy or Peewee more difficult.</p>
 <p>PyPika I discovered while writing this article;
-it is actively maintained, and has somewhat better documentation.</p>
+it is actively maintained and has somewhat better documentation.</p>
 <h3 id="sqlbuilder-mini">sqlbuilder.mini<span class="headerlink"> <a href="#sqlbuilder-mini" title="permalink">#</a></span></h3>
 <p>SQLBuilder comes with another, extremely lightweight SQL builder, <a href="https://sqlbuilder.readthedocs.io/en/latest/#short-manual-for-sqlbuilder-mini">sqlbuilder.mini</a>.</p>
-<p>As dicussed <a href="#the-first-prototype">at the beginning of the article</a>,
+<p>As dicussed <a href="#the-first-prototype">in the beginning</a>,
 I like the overall approach
 (and at ~500 lines, it's small enough to vendor),
 but it still seems verbose, and the generated SQL isn't very readable.</p>
 <h3 id="jinjasql-sqlpy">JinjaSQL, SQLpy<span class="headerlink"> <a href="#jinjasql-sqlpy" title="permalink">#</a></span></h3>
 <p>These two are interesting because they use templating.</p>
 <p><a href="https://github.com/sripathikrishnan/jinjasql">JinjaSQL</a> is exactly what you'd expect:
-generate SQL using Jinja templates.
+generate SQL from Jinja templates.
 I didn't use it because composition
 through macros would still be verbose,
 and a bit tricky (careful with the comma after that last column).</p>
@@ -393,14 +390,14 @@ the lines using that parameter aren't included in the query
 <h3 id="pony">Pony<span class="headerlink"> <a href="#pony" title="permalink">#</a></span></h3>
 <p>I don't think I considered <a href="https://ponyorm.org/">Pony</a> at the time,
 but it's worth mentioning:
-it is an ORM that's been around since 2012,
+it has been around since 2012,
 is actively maintained, and has commercial support.</p>
-<p>And it can translate this into an SQL query:</p>
+<p>And it can translate <a href="https://docs.ponyorm.org/queries.html">generator expressions</a> like this one into SQL queries:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">select</span><span class="p">(</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">Customer</span> <span class="k">if</span> <span class="nb">sum</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">orders</span><span class="o">.</span><span class="n">price</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1000</span><span class="p">)</span>
 </code></pre></div>
-<p>For <em>reader</em> it is overkill.
-It does look really interesting, though
-– maybe <a href="http://boringtechnology.club/">too interesting</a>?.</p>
+<p>For <em>reader</em> it is definitely overkill.</p>
+<p>It does look really, really interesting, though
+(<a href="http://boringtechnology.club/">too interesting</a>, maybe?).</p>
 <hr />
 <p>That's it for now.</p>
 <p><strong>Learned something new today?</strong> Share this with others, it really helps!</p>
@@ -410,8 +407,8 @@ or <a href="https://death.andgravity.com/_feed/index.xml">Atom feed</a>.</p>
 <div class="admonition-text">
 <p>This is my first <em>planned</em> series, and still a work in progress.
  This means <strong>you get a say</strong> in it.
- <a href="/about#contact">Email me</a> your questions or comments,
- and I'll do my best to address them in one of the future articles.</p>
+ <a href="/about#contact">Email me</a>, and I'll address your questions or comments 
+ in one of the future articles.</p>
 </div>
 </section>
 <hr />
@@ -422,7 +419,8 @@ that have been around for a while.
 Some extensions relevant to my project:
 SQLAlchemy has <a href="https://alembic.sqlalchemy.org/">Alembic</a> for migrations (from the same author) and
 <a href="https://github.com/djrobstep/sqlakeyset">sqlakeyset</a> for scrolling window queries;
-Peewee has a lot of SQLite-specific functionality. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+Peewee has <em>a lot</em> of SQLite-specific functionality. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>They'd also be my first choice for a project with resources and deadlines. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
