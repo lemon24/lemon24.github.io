@@ -21,7 +21,7 @@
 
 
 
-<title>Why I wrote my own SQL query builder - death and gravity</title>
+<title>Why I wrote my own SQL query builder (in Python) - death and gravity</title>
 
 
 <meta name="description" content="This is the third article in a series about writing an SQL query builder in 150 lines of Python. Here, I talk about why I decided to write my own, the alternatives I considered, why I didn&#39;t use an existing library, and how I knew it wouldn&#39;t become a maintenance burden." />
@@ -66,14 +66,14 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">Why I wrote my own SQL query builder</h1>
+<h1 class="heading-noindex">Why I wrote my own SQL query builder (in Python)</h1>
 
 <p class="text-gray"><small>
-<span class="tooltip" data-tooltip="updated on 2021-07-02">2021-06-28</span>
+<span class="tooltip" data-tooltip="updated on 2021-07-13">2021-06-28</span>
 
 
 
-∙ eight minute read
+∙ nine minute read
 
 
 </small></p>
@@ -102,6 +102,11 @@ writing an SQL query builder in 150 lines of Python.</p>
 <p>The first part is in rough chronological order.
 If you're only interested in the libraries I looked at,
 you can find the list <a href="#other-alternatives">at the end</a>.</p>
+<section class="admonition note">
+<div class="admonition-text">
+<p>Update: I added a few more libraries after publishing the article.</p>
+</div>
+</section>
 <details>
 <summary>Contents</summary>
 <section class="toc">
@@ -116,9 +121,9 @@ you can find the list <a href="#other-alternatives">at the end</a>.</p>
 <li><a href="#do-nothing">Do nothing</a></li>
 <li><a href="#disable-parts-of-the-query">Disable parts of the query</a></li>
 <li><a href="#sqlalchemy-core-peewee-query-builder">SQLAlchemy Core, Peewee query builder</a></li>
-<li><a href="#sqlbuilder-pypika">SQLBuilder, PyPika</a></li>
-<li><a href="#sqlbuilder-mini">sqlbuilder.mini</a></li>
-<li><a href="#jinjasql-sqlpy">JinjaSQL, SQLpy</a></li>
+<li><a href="#sqlbuilder-pypika-python-sql">SQLBuilder, PyPika, python-sql</a></li>
+<li><a href="#sqlbuilder-mini-psycopg2-sql">sqlbuilder.mini, psycopg2.sql</a></li>
+<li><a href="#jinjasql-sqlpy-pugsql">JinjaSQL, SQLpy, PugSQL</a></li>
 <li><a href="#pony">Pony</a></li>
 </ul>
 </li>
@@ -323,6 +328,8 @@ or that are interesting in some way.
 There are others out there;
 some aren't actively maintained,
 some I simply missed.</p>
+<p><small>(update)</small>
+I added a few more interesting libraries after publishing the article.</p>
 <h3 id="do-nothing">Do nothing<span class="headerlink"> <a href="#do-nothing" title="permalink">#</a></span></h3>
 <p>It's worth keeping in mind that &quot;do nothing&quot;
 <a href="/sentinels#is-this-worth-a-pep">is always an option</a>
@@ -368,7 +375,8 @@ and meant I had to switch to them eventually,
 adding the burden of researching a use case I don't have yet.
 However, if I ever need multi-database support,
 it's likely I'll use one of them.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
-<h3 id="sqlbuilder-pypika">SQLBuilder, PyPika<span class="headerlink"> <a href="#sqlbuilder-pypika" title="permalink">#</a></span></h3>
+<p><a id="sqlbuilder-pypika"></a></p>
+<h3 id="sqlbuilder-pypika-python-sql">SQLBuilder, PyPika, python-sql<span class="headerlink"> <a href="#sqlbuilder-pypika-python-sql" title="permalink">#</a></span></h3>
 <p><a href="https://sqlbuilder.readthedocs.io/en/latest/">SQLBuilder</a> and <a href="https://pypika.readthedocs.io/en/latest/">PyPika</a> are standalone query builders
 – no ORM, no connection management, just SQL generation;
 they are similar to the Peewee query builder.</p>
@@ -377,19 +385,40 @@ Aside from that, I didn't use it because it would make
 a potential migration to SQLAlchemy or Peewee more difficult.</p>
 <p>PyPika I discovered while writing this article;
 it is actively maintained and has somewhat better documentation.</p>
-<h3 id="sqlbuilder-mini">sqlbuilder.mini<span class="headerlink"> <a href="#sqlbuilder-mini" title="permalink">#</a></span></h3>
+<p><small>(update)</small>
+Another actively maintained query builder is <a href="https://pypi.org/project/python-sql/">python-sql</a>.
+It is part of <a href="https://en.wikipedia.org/wiki/Tryton">Tryton</a>, an open-source ERP platform;
+it's been around for a while, and will likely continue to be.
+I missed this one during my research :)</p>
+<p><a id="sqlbuilder-mini"></a></p>
+<h3 id="sqlbuilder-mini-psycopg2-sql">sqlbuilder.mini, psycopg2.sql<span class="headerlink"> <a href="#sqlbuilder-mini-psycopg2-sql" title="permalink">#</a></span></h3>
 <p>SQLBuilder comes with another, extremely lightweight SQL builder, <a href="https://sqlbuilder.readthedocs.io/en/latest/#short-manual-for-sqlbuilder-mini">sqlbuilder.mini</a>.</p>
 <p>As dicussed <a href="#the-first-prototype">in the beginning</a>,
 I like the overall approach
 (and at ~500 lines, it's small enough to vendor),
 but it still seems verbose, and the generated SQL isn't very readable.</p>
-<h3 id="jinjasql-sqlpy">JinjaSQL, SQLpy<span class="headerlink"> <a href="#jinjasql-sqlpy" title="permalink">#</a></span></h3>
+<p><small>(update)</small>
+<a href="https://www.psycopg.org/docs/sql.html">psycopg2.sql</a> has a similar philosophy in how it treats SQL strings.
+Unlike my builder, it's &quot;inside-out&quot;
+(you append stuff to lists explicitly),
+so it's more verbose. 
+It does support escaping identifiers and placeholders, though;
+I didn't really deal with that in any way.</p>
+<p><a id="jinjasql-sqlpy"></a></p>
+<h3 id="jinjasql-sqlpy-pugsql">JinjaSQL, SQLpy, PugSQL<span class="headerlink"> <a href="#jinjasql-sqlpy-pugsql" title="permalink">#</a></span></h3>
 <p>These two are interesting because they use templating.</p>
 <p><a href="https://github.com/sripathikrishnan/jinjasql">JinjaSQL</a> is exactly what you'd expect:
 generate SQL from Jinja templates.
 I didn't use it because composition
 through macros would still be verbose,
 and a bit tricky (careful with the comma after that last column).</p>
+<p><small>(update)</small>
+Template engines like Jinja are useful
+if you need to allow <em>end users</em> to build queries,
+since you can <a href="https://jinja.palletsprojects.com/en/3.0.x/sandbox/">sandbox</a> templates
+(sandboxing Python is not easy, at least <a href="https://mail.python.org/pipermail/python-dev/2013-November/130132.html">not with CPython</a>).
+<a href="https://github.com/dbt-labs/dbt">dbt</a>, brought to my attention by a reader, 
+seems to be using Jinja in this way.</p>
 <p><a href="https://github.com/9fin/sqlpy">SQLpy</a> is similar, but different.
 You put your named queries in a separate file,
 and access them from Python as functions.
@@ -397,6 +426,14 @@ Query building happens via named parameters:
 if you don't pass a parameter when executing the query,
 the lines using that parameter aren't included in the query
 (as you'd expect, this comes with a lot of <a href="https://sqlpy.readthedocs.io/en/latest/readme.html#built-sql">caveats</a>).</p>
+<p><small>(update)</small>
+I also re-discovered <a href="https://github.com/mcfunley/pugsql">PugSQL</a>,
+which is like SQLpy, but is actively maintained
+and doesn't do the magic line disappearing stuff.
+Turns out they're both inspired by a pair of Clojure libraries.</p>
+<p>If your SQL doesn't change, but is parametrized, 
+PugSQL looks like a good lightweight solution. 
+For me, adding WHERE conditions was a strong requirement.</p>
 <h3 id="pony">Pony<span class="headerlink"> <a href="#pony" title="permalink">#</a></span></h3>
 <p>I don't think I considered <a href="https://ponyorm.org/">Pony</a> at the time,
 but it's worth mentioning:
@@ -462,7 +499,7 @@ Peewee has <em>a lot</em> of SQLite-specific functionality. <a href="#fnref-2" c
 
 
 <li>
-    <a href="/own-query-builder">Why I wrote my own SQL query builder</a> <small class="text-gray">(this article)</small>
+    <a href="/own-query-builder">Why I wrote my own SQL query builder (in Python)</a> <small class="text-gray">(this article)</small>
 
 
 </ul>
