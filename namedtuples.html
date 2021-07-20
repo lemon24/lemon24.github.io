@@ -78,8 +78,21 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<!-- posted as https://www.reddit.com/r/Python/comments/nqaqks/x/h1ycvdj -->
-<!-- .. toc:: -->
+<p>Intro TBD.</p>
+<section class="toc">
+<ul>
+<li><a href="#what-are-named-tuples-used-for">What are named tuples used for?</a></li>
+<li><a href="#the-problems-with-named-tuples">The problems with named tuples</a></li>
+<li><a href="#what-are-named-tuples-still-good-for">What are named tuples still good for?</a>
+<ul>
+<li><a href="#the-data-is-naturally-a-tuple">The data is naturally a tuple</a></li>
+<li><a href="#you-re-already-using-a-tuple">You're already using a tuple</a></li>
+<li><a href="#you-want-consumers-that-do-unpacking-to-fail">You want consumers that do unpacking to fail</a></li>
+<li><a href="#memory-and-speed">Memory and speed</a></li>
+</ul>
+</li>
+</ul>
+</section>
 <h2 id="what-are-named-tuples-used-for">What are named tuples used for?<span class="headerlink"> <a href="#what-are-named-tuples-used-for" title="permalink">#</a></span></h2>
 <p><strong><a href="https://docs.python.org/3/library/collections.html#collections.namedtuple">namedtuple</a></strong> exists in the standard library since Python 2.6,
 and allows building tuple subclasses that
@@ -105,7 +118,7 @@ or as arguments to functions decorated with e.g. <a href="https://docs.python.or
 <p><strong><a href="https://docs.python.org/3/library/dataclasses.html">dataclasses</a></strong> was added in Python 3.7,
 and allows writing regular classes just as easily,
 by generating the required special methods.
-It even covers hashable and (<a href="https://docs.python.org/3/library/dataclasses.html#frozen-instances">practically</a>) immutable instances.</p>
+With <a href="https://docs.python.org/3/library/dataclasses.html#frozen-instances">frozen instances</a>, it even covers hashable and immutable instances.</p>
 <p>Before dataclasses,
 named tuples were used for the last three use cases because
 there were no other good alternatives in the standard library –
@@ -168,7 +181,7 @@ even if you later stop using namedtuple.</li>
 <li>Fields can't be combined by inheritance.</li>
 </ul>
 <p>(BTW, if you're curious about dataclasses and the PEP, I talk more about them <a href="https://death.andgravity.com/stdlib#dataclasses">here</a>).</p>
-<h2 id="what-are-named-tuples-still-a-good-for">What are named tuples still a good for?<span class="headerlink"> <a href="#what-are-named-tuples-still-a-good-for" title="permalink">#</a></span></h2>
+<h2 id="what-are-named-tuples-still-good-for">What are named tuples still good for?<span class="headerlink"> <a href="#what-are-named-tuples-still-good-for" title="permalink">#</a></span></h2>
 <p>With the drawbacks mentioned above,
 and with dataclasses covering a lot of their (maybe unintended) use cases,
 are named tuples good for anything anymore?</p>
@@ -213,7 +226,7 @@ I use a named tuple to group <a href="https://github.com/lemon24/reader/blob/2.0
 because there's a lot of them,
 and they get passed around quite a bit before being used
 (I cover why in more detail <a href="/more-arguments#counter-example-data-classes">here</a>).</p>
-<p>When I know all arguments should always be handled,
+<p>I know all arguments should always be handled, so
 I <a href="https://github.com/lemon24/reader/blob/2.0/src/reader/_storage.py#L1261">use unpacking</a> specifically because
 I want the code to fail when a new one is added –
 if I used attribute access,
@@ -221,119 +234,87 @@ the code would silently succeed.
 This is no substitute for tests,
 but the early warning is nice,
 especially in a larger code base.</p>
-<h3 id="memory-or-speed">Memory or speed<span class="headerlink"> <a href="#memory-or-speed" title="permalink">#</a></span></h3>
-<ul>
-<li><p>Last, but not least, named tuples are useful if you care about memory or speed;
-<em>they are much smaller</em> and faster than the equivalent (data)class,
-even if you use <code>__slots__</code> (see some measurements below).</p>
-<p>In most cases, the difference doesn't matter,
-but it can become noticeable if you create millions of instances,
-or run in a <a href="https://circuitpython.org/">constrained environment</a>.</p>
-</li>
-</ul>
+<h3 id="memory-and-speed">Memory and speed<span class="headerlink"> <a href="#memory-and-speed" title="permalink">#</a></span></h3>
+<p>Last, but not least, named tuples are useful if you care about memory or speed;
+<em>they are much smaller</em> and faster than the equivalent (data)class.
+In most cases, the difference doesn't matter,
+but it can become noticeable if you create millions of instances.</p>
+<p>Setting <a href="https://docs.python.org/3/glossary.html#term-slots">__slots__</a> helps with memory, but doesn't really help with speed.</p>
 <hr />
-<p>Dataclasses are slower to create, and larger than namedtuples:</p>
-<pre class="code code-container"><code>&gt;&gt;&gt; from typing import NamedTuple
-... from dataclasses import dataclass
-...
-... class NT(NamedTuple):
-...     x: int
-...     y: int
-...
-... @dataclass(frozen=True)
-... class DC:
-...     x: int
-...     y: int
-...
-&gt;&gt;&gt; %timeit NT(1, 2)
-464 ns ± 2.99 ns per loop (mean ± std. dev. of 7 runs, 1000000 loops each)
-&gt;&gt;&gt; %timeit DC(1, 2)
-836 ns ± 0.929 ns per loop (mean ± std. dev. of 7 runs, 1000000 loops each)
-&gt;&gt;&gt;
-&gt;&gt;&gt; nt = NT(1, 2)
-&gt;&gt;&gt; %timeit nt.x
-42.7 ns ± 0.149 ns per loop (mean ± std. dev. of 7 runs, 10000000 loops each)
-&gt;&gt;&gt; dc = DC(1, 2)
-&gt;&gt;&gt; %timeit dc.x
-53.7 ns ± 0.0921 ns per loop (mean ± std. dev. of 7 runs, 10000000 loops each)
-&gt;&gt;&gt;
-&gt;&gt;&gt; %timeit hash(nt)
-109 ns ± 0.307 ns per loop (mean ± std. dev. of 7 runs, 10000000 loops each)
-&gt;&gt;&gt; %timeit hash(dc)
-423 ns ± 46.4 ns per loop (mean ± std. dev. of 7 runs, 1000000 loops each)
-&gt;&gt;&gt;
-&gt;&gt;&gt; # size of the object itself
-&gt;&gt;&gt; import sys
-&gt;&gt;&gt; sys.getsizeof(nt)
-56
-&gt;&gt;&gt; sys.getsizeof(dc)  # doesn't include the __dict__
-48
-&gt;&gt;&gt; sys.getsizeof(dc.__dict__)
-104
-&gt;&gt;&gt;
-&gt;&gt;&gt; # total size (recursive)
-&gt;&gt;&gt; from pympler.asizeof import asizeof
-&gt;&gt;&gt; asizeof(nt)
-120
-&gt;&gt;&gt; asizeof(dc)
-328
+<p>Really, I ran the numbers:</p>
+<table class="table">
+<thead>
+<tr>
+  <th style="text-align:left"></th>
+  <th style="text-align:right">cls(1, 2)</th>
+  <th style="text-align:right">obj.a</th>
+  <th style="text-align:right">hash(obj)</th>
+  <th style="text-align:right">size</th>
+  <th style="text-align:right">total size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td style="text-align:left">dataclass</td>
+  <td style="text-align:right">846.7</td>
+  <td style="text-align:right">52.7</td>
+  <td style="text-align:right">362.8</td>
+  <td style="text-align:right">152</td>
+  <td style="text-align:right">320</td>
+</tr>
+<tr>
+  <td style="text-align:left">dataclass + slots</td>
+  <td style="text-align:right">705.4</td>
+  <td style="text-align:right">46.7</td>
+  <td style="text-align:right">348.2</td>
+  <td style="text-align:right">48</td>
+  <td style="text-align:right">104</td>
+</tr>
+<tr>
+  <td style="text-align:left">namedtuple</td>
+  <td style="text-align:right">462.0</td>
+  <td style="text-align:right">44.9</td>
+  <td style="text-align:right">101.8</td>
+  <td style="text-align:right">56</td>
+  <td style="text-align:right">112</td>
+</tr>
+</tbody>
+</table>
+<p><code>cls(1, 2)</code>, <code>obj.a</code>, <code>hash(obj)</code> are timings for that expression,
+in nanoseconds.</p>
+<p><em>size</em> is the <a href="https://docs.python.org/3/library/sys.html#sys.getsizeof">sys.getsizeof</a> of the object itself
+plus that of its <code>__dict__</code> (if any), excluding the actual values.
+<em>total size</em> includes the values, as returned by Pympler's <a href="https://pympler.readthedocs.io/en/stable/library/asizeof.html#pympler.asizeof.asizeof">asizeof</a>.</p>
+<p><code>obj.a</code> remains constant,
+while the other timings increase with the number of fields.
+The dataclass with slots is always 8 bytes smaller than the namedtuple.</p>
+<p>I ran this with CPython 3.8 on macOS;
+on Linux, the timings are roughly the same.</p>
+<details>
+<summary>Here's the class definitions:</summary>
+<p>For dataclasses, <code>__slots__</code> must be set explicitly;
+this was fixed <a href="https://bugs.python.org/issue42269">in Python 3.10</a>.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">NamedTuple</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
 
-</code></pre>
-<p><code>__slots__</code> helps with memory, but not speed:</p>
-<pre class="code code-container"><code>&gt;&gt;&gt; @dataclass(frozen=True)
-... class DCS:
-...     x: int
-...     y: int
-...     __slots__ = ('x', 'y')
-...
-&gt;&gt;&gt; %timeit DCS(1, 2)
-708 ns ± 1.4 ns per loop (mean ± std. dev. of 7 runs, 1000000 loops each)
-&gt;&gt;&gt; dcs = DCS(1, 2)
-&gt;&gt;&gt; %timeit dcs.x
-46.1 ns ± 0.757 ns per loop (mean ± std. dev. of 7 runs, 10000000 loops each)
-&gt;&gt;&gt; asizeof(dcs)
-112
+<span class="k">class</span> <span class="nc">NT</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">b</span><span class="p">:</span> <span class="nb">int</span>
 
-</code></pre>
-<p>(Also, currently you have to specify the names explicitly; this will likely get fixed <a href="https://bugs.python.org/issue42269">in Python 3.10</a>.)</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">sys</span>
-<span class="o">...</span> <span class="kn">from</span> <span class="nn">pympler.asizeof</span> <span class="kn">import</span> <span class="n">asizeof</span>
-<span class="o">...</span>
-<span class="o">...</span> <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">NamedTuple</span>
-<span class="o">...</span> <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
-<span class="o">...</span>
-<span class="o">...</span> <span class="k">class</span> <span class="nc">NT</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
-<span class="o">...</span>     <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="n">y</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="n">b</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="n">c</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="n">d</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="n">e</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="n">f</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>
-<span class="o">...</span> <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="o">...</span> <span class="k">class</span> <span class="nc">DCS</span><span class="p">:</span>
-<span class="o">...</span>     <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="n">y</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="n">b</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="n">c</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="n">d</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="n">e</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="n">f</span><span class="p">:</span> <span class="nb">int</span>
-<span class="o">...</span>     <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;d&#39;</span><span class="p">,</span> <span class="s1">&#39;e&#39;</span><span class="p">,</span> <span class="s1">&#39;f&#39;</span><span class="p">)</span>
-<span class="o">...</span>
-<span class="o">...</span> <span class="n">nt</span> <span class="o">=</span> <span class="n">NT</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
-<span class="o">...</span>
-<span class="o">...</span> <span class="n">dcs</span> <span class="o">=</span> <span class="n">DCS</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
-<span class="o">...</span>
-<span class="o">...</span> <span class="k">for</span> <span class="n">thing</span> <span class="ow">in</span> <span class="n">nt</span><span class="p">,</span> <span class="n">dcs</span><span class="p">:</span>
-<span class="o">...</span>     <span class="nb">print</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">getsizeof</span><span class="p">(</span><span class="n">thing</span><span class="p">),</span> <span class="n">asizeof</span><span class="p">(</span><span class="n">thing</span><span class="p">))</span>
-<span class="o">...</span>
-<span class="mi">104</span> <span class="mi">360</span>
-<span class="mi">96</span> <span class="mi">352</span>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">DC</span><span class="p">:</span>
+    <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">b</span><span class="p">:</span> <span class="nb">int</span>
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">DS</span><span class="p">:</span>
+    <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">b</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">)</span>
 </code></pre></div>
+</details>
+<hr />
+<p>That's it for now.</p>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>For an example of why you might want immutable instances,
