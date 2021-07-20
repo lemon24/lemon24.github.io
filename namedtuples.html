@@ -80,6 +80,7 @@ window.addEventListener('resize', set_vh);
 
 <!-- posted as https://www.reddit.com/r/Python/comments/nqaqks/x/h1ycvdj -->
 <!-- .. toc:: -->
+<h2 id="what-are-named-tuples-used-for">What are named tuples used for?<span class="headerlink"> <a href="#what-are-named-tuples-used-for" title="permalink">#</a></span></h2>
 <p><strong><a href="https://docs.python.org/3/library/collections.html#collections.namedtuple">namedtuple</a></strong> exists in the standard library since Python 2.6,
 and allows building tuple subclasses that
 also have fields accessible by attribute lookup.</p>
@@ -104,7 +105,12 @@ or as arguments to functions decorated with e.g. <a href="https://docs.python.or
 <p><strong><a href="https://docs.python.org/3/library/dataclasses.html">dataclasses</a></strong> was added in Python 3.7,
 and allows writing regular classes just as easily,
 by generating the required special methods.
-It even covers hashable and immutable instances (through <a href="https://docs.python.org/3/library/dataclasses.html#frozen-instances">frozen instances</a>).</p>
+It even covers hashable and (<a href="https://docs.python.org/3/library/dataclasses.html#frozen-instances">practically</a>) immutable instances.</p>
+<p>Before dataclasses,
+named tuples were used for the last three use cases because
+there were no other good alternatives in the standard library –
+you <em>can</em> do it with a normal class definition,
+but you have to write all the special methods by hand.</p>
 <details>
 <summary>In case you've never used them, here's a comparison.</summary>
 <p>(I'm using the <a href="https://docs.python.org/3/library/typing.html#typing.NamedTuple">typing.NamedTuple</a> form here
@@ -145,61 +151,76 @@ traditional <a href="https://docs.python.org/3/library/collections.html#collecti
 <span class="gr">TypeError</span>: <span class="n">&#39;Point&#39; object is not iterable</span>
 </code></pre></div>
 </details>
-<h2 id="the-problems-with-namedtuples">The problems with namedtuples<span class="headerlink"> <a href="#the-problems-with-namedtuples" title="permalink">#</a></span></h2>
-<p>Prior to <a href="https://docs.python.org/3/library/dataclasses.html">dataclasses</a>,
-namedtuples would be used for the last 3 use cases because there were
-no other good alternatives in the standard library –
-you can achieve them with a normal class, but it's verbose as hell.</p>
-<p>PEP 557 has a section explaining <a href="https://www.python.org/dev/peps/pep-0557/#why-not-just-use-namedtuple">why namedtuple is not good enough for some use cases</a>; tl;dr:</p>
+<h2 id="the-problems-with-named-tuples">The problems with named tuples<span class="headerlink"> <a href="#the-problems-with-named-tuples" title="permalink">#</a></span></h2>
+<p><a href="https://www.python.org/dev/peps/pep-0557/">PEP 557</a> explains why sometimes namedtuple <a href="https://www.python.org/dev/peps/pep-0557/#why-not-just-use-namedtuple">isn't good enough</a>;
+in summary:</p>
 <ul>
-<li>can make it difficult to add fields because the instances are iterable (if you add a new field, code that uses unpacking will be broken)</li>
-<li>can be accidentally compared with any other tuple</li>
-<li>there's no mutable version of it</li>
-<li>can't add new fields via inheritance</li>
+<li>The instances are always iterable;
+this can make it difficult to add fields,
+because adding a new field will break code that uses unpacking.<ul>
+<li>Also, if used as return value in a backwards-compatible API,
+it means the result must remain iterable/indexable forever,
+even if you later stop using namedtuple.</li>
+</ul>
+</li>
+<li>Instances can be accidentally compared with any other tuple.</li>
+<li>There's no mutable version (in the standard library).</li>
+<li>Fields can't be combined by inheritance.</li>
 </ul>
 <p>(BTW, if you're curious about dataclasses and the PEP, I talk more about them <a href="https://death.andgravity.com/stdlib#dataclasses">here</a>).</p>
-<h2 id="what-are-namedtuples-still-good-for">What are namedtuples still good for?<span class="headerlink"> <a href="#what-are-namedtuples-still-good-for" title="permalink">#</a></span></h2>
-<p>However, even in a post-dataclasses world, named tuples can still be useful:</p>
-<h3 id="you-re-already-using-a-tuple">You're already using a tuple<span class="headerlink"> <a href="#you-re-already-using-a-tuple" title="permalink">#</a></span></h3>
-<ul>
-<li>You're already using a tuple, and want to make <em>new</em> code more readable:
-a namedtuple gets you this, but guarantees you won't break <em>old</em> code.</li>
-</ul>
+<h2 id="what-are-named-tuples-still-a-good-for">What are named tuples still a good for?<span class="headerlink"> <a href="#what-are-named-tuples-still-a-good-for" title="permalink">#</a></span></h2>
+<p>With the drawbacks mentioned above,
+and with dataclasses covering a lot of their (maybe unintended) use cases,
+are named tuples good for anything anymore?</p>
+<p>As you'd expect, the answer is <em>yes</em>.</p>
 <h3 id="the-data-is-naturally-a-tuple">The data is naturally a tuple<span class="headerlink"> <a href="#the-data-is-naturally-a-tuple" title="permalink">#</a></span></h3>
-<p>TODO: Rows in DB.</p>
+<p>Named tuples are still perfect for their originally intended purpose:
+ordered, structured data.</p>
+<p>Some examples:</p>
 <ul>
-<li><p>The data is naturally a tuple (e.g. pairs of something);
-both unpacking and attribute access are valid usage patterns.</p>
-<p>For example, I use a named tuple to model the result of a
-<a href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.update_feeds_iter">feed update</a>,
-a <code>(feed url, update details or exception)</code> pair.</p>
-<p>This makes it easier for people to make sense of what was returned in an interactive session;
-compare the named and unnamed tuple versions:</p>
-<pre class="code code-container"><code>&gt;&gt;&gt; result = next(reader.update_feeds_iter())
-&gt;&gt;&gt; result
-UpdateResult(url='http://antirez.com/rss', value=None)
-&gt;&gt;&gt; tuple(result)
-('http://antirez.com/rss', None)
-&gt;&gt;&gt; help(result)
-
-</code></pre>
-<p>A distinct class allows you to attach a docstring to the result,
-which users can read with help().</p>
-<p>Specifically in this case, the distinct class
-also allows adding more semantics to the tuple via properties
-(error/ok/not_modified <a href="https://github.com/lemon24/reader/issues/204#issuecomment-780553373">here</a>).</p>
-</li>
+<li>rows returned by a database query</li>
+<li>the result of parsing a binary file format</li>
+<li>pairs of things, like HTTP headers
+(a dict is not always appropriate,
+since the same header can appear more than once,
+and the order does matter in some cases)</li>
 </ul>
+<p>Pairs of things are interesting,
+because both unpacking and attribute access are valid usage patterns.</p>
+<p>For example, for my feed reader library
+I use a named tuple to model <a href="https://reader.readthedocs.io/en/stable/api.html#reader.UpdateResult">the result of a feed update</a>,
+a (feed URL, update details or exception) pair.</p>
+<p>This makes it easier to make sense of what a value <em>means</em>
+in interactive sessions or when debugging;
+compare the named and unnamed versions:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">reader</span><span class="o">.</span><span class="n">update_feeds_iter</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span>
+<span class="go">UpdateResult(url=&#39;http://antirez.com/rss&#39;, value=None)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">tuple</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+<span class="go">(&#39;http://antirez.com/rss&#39;, None)</span>
+</code></pre></div>
+<p>Also, the distinct class allows having
+a docstring that users can look at with <a href="https://docs.python.org/3/library/functions.html#help">help()</a>,
+and better semantics via properties
+(<code>error</code>/<code>ok</code> <a href="https://github.com/lemon24/reader/issues/204#issuecomment-780553373">here</a>).</p>
+<h3 id="you-re-already-using-a-tuple">You're already using a tuple<span class="headerlink"> <a href="#you-re-already-using-a-tuple" title="permalink">#</a></span></h3>
+<p>You're already using a tuple, and want to make <em>new</em> code more readable:
+a namedtuple gets you this, but guarantees you won't break <em>old</em> code.</p>
 <h3 id="you-want-consumers-that-do-unpacking-to-fail">You <em>want</em> consumers that do unpacking to fail<span class="headerlink"> <a href="#you-want-consumers-that-do-unpacking-to-fail" title="permalink">#</a></span></h3>
-<ul>
-<li><p>You <em>want</em> consumers that do unpacking to fail.</p>
-<p>For example, in my feed reader library, I group arguments
-related to filtering using <a href="https://github.com/lemon24/reader/blob/1.18/src/reader/_types.py#L290">a named tuple</a>,
-because there's a lot of them, and they get passed around quite a bit before they're actually used
-(more details in <a href="https://death.andgravity.com/more-arguments#counter-example-data-classes">this article</a> I'm still working on).</p>
-<p>I <a href="https://github.com/lemon24/reader/blob/master/src/reader/_storage.py#L1364">use unpacking</a> specifically because I want code using the arguments to fail when a new one gets added, since the new argument should to be handled as well. If I used attribute access, the code would silently succeed. This is no substitute for proper tests, but the early warning is nice, especially in a larger code base.</p>
-</li>
-</ul>
+<p>In some cases, you <em>want</em> consumers that do unpacking to fail.</p>
+<p>For example, in my feed reader library,
+I use a named tuple to group <a href="https://github.com/lemon24/reader/blob/2.0/src/reader/_types.py#L292">arguments related to filtering</a>,
+because there's a lot of them,
+and they get passed around quite a bit before being used
+(I cover why in more detail <a href="/more-arguments#counter-example-data-classes">here</a>).</p>
+<p>When I know all arguments should always be handled,
+I <a href="https://github.com/lemon24/reader/blob/2.0/src/reader/_storage.py#L1261">use unpacking</a> specifically because
+I want the code to fail when a new one is added –
+if I used attribute access,
+the code would silently succeed.
+This is no substitute for tests,
+but the early warning is nice,
+especially in a larger code base.</p>
 <h3 id="memory-or-speed">Memory or speed<span class="headerlink"> <a href="#memory-or-speed" title="permalink">#</a></span></h3>
 <ul>
 <li><p>Last, but not least, named tuples are useful if you care about memory or speed;
@@ -315,7 +336,7 @@ or run in a <a href="https://circuitpython.org/">constrained environment</a>.</p
 </code></pre></div>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>For an example of why you might want instances to be immutable,
+<li id="fn-1"><p>For an example of why you might want immutable instances,
 check out <a href="/same-arguments#caveat-attribute-changes-are-confusing">this article</a>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
