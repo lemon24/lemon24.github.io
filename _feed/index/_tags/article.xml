@@ -2,13 +2,274 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #article</title>
-  <updated>2021-07-20T12:04:00+00:00</updated>
+  <updated>2021-07-21T07:55:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
   </author>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index/_tags/article.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/namedtuples">
+    <id>https://death.andgravity.com/namedtuples</id>
+    <title>namedtuple in a post-dataclasses world</title>
+    <updated>2021-07-21T07:55:00+00:00</updated>
+    <content type="html">&lt;p&gt;&lt;strong&gt;namedtuple&lt;/strong&gt; exists since forever,&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;
+and over time, its usefulness saw it used 
+far outside its originally intended purpose.&lt;/p&gt;
+&lt;p&gt;With &lt;strong&gt;dataclasses&lt;/strong&gt; now covering part of those use cases,
+what &lt;em&gt;should&lt;/em&gt; one use named tuples for?
+In this article, we take a look at exactly that.&lt;/p&gt;
+&lt;section class="toc"&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#what-are-named-tuples-used-for"&gt;What are named tuples used for?&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#the-problems-with-named-tuples"&gt;The problems with named tuples&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#what-are-named-tuples-still-good-for"&gt;What are named tuples still good for?&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#the-data-is-naturally-a-tuple"&gt;The data is naturally a tuple&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#you-re-already-using-a-tuple"&gt;You're already using a tuple&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#you-want-consumers-that-do-unpacking-to-fail"&gt;You want consumers that do unpacking to fail&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#memory-and-speed"&gt;Memory and speed&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h2 id="what-are-named-tuples-used-for"&gt;What are named tuples used for?&lt;span class="headerlink"&gt; &lt;a href="#what-are-named-tuples-used-for" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;strong&gt;&lt;a href="https://docs.python.org/3/library/collections.html#collections.namedtuple"&gt;namedtuple&lt;/a&gt;&lt;/strong&gt; exists in the standard library since Python 2.6,
+and allows building tuple subclasses that
+also have fields accessible by attribute lookup.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;collections&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;namedtuple&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;Point&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;namedtuple&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;Point&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;x y&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;In general, this is useful when wrapping structured data; from the docs:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Named tuples are especially useful for assigning field names to result tuples returned by the csv or sqlite3 modules.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Because of how easy they are to define,
+named tuples have also been used for:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;quick-and-dirty temporary data structures,
+more readable than plain tuples and regular classes
+(you get constructor keyword arguments and a &lt;code&gt;__repr__&lt;/code&gt; for free)&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://docs.python.org/3/glossary.html#term-hashable"&gt;hashable&lt;/a&gt; instances
+(to use as dict keys or set members,
+or as arguments to functions decorated with e.g. &lt;a href="https://docs.python.org/3/library/functools.html#functools.lru_cache"&gt;functools.lru_cache&lt;/a&gt;)&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://docs.python.org/3/glossary.html#term-immutable"&gt;immutable&lt;/a&gt; instances&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;&lt;a href="https://docs.python.org/3/library/dataclasses.html"&gt;dataclasses&lt;/a&gt;&lt;/strong&gt; was added in Python 3.7,
+and allows writing regular classes just as easily,
+by generating the required special methods.
+With &lt;a href="https://docs.python.org/3/library/dataclasses.html#frozen-instances"&gt;frozen instances&lt;/a&gt;, it even covers hashable and immutable instances.&lt;/p&gt;
+&lt;p&gt;Before dataclasses,
+named tuples were used for the last three use cases because
+there were no other good alternatives in the standard library –
+you &lt;em&gt;can&lt;/em&gt; do it with a normal class definition,
+but you have to write all the special methods by hand.&lt;/p&gt;
+&lt;details&gt;
+&lt;summary&gt;In case you've never used them, here's a comparison.&lt;/summary&gt;
+&lt;p&gt;I'm using &lt;a href="https://docs.python.org/3/library/typing.html#typing.NamedTuple"&gt;typing.NamedTuple&lt;/a&gt; because it looks similar to dataclasses;
+the result is the same as that of the
+traditional &lt;a href="https://docs.python.org/3/library/collections.html#collections.namedtuple"&gt;collections.namedtuple&lt;/a&gt; factory.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Point&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;NamedTuple&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;
+&lt;span class="gp"&gt;...&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;Point&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;
+&lt;span class="go"&gt;Point(x=1, y=2)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;
+&lt;span class="go"&gt;1&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="go"&gt;1&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;[1, 2]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Point&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;
+&lt;span class="gp"&gt;...&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;Point&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;
+&lt;span class="go"&gt;Point(x=1, y=2)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;
+&lt;span class="go"&gt;1&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+  &lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="gr"&gt;TypeError&lt;/span&gt;: &lt;span class="n"&gt;&amp;#39;Point&amp;#39; object is not subscriptable&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+  &lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="gr"&gt;TypeError&lt;/span&gt;: &lt;span class="n"&gt;&amp;#39;Point&amp;#39; object is not iterable&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/details&gt;
+&lt;h2 id="the-problems-with-named-tuples"&gt;The problems with named tuples&lt;span class="headerlink"&gt; &lt;a href="#the-problems-with-named-tuples" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;a href="https://www.python.org/dev/peps/pep-0557/"&gt;PEP 557&lt;/a&gt;&lt;sup class="footnote-ref" id="fnref-3"&gt;&lt;a href="#fn-3"&gt;3&lt;/a&gt;&lt;/sup&gt; explains why sometimes namedtuple &lt;a href="https://www.python.org/dev/peps/pep-0557/#why-not-just-use-namedtuple"&gt;isn't good enough&lt;/a&gt;;
+in summary:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;The instances are always iterable;
+this can make it difficult to add fields,
+because adding a new field will break code that uses unpacking.&lt;ul&gt;
+&lt;li&gt;Also, if used as return value in a backwards-compatible API,
+it means the result must remain iterable/indexable forever,
+even if you later stop using namedtuple.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;Instances can be accidentally compared with any other tuple.&lt;/li&gt;
+&lt;li&gt;There's no mutable version (in the standard library).&lt;/li&gt;
+&lt;li&gt;Fields can't be combined by inheritance.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="what-are-named-tuples-still-good-for"&gt;What are named tuples still good for?&lt;span class="headerlink"&gt; &lt;a href="#what-are-named-tuples-still-good-for" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;With the drawbacks mentioned above,
+and with dataclasses covering a lot of their (maybe unintended) use cases,
+are named tuples good for anything anymore?&lt;/p&gt;
+&lt;p&gt;As you'd expect, the answer is &lt;em&gt;yes&lt;/em&gt;.&lt;/p&gt;
+&lt;h3 id="the-data-is-naturally-a-tuple"&gt;The data is naturally a tuple&lt;span class="headerlink"&gt; &lt;a href="#the-data-is-naturally-a-tuple" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Named tuples remain perfect for their originally intended purpose:
+ordered, structured data.&lt;/p&gt;
+&lt;p&gt;Some examples:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;rows returned by a database query&lt;/li&gt;
+&lt;li&gt;the result of parsing a binary file format&lt;/li&gt;
+&lt;li&gt;pairs of things, like HTTP headers
+(a dict is not always appropriate,
+since the same header can appear more than once,
+and the order does matter in some cases)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Pairs of things are interesting,
+because both unpacking and attribute access are valid usage patterns.&lt;/p&gt;
+&lt;p&gt;For example, for my feed reader library
+I use a named tuple to model &lt;a href="https://reader.readthedocs.io/en/stable/api.html#reader.UpdateResult"&gt;the result of a feed update&lt;/a&gt;,
+a (feed URL, update details or exception) pair.&lt;/p&gt;
+&lt;p&gt;This makes it easier to make sense of what a value &lt;em&gt;means&lt;/em&gt;
+in interactive sessions or when debugging;
+compare the named and unnamed versions:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;reader&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;update_feeds_iter&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;
+&lt;span class="go"&gt;UpdateResult(url=&amp;#39;http://antirez.com/rss&amp;#39;, value=None)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;tuple&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;(&amp;#39;http://antirez.com/rss&amp;#39;, None)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Also, the distinct class allows having
+a docstring that users can look at with &lt;a href="https://docs.python.org/3/library/functions.html#help"&gt;help()&lt;/a&gt;,
+and better semantics via properties
+(&lt;code&gt;error&lt;/code&gt;/&lt;code&gt;ok&lt;/code&gt; &lt;a href="https://github.com/lemon24/reader/issues/204#issuecomment-780553373"&gt;here&lt;/a&gt;).&lt;/p&gt;
+&lt;h3 id="you-re-already-using-a-tuple"&gt;You're already using a tuple&lt;span class="headerlink"&gt; &lt;a href="#you-re-already-using-a-tuple" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;You're already using a tuple, and want to make &lt;em&gt;new&lt;/em&gt; code more readable:
+a namedtuple gets you this, but guarantees you won't break &lt;em&gt;old&lt;/em&gt; code.&lt;/p&gt;
+&lt;p&gt;Some people argue that wherever you return a non-trivial tuple,
+you should be returning a namedtuple instead. I tend to agree.&lt;/p&gt;
+&lt;h3 id="you-want-consumers-that-do-unpacking-to-fail"&gt;You want consumers that do unpacking to fail&lt;span class="headerlink"&gt; &lt;a href="#you-want-consumers-that-do-unpacking-to-fail" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;In some cases, you &lt;em&gt;want&lt;/em&gt; consumers that do unpacking to fail.&lt;/p&gt;
+&lt;p&gt;For example, in my feed reader library,
+I use a named tuple to group &lt;a href="https://github.com/lemon24/reader/blob/2.0/src/reader/_types.py#L292"&gt;arguments related to filtering&lt;/a&gt;,
+because there's a lot of them,
+and they get passed around quite a bit before being used
+(I cover why in more detail &lt;a href="/more-arguments#counter-example-data-classes"&gt;here&lt;/a&gt;).&lt;/p&gt;
+&lt;p&gt;I know all arguments should always be handled, so
+I &lt;a href="https://github.com/lemon24/reader/blob/2.0/src/reader/_storage.py#L1261"&gt;use unpacking&lt;/a&gt; specifically because
+I want the code to fail when a new one is added –
+if I used attribute access,
+the code would silently succeed.
+This is no substitute for tests,
+but the early warning is nice,
+especially in a larger code base.&lt;/p&gt;
+&lt;h3 id="memory-and-speed"&gt;Memory and speed&lt;span class="headerlink"&gt; &lt;a href="#memory-and-speed" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Last, but not least, named tuples are useful if you care about memory or speed;
+&lt;em&gt;they are much smaller&lt;/em&gt; and faster than the equivalent (data)class.
+In most cases, the difference doesn't matter,
+but it can become noticeable if you create millions of instances.&lt;/p&gt;
+&lt;p&gt;Setting &lt;a href="https://docs.python.org/3/glossary.html#term-slots"&gt;__slots__&lt;/a&gt; helps with memory, but doesn't really help with speed.&lt;/p&gt;
+&lt;p&gt;Here's a quick comparison:&lt;/p&gt;
+&lt;table class="table"&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+  &lt;th style="text-align:left"&gt;&lt;/th&gt;
+  &lt;th style="text-align:right"&gt;cls(1, 2)&lt;/th&gt;
+  &lt;th style="text-align:right"&gt;obj.a&lt;/th&gt;
+  &lt;th style="text-align:right"&gt;hash(obj)&lt;/th&gt;
+  &lt;th style="text-align:right"&gt;size&lt;/th&gt;
+  &lt;th style="text-align:right"&gt;total size&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+  &lt;td style="text-align:left"&gt;dataclass&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;846.7&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;52.7&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;362.8&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;152&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;320&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td style="text-align:left"&gt;dataclass + slots&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;705.4&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;46.7&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;348.2&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;48&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;104&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td style="text-align:left"&gt;namedtuple&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;462.0&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;44.9&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;101.8&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;56&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;112&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;&lt;code&gt;cls(1, 2)&lt;/code&gt;, &lt;code&gt;obj.a&lt;/code&gt;, &lt;code&gt;hash(obj)&lt;/code&gt; are timings for that expression,
+in nanoseconds.&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;size&lt;/em&gt; is the &lt;a href="https://docs.python.org/3/library/sys.html#sys.getsizeof"&gt;sys.getsizeof&lt;/a&gt; of the object itself
+plus that of its &lt;code&gt;__dict__&lt;/code&gt; (if any), excluding the actual values.
+&lt;em&gt;total size&lt;/em&gt; includes the values, as returned by Pympler's &lt;a href="https://pympler.readthedocs.io/en/stable/library/asizeof.html#pympler.asizeof.asizeof"&gt;asizeof&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;I ran this with CPython 3.8 on macOS;
+on Linux, the timings are roughly the same.&lt;/p&gt;
+&lt;p&gt;When increasing the number of fields, &lt;code&gt;obj.a&lt;/code&gt; remains constant,
+while the other timings increase proportionally.
+The slots dataclass is always 8 bytes smaller than the namedtuple.&lt;/p&gt;
+&lt;details&gt;
+&lt;summary&gt;The class definitions:&lt;/summary&gt;
+&lt;p&gt;For dataclasses, &lt;code&gt;__slots__&lt;/code&gt; must be set explicitly;
+this was fixed &lt;a href="https://bugs.python.org/issue42269"&gt;in Python 3.10&lt;/a&gt;.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;typing&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;NamedTuple&lt;/span&gt;
+&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;dataclasses&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;dataclass&lt;/span&gt;
+
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;NT&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;NamedTuple&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;
+    &lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;
+
+&lt;span class="nd"&gt;@dataclass&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;frozen&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;DC&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;
+    &lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;
+
+&lt;span class="nd"&gt;@dataclass&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;frozen&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;DS&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;
+    &lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;
+    &lt;span class="vm"&gt;__slots__&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;a&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;b&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/details&gt;
+&lt;hr /&gt;
+&lt;p&gt;That's it for now. :)&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Learned something new today?&lt;/strong&gt; Share this with others, it really helps!&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Want more?&lt;/strong&gt; Get updates via &lt;a href="#embedded-subscribe-form"&gt;email&lt;/a&gt;
+or &lt;a href="https://death.andgravity.com/_feed/index.xml"&gt;Atom feed&lt;/a&gt;.&lt;/p&gt;
+&lt;section class="footnotes"&gt;
+&lt;ol&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;&lt;a href="https://code.activestate.com/recipes/500261-named-tuples/"&gt;2007&lt;/a&gt;–&lt;a href="https://docs.python.org/3/whatsnew/2.6.html#new-and-improved-modules"&gt;2008&lt;/a&gt; seems like forever enough these days. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-2"&gt;&lt;p&gt;See &lt;a href="/same-arguments#caveat-attribute-changes-are-confusing"&gt;this&lt;/a&gt;
+for an example of why you might want immutable instances. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-3"&gt;&lt;p&gt;I also cover PEP 557 and what can be learned from it &lt;a href="https://death.andgravity.com/stdlib#dataclasses"&gt;here&lt;/a&gt;. &lt;a href="#fnref-3" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+    <link href="https://death.andgravity.com/namedtuples" rel="alternate"/>
+    <summary>It seems like namedtuple exists since forever, and over time, its usefulness saw it used far outside its originally intended purpose. With dataclasses now covering part of those use cases,  what should one use named tuples for? In this article, I discuss this, with some examples from real code.</summary>
+    <published>2021-07-21T07:55:00+00:00</published>
+  </entry>
   <entry xml:base="https://death.andgravity.com/own-query-builder">
     <id>https://death.andgravity.com/own-query-builder</id>
     <title>Why I wrote my own SQL query builder (in Python)</title>
