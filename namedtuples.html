@@ -73,7 +73,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ five minute read
+∙ six minute read
 
 
 </small></p>
@@ -274,27 +274,43 @@ but it can become noticeable if you create millions of instances.</p>
 <tbody>
 <tr>
   <td style="text-align:left">dataclass</td>
-  <td style="text-align:right">846.7</td>
-  <td style="text-align:right">52.7</td>
-  <td style="text-align:right">362.8</td>
+  <td style="text-align:right">846.9</td>
+  <td style="text-align:right">49.7</td>
+  <td style="text-align:right">361.7</td>
   <td style="text-align:right">152</td>
   <td style="text-align:right">320</td>
 </tr>
 <tr>
   <td style="text-align:left">dataclass + slots</td>
-  <td style="text-align:right">705.4</td>
-  <td style="text-align:right">46.7</td>
-  <td style="text-align:right">348.2</td>
+  <td style="text-align:right">709.1</td>
+  <td style="text-align:right">45.5</td>
+  <td style="text-align:right">342.5</td>
   <td style="text-align:right">48</td>
   <td style="text-align:right">104</td>
 </tr>
 <tr>
   <td style="text-align:left">namedtuple</td>
-  <td style="text-align:right">462.0</td>
-  <td style="text-align:right">44.9</td>
-  <td style="text-align:right">101.8</td>
+  <td style="text-align:right">465.3</td>
+  <td style="text-align:right">43.2</td>
+  <td style="text-align:right">99.6</td>
   <td style="text-align:right">56</td>
   <td style="text-align:right">112</td>
+</tr>
+<tr>
+  <td style="text-align:left">dataobject + gc</td>
+  <td style="text-align:right">150.3</td>
+  <td style="text-align:right">43.1</td>
+  <td style="text-align:right">104.1</td>
+  <td style="text-align:right">48</td>
+  <td style="text-align:right">48</td>
+</tr>
+<tr>
+  <td style="text-align:left">dataobject</td>
+  <td style="text-align:right">136.4</td>
+  <td style="text-align:right">45.1</td>
+  <td style="text-align:right">106.5</td>
+  <td style="text-align:right">32</td>
+  <td style="text-align:right">32</td>
 </tr>
 </tbody>
 </table>
@@ -303,17 +319,28 @@ in nanoseconds.</p>
 <p><em>size</em> is the <a href="https://docs.python.org/3/library/sys.html#sys.getsizeof">sys.getsizeof</a> of the object itself
 plus that of its <code>__dict__</code> (if any), excluding the actual values.
 <em>total size</em> includes the values, as returned by Pympler's <a href="https://pympler.readthedocs.io/en/stable/library/asizeof.html#pympler.asizeof.asizeof">asizeof</a>.</p>
-<p>I ran this with CPython 3.8 on macOS;
-on Linux, the timings are roughly the same.</p>
+<p>I ran this with 64-bit CPython 3.8 on macOS;
+Linux looks roughly the same.</p>
 <p>When increasing the number of fields, <code>obj.a</code> remains constant,
 while the other timings increase proportionally.
 The slots dataclass is always 8 bytes smaller than the namedtuple.</p>
+<p>For the <em>dataobject</em> rows I used <a href="https://bitbucket.org/intellimath/recordclass/src/master/README.md">recordclass</a>,
+which provides dataclass/namedtuple-equivalent types.
+The version without <em>gc</em> doesn't participate in cyclic garbage collection,
+so it shouldn't be used for recursive data structures.</p>
+<p>The library still has some rough edges, though:
+the documentation is a bit confusing,
+and I had to use the (yet unreleased) 0.15 version to get it working;
+also, note the wrong <em>total size</em> (it may be a Pympler bug).
+Nevertheless, the numbers are pretty compelling, and
+<em>if you have this problem</em>, it's definitely worth a look.</p>
 <details>
 <summary>The class definitions:</summary>
 <p>For dataclasses, <code>__slots__</code> must be set explicitly;
 this was fixed <a href="https://bugs.python.org/issue42269">in Python 3.10</a>.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">NamedTuple</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span> <span class="nn">recordclass</span> <span class="kn">import</span> <span class="n">dataobject</span>
 
 <span class="k">class</span> <span class="nc">NT</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
     <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
@@ -329,6 +356,16 @@ this was fixed <a href="https://bugs.python.org/issue42269">in Python 3.10</a>.<
     <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">b</span><span class="p">:</span> <span class="nb">int</span>
     <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">DO</span><span class="p">(</span><span class="n">dataobject</span><span class="p">):</span>
+    <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">b</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">__options__</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">readonly</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">fast_new</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">DG</span><span class="p">(</span><span class="n">dataobject</span><span class="p">):</span>
+    <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">b</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">__options__</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">readonly</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">fast_new</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">gc</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
 </details>
 <hr />
