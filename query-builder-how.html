@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ seven minute read
+∙ 10 minute read
 
 
 </small></p>
@@ -78,12 +78,17 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
+<p>part of a series etc.</p>
+<p>a walk-through: we'll rewrite the query builder from scratch, incrementally,
+looking at various things.</p>
 <details>
 <summary>Contents</summary>
 <section class="toc">
 <ul>
-<li><a href="#insight">insight</a></li>
-<li><a href="#begin">begin</a>
+<li><a href="#what-are-we-trying-to-build">what are we trying to build?</a></li>
+<li><a href="#trade-offs">trade-offs</a></li>
+<li><a href="#data-representation">data representation</a></li>
+<li><a href="#a-minimal-plausible-solution">a minimal plausible solution</a>
 <ul>
 <li><a href="#class">class</a></li>
 <li><a href="#adding-stuff">adding stuff</a></li>
@@ -91,17 +96,13 @@ window.addEventListener('resize', set_vh);
 <li><a href="#test">test</a></li>
 </ul>
 </li>
-<li><a href="#separators">separators</a>
-<ul>
-<li><a href="#test-1">test</a></li>
-</ul>
-</li>
+<li><a href="#separators">separators</a></li>
 <li><a href="#aliases">aliases</a>
 <ul>
 <li><a href="#add-thing">add thing</a></li>
 <li><a href="#create-thing">create thing</a></li>
 <li><a href="#output-thing">output thing</a></li>
-<li><a href="#test-2">test</a></li>
+<li><a href="#test-1">test</a></li>
 </ul>
 </li>
 <li><a href="#subqueries">subqueries</a>
@@ -109,7 +110,6 @@ window.addEventListener('resize', set_vh);
 <li><a href="#add-is-subquery">add is_subquery</a></li>
 <li><a href="#set-is-subquery">set is_subquery</a></li>
 <li><a href="#use-is-subquery">use is_subquery</a></li>
-<li><a href="#test-3">test</a></li>
 </ul>
 </li>
 <li><a href="#joins">joins</a>
@@ -117,7 +117,6 @@ window.addEventListener('resize', set_vh);
 <li><a href="#add-keyword-option">add keyword option</a></li>
 <li><a href="#set-keyword">set keyword</a></li>
 <li><a href="#use-keyword">use keyword</a></li>
-<li><a href="#test-4">test</a></li>
 </ul>
 </li>
 <li><a href="#distinct">distinct</a>
@@ -125,7 +124,6 @@ window.addEventListener('resize', set_vh);
 <li><a href="#add-flaglist">add flaglist</a></li>
 <li><a href="#set-flag">set flag</a></li>
 <li><a href="#use-flag">use flag</a></li>
-<li><a href="#test-5">test</a></li>
 </ul>
 </li>
 <li><a href="#more-tests">more tests</a></li>
@@ -134,22 +132,35 @@ window.addEventListener('resize', set_vh);
 </ul>
 </section>
 </details>
-<h2 id="insight">insight<span class="headerlink"> <a href="#insight" title="permalink">#</a></span></h2>
+<h2 id="what-are-we-trying-to-build">what are we trying to build?<span class="headerlink"> <a href="#what-are-we-trying-to-build" title="permalink">#</a></span></h2>
+<p>TBD: an example</p>
+<h2 id="trade-offs">trade-offs<span class="headerlink"> <a href="#trade-offs" title="permalink">#</a></span></h2>
+<ul>
+<li>little customization; there's exactly one user for this, no need for API flourishes</li>
+<li>some error checking; exceptions for most errors, but it doesn't matter what kind, they're only for indicating programming bugs (should never bubble up to the end user)</li>
+<li>only cover the <a href="/own-query-builder#requirements-and-existing-libraries">known requirements</a></li>
+<li>only support SQLite syntax</li>
+</ul>
+<h2 id="data-representation">data representation<span class="headerlink"> <a href="#data-representation" title="permalink">#</a></span></h2>
+<p>As mentioned in the <a href="/own-query-builder#the-first-prototype">previous article</a>,
+my prototype query builder was based on the idea that
+<em>queries can be represented as plain datastructures</em>.</p>
+<p>Looking at a query, a more or less natural representation may come to mind:</p>
 <div class="highlight code-container"><pre class="code" data-lang="SQL"><span></span><code><span class="k">SELECT</span>
     <span class="n">one</span><span class="p">,</span>
-    <span class="n">two</span><span class="p">,</span>
-    <span class="n">three</span>
+    <span class="n">two</span>
 <span class="k">FROM</span>
     <span class="k">table</span>
 <span class="k">WHERE</span>
     <span class="n">condition</span> <span class="k">AND</span>
     <span class="n">another</span><span class="o">-</span><span class="n">condition</span>
 </code></pre></div>
+<p>See it?</p>
+<p>It's a dict with a list of strings for each clause:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="p">{</span>
     <span class="s1">&#39;SELECT&#39;</span><span class="p">:</span> <span class="p">[</span>
         <span class="s1">&#39;one&#39;</span><span class="p">,</span>
         <span class="s1">&#39;two&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;three&#39;</span><span class="p">,</span>
     <span class="p">],</span>
     <span class="s1">&#39;FROM&#39;</span><span class="p">:</span> <span class="p">[</span>
         <span class="s1">&#39;table&#39;</span><span class="p">,</span>
@@ -160,55 +171,14 @@ window.addEventListener('resize', set_vh);
     <span class="p">],</span>
 <span class="p">}</span>
 </code></pre></div>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="p">{</span>                             
-    <span class="s1">&#39;SELECT&#39;</span><span class="p">:</span> <span class="p">[</span>               <span class="c1">#  SELECT</span>
-        <span class="s1">&#39;one&#39;</span><span class="p">,</span>                <span class="c1">#      one,</span>
-        <span class="s1">&#39;two&#39;</span><span class="p">,</span>                <span class="c1">#      two,</span>
-        <span class="s1">&#39;three&#39;</span><span class="p">,</span>              <span class="c1">#      three</span>
-    <span class="p">],</span>                        
-    <span class="s1">&#39;FROM&#39;</span><span class="p">:</span> <span class="p">[</span>                 <span class="c1">#  FROM</span>
-        <span class="s1">&#39;table&#39;</span><span class="p">,</span>              <span class="c1">#      table</span>
-    <span class="p">],</span>                        
-    <span class="s1">&#39;WHERE&#39;</span><span class="p">:</span> <span class="p">[</span>                <span class="c1">#  WHERE</span>
-        <span class="s1">&#39;condition&#39;</span><span class="p">,</span>          <span class="c1">#      condition AND</span>
-        <span class="s1">&#39;another-condition&#39;</span><span class="p">,</span>  <span class="c1">#      another-condition</span>
-    <span class="p">],</span>               
-<span class="p">}</span>                
-</code></pre></div>
-<pre class="code code-container"><code>{                             |
-    'SELECT': [               |  SELECT
-        'one',                |      one,
-        'two',                |      two,
-        'three',              |      three
-    ],                        |
-    'FROM': [                 |  FROM
-        'table',              |      table
-    ],                        |
-    'WHERE': [                |  WHERE
-        'condition',          |      condition AND
-        'another-condition',  |      another-condition
-    ],                        |
-}                             |
-</code></pre>
-<pre class="code code-container"><code>                        |  {
-SELECT                  |      'SELECT': [
-    one,                |          'one',
-    two,                |          'two',
-    three               |          'three',
-                        |      ],
-FROM                    |      'FROM': [
-    table               |          'table',
-                        |      ],
-WHERE                   |      'WHERE': [
-    condition AND       |          'condition',
-    another-condition   |          'another-condition',
-                        |      ],
-                        |  }
-</code></pre>
-<h2 id="begin">begin<span class="headerlink"> <a href="#begin" title="permalink">#</a></span></h2>
+<p>Let's start from this model, and build ourselves a query builder.</p>
+<p>note: this is a linear story, going only through what worked;
+there other possible implemenations,
+some of which I did take and then changed my mind on</p>
+<h2 id="a-minimal-plausible-solution">a minimal plausible solution<span class="headerlink"> <a href="#a-minimal-plausible-solution" title="permalink">#</a></span></h2>
 <h3 id="class">class<span class="headerlink"> <a href="#class" title="permalink">#</a></span></h3>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 1</span>
-<span class="normal"> 2</span>
+<p>We start by adding a class:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 2</span>
 <span class="normal"> 3</span>
 <span class="normal"> 4</span>
 <span class="normal"> 5</span>
@@ -222,8 +192,7 @@ WHERE                   |      'WHERE': [
 <span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
-<span class="normal">16</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>
-<span class="k">class</span> <span class="nc">Query</span><span class="p">:</span>
+<span class="normal">16</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Query</span><span class="p">:</span>
 
     <span class="n">keywords</span> <span class="o">=</span> <span class="p">[</span>
         <span class="s1">&#39;WITH&#39;</span><span class="p">,</span>
@@ -240,7 +209,15 @@ WHERE                   |      'WHERE': [
         <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">keywords</span><span class="p">}</span>
 </code></pre></div>
 </td></tr></table>
+<ul>
+<li>as mentioned in the previous article, we don't want to work with the underlying data structure; we want <code>query.SELECT('one', 'two')</code> instead of <code>query['SELECT'].extend(['one', 'two'])</code></li>
+<li>no customization in the constructor, for now; if we need more clauses, we can add them to <code>keywords</code> directly</li>
+<li>not subclassing dict, to keep the API tight</li>
+<li>we build the dict upfront; this means we can use the dict order directly (py36+, insertion order), and we get some free error checking (<code>data[keyword]</code> for the wrong keyword )</li>
+<li>we could use dataclasses, but most of the time the repr() is too long to be useful, and we don't need any other magic methods</li>
+</ul>
 <h3 id="adding-stuff">adding stuff<span class="headerlink"> <a href="#adding-stuff" title="permalink">#</a></span></h3>
+<p>Next, we add code to add stuff:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span>
 <span class="normal">19</span>
 <span class="normal">20</span>
@@ -251,7 +228,12 @@ WHERE                   |      'WHERE': [
 <span class="normal">25</span>
 <span class="normal">26</span>
 <span class="normal">27</span>
-<span class="normal">28</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keyword</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keyword</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
         <span class="n">target</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">keyword</span><span class="p">]</span>
 
         <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span><span class="p">:</span>
@@ -259,27 +241,43 @@ WHERE                   |      'WHERE': [
 
         <span class="k">return</span> <span class="bp">self</span>
 
+    <span class="k">def</span> <span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="o">.</span><span class="n">isupper</span><span class="p">():</span>
+            <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">super</span><span class="p">(),</span> <span class="n">name</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">,</span> <span class="n">name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">))</span>
+
 
 <span class="k">def</span> <span class="nf">_clean_up</span><span class="p">(</span><span class="n">thing</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
     <span class="k">return</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">dedent</span><span class="p">(</span><span class="n">thing</span><span class="o">.</span><span class="n">rstrip</span><span class="p">())</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
 </code></pre></div>
 </td></tr></table>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">1</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">functools</span>
-</code></pre></div>
-</td></tr></table>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">28</span>
-<span class="normal">29</span>
-<span class="normal">30</span>
-<span class="normal">31</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="o">.</span><span class="n">isupper</span><span class="p">():</span>
-            <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">super</span><span class="p">(),</span> <span class="n">name</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">,</span> <span class="n">name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">))</span>
-</code></pre></div>
-</td></tr></table>
+<ul>
+<li><p><code>add()</code> appends all its arguments to the list corresponding to <code>keyword</code></p>
+<ul>
+<li>note <code>self.data[keyword]</code> (free keyerror for bad keywords)</li>
+<li>upfront decision: we clean everything up and make as many choices here; this allows the part that generates the output to not care about any of that, and ensures error checking happens as early as possible (when building the query, not when converting it to a string)</li>
+<li>we return self, to allow for chaining (<code>query.add(...).add(...)</code>)</li>
+<li>add() is also an escape hatch for when we want to use a &quot;clause&quot; that's not a python identifier</li>
+</ul>
+</li>
+<li><p><code>__getattr__()</code> fabricates &quot;methods&quot; on the fly</p>
+<ul>
+<li>we make a stylistic choice, and require all keywords to be uppercase (<code>query.GROUP_BY()</code>, not <code>query.group_by()</code>)<ul>
+<li>makes it clearer to the user these are special methods</li>
+<li>it also has the benfit of us not having to avoid shadowing dunder methods like <code>__deepcopy__</code></li>
+<li>we don't bother raising AttributeError explicitly, we just let getattr() do it for us</li>
+</ul>
+</li>
+<li><code>__getattr__()</code> gets called for attributes that don't exist</li>
+<li>we return a <code>KEYWORD(*args)</code> callable by wrapping add() in a <code>partial</code><ul>
+<li>we could save the partial on the object (<code>setattr(self, name.replace('_', ' '), functools(...)</code>); this would side-step <code>__getattr__()</code> on subsequent calls, and return the stored partial; premature optimization</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
 <h3 id="printing-stuff">printing stuff<span class="headerlink"> <a href="#printing-stuff" title="permalink">#</a></span></h3>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">2</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">textwrap</span>
-</code></pre></div>
-</td></tr></table>
+<p>Finally, we turn the thing back into a string:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">default_separator</span> <span class="o">=</span> <span class="s1">&#39;,&#39;</span>
 </code></pre></div>
 </td></tr></table>
@@ -330,13 +328,19 @@ WHERE                   |      'WHERE': [
     <span class="n">_indent</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s1">&#39;    &#39;</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+<ul>
+<li>to get an SQL string, the user calls <code>str(query)</code>, which ends up calling <code>__str__</code> on our object<ul>
+<li>instead of doing everything in <code>__str__</code>, we farm most of the work to <code>_lines()</code>, which generates output lines; the main benefit of this is that it allows us to write <code>yield line</code> instead of <code>rv.append(line)</code>; a second benefit is that we could, in theory, pass it directly to an open file's writelines() method, and never have to build a whole string (although we won't actually need this); same goes for subqueries</li>
+<li>we also split the output for each clause into <code>_lines_keyword()</code>, since we'll add more stuff over time, and they're both gonna get more complicated (I initially left everything in _lines(), and had to refactor afterwards)</li>
+<li>because we may want to change how indenting happens, we make it a method using a partial</li>
+</ul>
+</li>
+<li>we store the separator as a class attribute, both to document what it is, and in case it ever needs to be overridden</li>
+</ul>
 <h3 id="test">test<span class="headerlink"> <a href="#test" title="permalink">#</a></span></h3>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 1</span>
-<span class="normal"> 2</span>
-<span class="normal"> 3</span>
-<span class="normal"> 4</span>
-<span class="normal"> 5</span>
-<span class="normal"> 6</span>
+<p>For a minimal thing, we're mostly done.</p>
+<p>To make sure we don't break stuff that works in the future, we add a basic test:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
 <span class="normal"> 9</span>
@@ -346,12 +350,7 @@ WHERE                   |      'WHERE': [
 <span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
-<span class="normal">16</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">textwrap</span> <span class="kn">import</span> <span class="n">dedent</span>
-
-<span class="kn">from</span> <span class="nn">builder</span> <span class="kn">import</span> <span class="n">Query</span>
-
-
-<span class="k">def</span> <span class="nf">test_query_simple</span><span class="p">():</span>
+<span class="normal">16</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_query_simple</span><span class="p">():</span>
     <span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;select&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;from-one&#39;</span><span class="p">,</span> <span class="s1">&#39;from-two&#39;</span><span class="p">)</span>
     <span class="k">assert</span> <span class="nb">str</span><span class="p">(</span><span class="n">query</span><span class="p">)</span> <span class="o">==</span> <span class="n">dedent</span><span class="p">(</span>
         <span class="sd">&quot;&quot;&quot;\</span>
@@ -365,6 +364,14 @@ WHERE                   |      'WHERE': [
 </code></pre></div>
 </td></tr></table>
 <h2 id="separators">separators<span class="headerlink"> <a href="#separators" title="permalink">#</a></span></h2>
+<p>At this point, the WHERE output doesn't really make sense:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">))</span>
+<span class="go">WHERE</span>
+<span class="go">    a,</span>
+<span class="go">    b</span>
+</code></pre></div>
+<p>We fix this by special-casing the separators for a few clauses,
+and storing them as a class attribute.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">separators</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">WHERE</span><span class="o">=</span><span class="s1">&#39;AND&#39;</span><span class="p">,</span> <span class="n">HAVING</span><span class="o">=</span><span class="s1">&#39;AND&#39;</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
@@ -395,7 +402,11 @@ WHERE                   |      'WHERE': [
 </span>            <span class="k">yield</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="test-1">test<span class="headerlink"> <a href="#test-1" title="permalink">#</a></span></h3>
+<p>We could've used defaultdict and gotten rid of <code>default_separator</code>,
+but then we'd have to remember that the non-comma separators need a space – <code>' AND'</code>;
+it's clearer to put this directly in code.</p>
+<details>
+<summary>We also mark our progress in the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -435,11 +446,27 @@ WHERE                   |      'WHERE': [
     <span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+</details>
 <h2 id="aliases">aliases<span class="headerlink"> <a href="#aliases" title="permalink">#</a></span></h2>
-<h3 id="add-thing">add thing<span class="headerlink"> <a href="#add-thing" title="permalink">#</a></span></h3>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">3</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">NamedTuple</span>
+<p>One of the requirements is making it possible to implement on top of our builder
+<a href="/query-builder-why#intermission-scrolling-window-queries">scrolling window queries</a>.</p>
+<p>For this to happen, that code needs to be able to introspect
+the aliases we use in SELECT, so it can use them in the generated WHERE condition.</p>
+<p>The output of the following looks OK, but to extract <code>alias</code> programmatically,
+we'd need to parse <code>column AS alias</code>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;column AS alias&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;SELECT&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+<span class="go">&#39;column AS alias&#39;</span>
 </code></pre></div>
-</td></tr></table>
+<p>Passing a pair of strings when we want an aliased column seems like an acceptable thing:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">((</span><span class="s1">&#39;alias&#39;</span><span class="p">,</span> <span class="s1">&#39;one&#39;</span><span class="p">),</span> <span class="s1">&#39;two&#39;</span><span class="p">))</span>
+<span class="go">SELECT</span>
+<span class="go">    one AS alias,</span>
+<span class="go">    two</span>
+</code></pre></div>
+<p>Since the column expression might be quite long,
+we make the alias the first thing in the pair.</p>
+<h3 id="add-thing">add thing<span class="headerlink"> <a href="#add-thing" title="permalink">#</a></span></h3>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">66</span>
 <span class="normal">67</span>
 <span class="normal">68</span>
@@ -484,9 +511,6 @@ WHERE                   |      'WHERE': [
 </code></pre></div>
 </td></tr></table>
 <h3 id="output-thing">output thing<span class="headerlink"> <a href="#output-thing" title="permalink">#</a></span></h3>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">3</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
-</code></pre></div>
-</td></tr></table>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">23</span>
 <span class="normal">24</span>
 <span class="normal">25</span>
@@ -525,7 +549,9 @@ WHERE                   |      'WHERE': [
             <span class="k">yield</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="test-2">test<span class="headerlink"> <a href="#test-2" title="permalink">#</a></span></h3>
+<h3 id="test-1">test<span class="headerlink"> <a href="#test-1" title="permalink">#</a></span></h3>
+<details>
+<summary>We also mark our progress in the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -567,6 +593,7 @@ WHERE                   |      'WHERE': [
     <span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+</details>
 <h2 id="subqueries">subqueries<span class="headerlink"> <a href="#subqueries" title="permalink">#</a></span></h2>
 <h3 id="add-is-subquery">add is_subquery<span class="headerlink"> <a href="#add-is-subquery" title="permalink">#</a></span></h3>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">73</span>
@@ -661,7 +688,8 @@ WHERE                   |      'WHERE': [
             <span class="k">yield</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="test-3">test<span class="headerlink"> <a href="#test-3" title="permalink">#</a></span></h3>
+<details>
+<summary>We also mark our progress in the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -713,6 +741,7 @@ WHERE                   |      'WHERE': [
     <span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+</details>
 <h2 id="joins">joins<span class="headerlink"> <a href="#joins" title="permalink">#</a></span></h2>
 <h3 id="add-keyword-option">add keyword option<span class="headerlink"> <a href="#add-keyword-option" title="permalink">#</a></span></h3>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">82</span>
@@ -839,7 +868,8 @@ WHERE                   |      'WHERE': [
             <span class="k">yield</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="test-4">test<span class="headerlink"> <a href="#test-4" title="permalink">#</a></span></h3>
+<details>
+<summary>We also mark our progress in the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -897,6 +927,7 @@ WHERE                   |      'WHERE': [
     <span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+</details>
 <h2 id="distinct">distinct<span class="headerlink"> <a href="#distinct" title="permalink">#</a></span></h2>
 <h3 id="add-flaglist">add flaglist<span class="headerlink"> <a href="#add-flaglist" title="permalink">#</a></span></h3>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">117</span>
@@ -1001,7 +1032,8 @@ WHERE                   |      'WHERE': [
                 <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lines_keyword</span><span class="p">(</span><span class="n">keyword</span><span class="p">,</span> <span class="n">group</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="test-5">test<span class="headerlink"> <a href="#test-5" title="permalink">#</a></span></h3>
+<details>
+<summary>We also mark our progress in the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -1063,6 +1095,7 @@ WHERE                   |      'WHERE': [
     <span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+</details>
 <h2 id="more-tests">more tests<span class="headerlink"> <a href="#more-tests" title="permalink">#</a></span></h2>
 <details>
 <summary>long tests</summary>
@@ -1092,6 +1125,8 @@ WHERE                   |      'WHERE': [
             <span class="bp">self</span><span class="o">.</span><span class="n">separators</span> <span class="o">=</span> <span class="n">separators</span>
 </code></pre></div>
 </td></tr></table>
+<details>
+<summary>We also mark our progress in the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">108</span>
 <span class="normal">109</span>
 <span class="normal">110</span>
@@ -1117,6 +1152,7 @@ WHERE                   |      'WHERE': [
     <span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+</details>
 <h2 id="wrapping-up">wrapping up<span class="headerlink"> <a href="#wrapping-up" title="permalink">#</a></span></h2>
 <p><a href="/_file/query-builder-how/07-more-init/builder.py">final thing</a></p>
 
