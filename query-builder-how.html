@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ 10 minute read
+∙ 11 minute read
 
 
 </small></p>
@@ -99,10 +99,8 @@ looking at various things.</p>
 <li><a href="#separators">separators</a></li>
 <li><a href="#aliases">aliases</a>
 <ul>
-<li><a href="#add-thing">add thing</a></li>
-<li><a href="#create-thing">create thing</a></li>
-<li><a href="#output-thing">output thing</a></li>
-<li><a href="#test-1">test</a></li>
+<li><a href="#more-data-representation">more data representation</a></li>
+<li><a href="#output">output</a></li>
 </ul>
 </li>
 <li><a href="#subqueries">subqueries</a>
@@ -144,7 +142,7 @@ looking at various things.</p>
 <h2 id="data-representation">data representation<span class="headerlink"> <a href="#data-representation" title="permalink">#</a></span></h2>
 <p>As mentioned in the <a href="/own-query-builder#the-first-prototype">previous article</a>,
 my prototype query builder was based on the idea that
-<em>queries can be represented as plain datastructures</em>.</p>
+<em>queries can be represented as plain data structures</em>.</p>
 <p>Looking at a query, a more or less natural representation may come to mind:</p>
 <div class="highlight code-container"><pre class="code" data-lang="SQL"><span></span><code><span class="k">SELECT</span>
     <span class="n">one</span><span class="p">,</span>
@@ -406,7 +404,7 @@ and storing them as a class attribute.</p>
 but then we'd have to remember that the non-comma separators need a space – <code>' AND'</code>;
 it's clearer to put this directly in code.</p>
 <details>
-<summary>We also mark our progress in the test.</summary>
+<summary>We mark our progress in the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -458,15 +456,21 @@ we'd need to parse <code>column AS alias</code>:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;SELECT&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
 <span class="go">&#39;column AS alias&#39;</span>
 </code></pre></div>
-<p>Passing a pair of strings when we want an aliased column seems like an acceptable thing:</p>
+<p>Passing a pair of strings when we want an aliased column seems like an acceptable thing.
+Since the column expression might be quite long,
+we'll make the alias the first thing in the pair.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">((</span><span class="s1">&#39;alias&#39;</span><span class="p">,</span> <span class="s1">&#39;one&#39;</span><span class="p">),</span> <span class="s1">&#39;two&#39;</span><span class="p">))</span>
 <span class="go">SELECT</span>
 <span class="go">    one AS alias,</span>
 <span class="go">    two</span>
 </code></pre></div>
-<p>Since the column expression might be quite long,
-we make the alias the first thing in the pair.</p>
-<h3 id="add-thing">add thing<span class="headerlink"> <a href="#add-thing" title="permalink">#</a></span></h3>
+<h3 id="more-data-representation">more data representation<span class="headerlink"> <a href="#more-data-representation" title="permalink">#</a></span></h3>
+<p>As mentioned earlier, we'll store the data in cleaned up and standard form,
+so the output code doesn't have to care about that.
+A 2-tuple seems like a decent choice.</p>
+<p>Here we depart a tiny bit from plain data structures:
+to make the code easier to read,
+we'll use a named tuple instead of a plain tuple.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">66</span>
 <span class="normal">67</span>
 <span class="normal">68</span>
@@ -494,7 +498,20 @@ we make the alias the first thing in the pair.</p>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">_clean_up</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">_clean_up</span><span class="p">(</span><span class="n">alias</span><span class="p">))</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="create-thing">create thing<span class="headerlink"> <a href="#create-thing" title="permalink">#</a></span></h3>
+<p>Conveniently, this also gives us a place where to convert the string-or-pair, 
+in the form of the <code>from_arg()</code> alternate constructor.
+We could've made it a stand-alone function, 
+but this makes clearer what's being returned.</p>
+<section class="admonition note">
+<div class="admonition-text">
+<p>Note that we use an empty string to mean &quot;no alias&quot;. 
+ In general, it's a good idea to distinguish this kind of absence by using None,
+ since the empty string may be a valid input,
+ and None can prevent some bugs – e.g. you can't concatenate None to a string.
+ Here, we know an empty string cannot be a valid alias, so we don't bother.</p>
+</div>
+</section>
+<p>Using it is just a one-line change to <code>add()</code>:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">25</span>
 <span class="normal">26</span>
 <span class="normal">27</span>
@@ -510,7 +527,16 @@ we make the alias the first thing in the pair.</p>
         <span class="k">return</span> <span class="bp">self</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="output-thing">output thing<span class="headerlink"> <a href="#output-thing" title="permalink">#</a></span></h3>
+<h3 id="output">output<span class="headerlink"> <a href="#output" title="permalink">#</a></span></h3>
+<p>On output, we have two concerns:</p>
+<ol>
+<li>there may or may not be an alias</li>
+<li>the order differs: 
+ you have <code>select expr as column-alias</code>,
+ but you have <code>with table-name as (stmt)</code>
+ (we treat the CTE table name as an alias)</li>
+</ol>
+<p>We can model this with mostly-empty <a href="https://docs.python.org/3/library/collections.html#collections.defaultdict">defaultdict</a>s:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">23</span>
 <span class="normal">24</span>
 <span class="normal">25</span>
@@ -520,6 +546,9 @@ we make the alias the first thing in the pair.</p>
     <span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+<p>To choose between &quot;has alias&quot; and &quot;doesn't have alias&quot;,
+we take advantage of True and False being equal to 1 and 0
+(this may be to clever for our own good, but eh).</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">55</span>
 <span class="normal">56</span>
 <span class="normal">57</span>
@@ -549,9 +578,8 @@ we make the alias the first thing in the pair.</p>
             <span class="k">yield</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="test-1">test<span class="headerlink"> <a href="#test-1" title="permalink">#</a></span></h3>
 <details>
-<summary>We also mark our progress in the test.</summary>
+<summary>We mark our progress in the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -689,7 +717,7 @@ we make the alias the first thing in the pair.</p>
 </code></pre></div>
 </td></tr></table>
 <details>
-<summary>We also mark our progress in the test.</summary>
+<summary>We mark our progress in the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -869,7 +897,7 @@ we make the alias the first thing in the pair.</p>
 </code></pre></div>
 </td></tr></table>
 <details>
-<summary>We also mark our progress in the test.</summary>
+<summary>We mark our progress in the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -1033,7 +1061,7 @@ we make the alias the first thing in the pair.</p>
 </code></pre></div>
 </td></tr></table>
 <details>
-<summary>We also mark our progress in the test.</summary>
+<summary>We mark our progress in the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -1126,7 +1154,7 @@ we make the alias the first thing in the pair.</p>
 </code></pre></div>
 </td></tr></table>
 <details>
-<summary>We also mark our progress in the test.</summary>
+<summary>We mark our progress in the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">108</span>
 <span class="normal">109</span>
 <span class="normal">110</span>
