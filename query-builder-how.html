@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ 11 minute read
+∙ 13 minute read
 
 
 </small></p>
@@ -97,26 +97,9 @@ looking at various things.</p>
 </ul>
 </li>
 <li><a href="#separators">separators</a></li>
-<li><a href="#aliases">aliases</a>
-<ul>
-<li><a href="#more-data-representation">more data representation</a></li>
-<li><a href="#output">output</a></li>
-</ul>
-</li>
-<li><a href="#subqueries">subqueries</a>
-<ul>
-<li><a href="#add-is-subquery">add is_subquery</a></li>
-<li><a href="#set-is-subquery">set is_subquery</a></li>
-<li><a href="#use-is-subquery">use is_subquery</a></li>
-</ul>
-</li>
-<li><a href="#joins">joins</a>
-<ul>
-<li><a href="#add-keyword-option">add keyword option</a></li>
-<li><a href="#set-keyword">set keyword</a></li>
-<li><a href="#use-keyword">use keyword</a></li>
-</ul>
-</li>
+<li><a href="#aliases">aliases</a></li>
+<li><a href="#subqueries">subqueries</a></li>
+<li><a href="#joins">joins</a></li>
 <li><a href="#distinct">distinct</a>
 <ul>
 <li><a href="#add-flaglist">add flaglist</a></li>
@@ -253,7 +236,7 @@ some of which I did take and then changed my mind on</p>
 <li><p><code>add()</code> appends all its arguments to the list corresponding to <code>keyword</code></p>
 <ul>
 <li>note <code>self.data[keyword]</code> (free keyerror for bad keywords)</li>
-<li>upfront decision: we clean everything up and make as many choices here; this allows the part that generates the output to not care about any of that, and ensures error checking happens as early as possible (when building the query, not when converting it to a string)</li>
+<li>upfront decision: we clean everything up and make as many choices here; this allows the part that generates the output to not care about any of that, and ensures error checking happens as early as possible (when building the query, not when converting it to a string); I initially didnt' do this</li>
 <li>we return self, to allow for chaining (<code>query.add(...).add(...)</code>)</li>
 <li>add() is also an escape hatch for when we want to use a &quot;clause&quot; that's not a python identifier</li>
 </ul>
@@ -403,6 +386,10 @@ and storing them as a class attribute.</p>
 <p>We could've used defaultdict and gotten rid of <code>default_separator</code>,
 but then we'd have to remember that the non-comma separators need a space – <code>' AND'</code>;
 it's clearer to put this directly in code.</p>
+<p>Also, we could've put the special separator on a new line (<code>'one\nAND two'</code> vs. <code>'one AND\ntwo'</code>).
+While this is recommended by some <a href="https://docs.telemetry.mozilla.org/concepts/sql_style.html#boolean-at-the-beginning-of-line">style guides</a>,
+it makes the code a bit more complicated for little benefit, <!-- TODO link -->
+and (maybe) makes it less obvious that AND is just another separator.</p>
 <details>
 <summary>We mark our progress in the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
@@ -464,7 +451,6 @@ we'll make the alias the first thing in the pair.</p>
 <span class="go">    one AS alias,</span>
 <span class="go">    two</span>
 </code></pre></div>
-<h3 id="more-data-representation">more data representation<span class="headerlink"> <a href="#more-data-representation" title="permalink">#</a></span></h3>
 <p>As mentioned earlier, we'll store the data in cleaned up and standard form,
 so the output code doesn't have to care about that.
 A 2-tuple seems like a decent choice.</p>
@@ -527,7 +513,6 @@ but this makes clearer what's being returned.</p>
         <span class="k">return</span> <span class="bp">self</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="output">output<span class="headerlink"> <a href="#output" title="permalink">#</a></span></h3>
 <p>On output, we have two concerns:</p>
 <ol>
 <li>there may or may not be an alias</li>
@@ -536,7 +521,7 @@ but this makes clearer what's being returned.</p>
  but you have <code>with table-name as (stmt)</code>
  (we treat the CTE table name as an alias)</li>
 </ol>
-<p>We can model this with mostly-empty <a href="https://docs.python.org/3/library/collections.html#collections.defaultdict">defaultdict</a>s:</p>
+<p>We can model this with mostly-empty <a href="https://docs.python.org/3/library/collections.html#collections.defaultdict">defaultdict</a>s with per-clause format strings:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">23</span>
 <span class="normal">24</span>
 <span class="normal">25</span>
@@ -623,7 +608,29 @@ we take advantage of True and False being equal to 1 and 0
 </td></tr></table>
 </details>
 <h2 id="subqueries">subqueries<span class="headerlink"> <a href="#subqueries" title="permalink">#</a></span></h2>
-<h3 id="add-is-subquery">add is_subquery<span class="headerlink"> <a href="#add-is-subquery" title="permalink">#</a></span></h3>
+<p>Currently, WITH is a little broken:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">WITH</span><span class="p">((</span><span class="s1">&#39;table-name&#39;</span><span class="p">,</span> <span class="s1">&#39;SELECT 1&#39;</span><span class="p">)))</span>
+<span class="go">WITH</span>
+<span class="go">    table-name AS SELECT 1</span>
+</code></pre></div>
+<p>Since common table expressions always have the select statement paranthesized,
+we'd like to have it out of the box as well;
+also, it should be indented properly:</p>
+<pre class="code code-container"><code>WITH
+    table-name AS (
+        SELECT 1
+    )
+</code></pre>
+<p>A simple way of handling this is to change the WITH format string to:</p>
+<p><code>'{alias} AS (\n{indented_value}\n)'</code></p>
+<p>where <code>indented_value</code> is the value, but indented.</p>
+<!-- TODO: link to old version -->
+<p>This kinda works, but is somewhat limited in usefulness;
+for instance, we can't build something like this on top:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">FROM</span><span class="p">((</span><span class="s1">&#39;alias&#39;</span><span class="p">,</span> <span class="s1">&#39;SELECT 1&#39;</span><span class="p">),</span> <span class="n">is_subquery</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+<p>Instead, let's refining our model about values,
+and indicate something is a subquery using a flag:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">73</span>
 <span class="normal">74</span>
 <span class="normal">75</span>
@@ -653,7 +660,8 @@ we take advantage of True and False being equal to 1 and 0
 <span class="hll">        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">_clean_up</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">_clean_up</span><span class="p">(</span><span class="n">alias</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 </span></code></pre></div>
 </td></tr></table>
-<h3 id="set-is-subquery">set is_subquery<span class="headerlink"> <a href="#set-is-subquery" title="permalink">#</a></span></h3>
+<p>We can then decide decide if a clause always has subqueries,
+and set it accordingly:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">28</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">subquery_keywords</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;WITH&#39;</span><span class="p">}</span>
 </code></pre></div>
 </td></tr></table>
@@ -680,7 +688,7 @@ we take advantage of True and False being equal to 1 and 0
         <span class="k">return</span> <span class="bp">self</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="use-is-subquery">use is_subquery<span class="headerlink"> <a href="#use-is-subquery" title="permalink">#</a></span></h3>
+<p>Using it for output is also straightforward:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">61</span>
 <span class="normal">62</span>
 <span class="normal">63</span>
@@ -771,7 +779,31 @@ we take advantage of True and False being equal to 1 and 0
 </td></tr></table>
 </details>
 <h2 id="joins">joins<span class="headerlink"> <a href="#joins" title="permalink">#</a></span></h2>
-<h3 id="add-keyword-option">add keyword option<span class="headerlink"> <a href="#add-keyword-option" title="permalink">#</a></span></h3>
+<p>One clause that's missing is JOIN.
+And it's important, needing to change your mind about what you're selecting from
+<a href="/query-builder-why#composition-and-reuse">happens quite often</a>.</p>
+<p>JOIN is a bit more complicated,
+mostly because it has different forms – JOIN, LEFT JOIN, etc.;
+for SQLite, there are at least 10 supported variations.</p>
+<p>I initially handled it by special-casing the keyword,
+considering any keyword that contained <code>JOIN</code> a separate keyword.
+This has a few drawbacks, though;
+aside from making the code somewhat complicated,
+it reorders some of the tables:
+<code>query.JOIN('a').LEFT_JOIN('b').JOIN('c')</code>
+resulted in
+<code>JOIN a JOIN b LEFT JOIN c</code>.</p>
+<!-- TODO: link to old version -->
+<p>A better solution is to continue refining our model about values.</p>
+<p>If you look at these railroad diagrams for the <a href="https://www.sqlite.org/syntax/select-core.html">SELECT statement</a>,
+<a href="https://www.sqlite.org/syntax/join-clause.html">JOIN clause</a>, and <a href="https://www.sqlite.org/syntax/join-operator.html">JOIN operator</a>,
+you may notice that the table-or-subquery followed by comma in FROM
+is actually a subset of the table-or-subquery followed by join-operator in join-clause.
+That is, for SQLite, a comma is just another join operator.</p>
+<!-- TODO: use pictures, they're public domain -->
+<p>Put the other way around, a join operator is just another separator,
+so we can model it as such.</p>
+<p>First, let's record which join operator a value has:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">82</span>
 <span class="normal">83</span>
 <span class="normal">84</span>
@@ -783,7 +815,6 @@ we take advantage of True and False being equal to 1 and 0
 </span>    <span class="n">is_subquery</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="set-keyword">set keyword<span class="headerlink"> <a href="#set-keyword" title="permalink">#</a></span></h3>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">29</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">fake_keywords</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">JOIN</span><span class="o">=</span><span class="s1">&#39;FROM&#39;</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
@@ -828,7 +859,11 @@ we take advantage of True and False being equal to 1 and 0
 </span><span class="hll">        <span class="k">return</span> <span class="n">keyword</span><span class="p">,</span> <span class="s1">&#39;&#39;</span>
 </span></code></pre></div>
 </td></tr></table>
-<h3 id="use-keyword">use keyword<span class="headerlink"> <a href="#use-keyword" title="permalink">#</a></span></h3>
+<p>We could've probably just hardcoded this in <code>add()</code>
+(<code>if 'JOIN' in keyword: ...</code>),
+but doing it like this maybe makes it easier to see at a glance that
+&quot;JOIN is a fake FROM&quot;.</p>
+<p>Using <code>keyword</code> as a separator is relatively straightforward:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">63</span>
 <span class="normal">64</span>
 <span class="normal">65</span>
