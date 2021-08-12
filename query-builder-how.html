@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ 13 minute read
+∙ 14 minute read
 
 
 </small></p>
@@ -102,7 +102,6 @@ looking at various things.</p>
 <li><a href="#joins">joins</a></li>
 <li><a href="#distinct">distinct</a>
 <ul>
-<li><a href="#add-flaglist">add flaglist</a></li>
 <li><a href="#set-flag">set flag</a></li>
 <li><a href="#use-flag">use flag</a></li>
 </ul>
@@ -621,9 +620,9 @@ also, it should be indented properly:</p>
         SELECT 1
     )
 </code></pre>
-<p>A simple way of handling this is to change the WITH format string to:</p>
-<p><code>'{alias} AS (\n{indented_value}\n)'</code></p>
-<p>where <code>indented_value</code> is the value, but indented.</p>
+<p>A simple way of handling this is to change the WITH format string to
+<code>'{alias} AS (\n{indented_value}\n)'</code>,
+where <code>indented_value</code> is the value, but indented.</p>
 <!-- TODO: link to old version -->
 <p>This kinda works, but is somewhat limited in usefulness;
 for instance, we can't build something like this on top:</p>
@@ -800,7 +799,18 @@ resulted in
 you may notice that the table-or-subquery followed by comma in FROM
 is actually a subset of the table-or-subquery followed by join-operator in join-clause.
 That is, for SQLite, a comma is just another join operator.</p>
-<!-- TODO: use pictures, they're public domain -->
+<figure class="figure">
+<figcaption class="figure-caption text-center text-small">select-core (from)</figcaption>
+<p><img class="img-responsive" src="/_file/query-builder-how/select-core.svg" alt="select-core" /></p>
+</figure>
+<figure class="figure">
+<figcaption class="figure-caption text-center text-small">join-clause</figcaption>
+<p><img class="img-responsive" src="/_file/query-builder-how/join-clause.svg" alt="join-clause" /></p>
+</figure>
+<figure class="figure">
+<figcaption class="figure-caption text-center text-small">join-operator</figcaption>
+<p><img class="img-responsive" src="/_file/query-builder-how/join-operator.svg" alt="join-operator" /></p>
+</figure>
 <p>Put the other way around, a join operator is just another separator,
 so we can model it as such.</p>
 <p>First, let's record which join operator a value has:</p>
@@ -992,7 +1002,9 @@ but doing it like this maybe makes it easier to see at a glance that
 </td></tr></table>
 </details>
 <h2 id="distinct">distinct<span class="headerlink"> <a href="#distinct" title="permalink">#</a></span></h2>
-<h3 id="add-flaglist">add flaglist<span class="headerlink"> <a href="#add-flaglist" title="permalink">#</a></span></h3>
+<p>The final adjustment to our model is to support SELECT DISTINCT.</p>
+<p>DISTINCT (or ALL) is like a flag that applies to the whole clause.
+We'll model it just like that:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">117</span>
 <span class="normal">118</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">_FlagList</span><span class="p">(</span><span class="nb">list</span><span class="p">):</span>
     <span class="n">flag</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
@@ -1003,6 +1015,10 @@ but doing it like this maybe makes it easier to see at a glance that
 <span class="hll">        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">_FlagList</span><span class="p">()</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">keywords</span><span class="p">}</span>
 </span></code></pre></div>
 </td></tr></table>
+<p>Since most of the time we're OK with the default value of <code>flag</code>, 
+we don't bother setting it as an instance variable in <code>__init__</code>;
+instead, we just set it as a class variable;
+setting <code>flag</code> on an instance will then shadow the class variable.</p>
 <h3 id="set-flag">set flag<span class="headerlink"> <a href="#set-flag" title="permalink">#</a></span></h3>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">30</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">flag_keywords</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">SELECT</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;DISTINCT&#39;</span><span class="p">,</span> <span class="s1">&#39;ALL&#39;</span><span class="p">})</span>
 </code></pre></div>
