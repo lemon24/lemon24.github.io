@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ 16 minute read
+∙ 17 minute read
 
 
 </small></p>
@@ -82,7 +82,7 @@ window.addEventListener('resize', set_vh);
 <p><strong><a href="/own-query-builder">Previously</a></strong></p>
 <p>This is the fourth article <a href="/query-builder">in a series</a> about
 writing an SQL query builder.</p>
-<p>Today, we'll dive into the code by <strong>rewriting it from scratch</strong>.</p>
+<p>Today, we'll dive into the code by <strong>rewriting it from scratch</strong>.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
 <p>Think of it as part walk-through, part tutorial;
 along the way, we'll talk about:</p>
 <ul>
@@ -97,15 +97,12 @@ I tried things out, I changed my mind multiple times,
 and I rewrote everything at least once.
 Even now, there may be equally-good – or better – implementations;
 the current one is simply <em>good enough</em>.</p>
-<p>For a higher-level view, see the previous articles about
-<a href="/query-builder-why">why use a query builder in the first place</a>,
-and <a href="/own-query-builder">why and how I decided to write my own</a>.</p>
 <details>
 <summary>Contents</summary>
 <section class="toc">
 <ul>
-<li><a href="#what-are-we-trying-to-build">what are we trying to build?</a></li>
-<li><a href="#trade-offs">trade-offs</a></li>
+<li><a href="#what-are-we-trying-to-build">What are we trying to build?</a></li>
+<li><a href="#trade-offs">Trade-offs</a></li>
 <li><a href="#data-representation">data representation</a></li>
 <li><a href="#a-minimal-plausible-solution">a minimal plausible solution</a>
 <ul>
@@ -127,14 +124,58 @@ and <a href="/own-query-builder">why and how I decided to write my own</a>.</p>
 </ul>
 </section>
 </details>
-<h2 id="what-are-we-trying-to-build">what are we trying to build?<span class="headerlink"> <a href="#what-are-we-trying-to-build" title="permalink">#</a></span></h2>
-<p>TBD: an example</p>
-<h2 id="trade-offs">trade-offs<span class="headerlink"> <a href="#trade-offs" title="permalink">#</a></span></h2>
+<h2 id="what-are-we-trying-to-build">What are we trying to build?<span class="headerlink"> <a href="#what-are-we-trying-to-build" title="permalink">#</a></span></h2>
+<p>We want a way of building SQL strings that takes care of formatting:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;one&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;table&#39;</span><span class="p">)</span>
+<span class="go">&lt;builder.Query object at 0x7fc953e60640&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+<span class="go">SELECT</span>
+<span class="go">    one</span>
+<span class="go">FROM</span>
+<span class="go">    table</span>
+</code></pre></div>
+<p>... and allows us to add parts incrementally:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;two&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="s1">&#39;condition&#39;</span><span class="p">)</span>
+<span class="go">&lt;builder.Query object at 0x7fc953e60640&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+<span class="go">SELECT</span>
+<span class="go">    one,</span>
+<span class="go">    two</span>
+<span class="go">FROM</span>
+<span class="go">    table</span>
+<span class="go">WHERE</span>
+<span class="go">    condition</span>
+</code></pre></div>
+<p>As discussed <a href="/own-query-builder#requirements-and-existing-libraries">previously</a>,
+it should:</p>
 <ul>
-<li>little customization; there's exactly one user for this, no need for API flourishes</li>
-<li>some error checking; exceptions for most errors, but it doesn't matter what kind, they're only for indicating programming bugs (should never bubble up to the end user)</li>
-<li>only cover the <a href="/own-query-builder#requirements-and-existing-libraries">known requirements</a></li>
-<li>only support SQLite syntax</li>
+<li>support SELECT with conditional WITH, WHERE, ORDER BY, JOIN etc.</li>
+<li>expose the names of the result columns</li>
+<li>be easy to use, understand and maintain</li>
+</ul>
+<h2 id="trade-offs">Trade-offs<span class="headerlink"> <a href="#trade-offs" title="permalink">#</a></span></h2>
+<p>As mentioned <a href="/own-query-builder#background">previously</a>,
+this query builder does not exist in a void,
+it exists to be used by my feed <a href="https://github.com/lemon24/reader">reader</a> library.</p>
+<p>To keep the query builder easy to maintain, we'll make these decisions upfront:</p>
+<ul>
+<li>No more customization than strictly required.
+There's exactly one user for this.
+if I want to change something, we can change it in the code.</li>
+<li>No other features except the known requirements.
+If we need something else, we can add it when we need it.</li>
+<li>No effort to support other syntax than SQLite's.</li>
+<li>Don't test too much.
+The feed reader already has comprehensive functional tests and 100% coverage,
+we can rely on the exitings tests.</li>
+<li>No SQL validation; the database does this already.<ul>
+<li>However, it would be nice to get at least a little error checking
+(e.g. catch stuff like <code>query.ESLECT()</code>);
+it's acceptable for them to not be &quot;nice&quot; (e.g. KeyError is OK),
+they should come up only during development and testing anyway.</li>
+</ul>
+</li>
 </ul>
 <h2 id="data-representation">data representation<span class="headerlink"> <a href="#data-representation" title="permalink">#</a></span></h2>
 <p>As mentioned in the <a href="/own-query-builder#the-first-prototype">previous article</a>,
@@ -1480,6 +1521,13 @@ that's nor very <em>convenient</em>.</p>
 </ul>
 <h2 id="wrapping-up">wrapping up<span class="headerlink"> <a href="#wrapping-up" title="permalink">#</a></span></h2>
 <p><a href="/_file/query-builder-how/07-more-init/builder.py">final thing</a></p>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>For a higher-level view, see the previous articles about
+<a href="/query-builder-why">why use a query builder in the first place</a>,
+and <a href="/own-query-builder">why and how I decided to write my own</a>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
 
 
 
