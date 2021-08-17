@@ -21,7 +21,7 @@
 
 
 
-<title>Writing an 150-line SQL query builder in Python - death and gravity</title>
+<title>Write an SQL query builder in 150 lines Python! - death and gravity</title>
 
 
 
@@ -55,7 +55,7 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">Writing an 150-line SQL query builder in Python</h1>
+<h1 class="heading-noindex">Write an SQL query builder in 150 lines Python!</h1>
 
 <p class="text-gray"><small>
 <span>2021-08-08</span>
@@ -81,33 +81,35 @@ window.addEventListener('resize', set_vh);
 <!-- TODO: links from query-builder and own-query-builder -->
 <p><strong><a href="/own-query-builder">Previously</a></strong></p>
 <p>This is the fourth article <a href="/query-builder">in a series</a> about
-writing an SQL query builder.</p>
-<p>Today, we'll dive into the code by <strong>rewriting it from scratch</strong>.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
+writing an SQL query builder for my feed <a href="https://github.com/lemon24/reader">reader</a> library.</p>
+<p>Today, we'll dive into the code by <strong>rewriting it from scratch</strong>.</p>
 <p>Think of it as part walk-through, part tutorial;
 along the way, we'll talk about:</p>
 <ul>
-<li>API design</li>
-<li>knowing when to be lazy</li>
+<li><strong>API design</strong></li>
+<li>knowing <strong>when to be lazy</strong></li>
 <li>worse (and better) ways of doing things</li>
 </ul>
-<p>While reading, keep in mind that this is a story,
-and thus <em>linear</em> by necessity;
-development was <em>not:</em>
+<p>As you read this, keep in mind that it is <em>linear</em> by necessity.
+Development was <em>not</em> linear:
 I tried things out, I changed my mind multiple times,
-and I rewrote everything at least once.
+and I <a href="https://programmingisterrible.com/post/176657481103/repeat-yourself-do-more-than-one-thing-and">rewrote everything</a> at least once.
 Even now, there may be equally-good – or better – implementations;
 the current one is simply <em>good enough</em>.</p>
 <details>
 <summary>Contents</summary>
 <section class="toc">
 <ul>
-<li><a href="#what-are-we-trying-to-build">What are we trying to build?</a></li>
-<li><a href="#trade-offs">Trade-offs</a></li>
-<li><a href="#data-representation">data representation</a></li>
-<li><a href="#a-minimal-plausible-solution">a minimal plausible solution</a>
+<li><a href="#what-are-we-trying-to-build">What are we trying to build?</a>
 <ul>
-<li><a href="#class">class</a></li>
-<li><a href="#adding-stuff">adding stuff</a></li>
+<li><a href="#trade-offs">Trade-offs</a></li>
+</ul>
+</li>
+<li><a href="#a-minimal-plausible-solution">A minimal plausible solution</a>
+<ul>
+<li><a href="#data-representation">Data representation</a></li>
+<li><a href="#classes">Classes</a></li>
+<li><a href="#adding-things">Adding things</a></li>
 <li><a href="#printing-stuff">printing stuff</a></li>
 <li><a href="#test">test</a></li>
 </ul>
@@ -125,7 +127,7 @@ the current one is simply <em>good enough</em>.</p>
 </section>
 </details>
 <h2 id="what-are-we-trying-to-build">What are we trying to build?<span class="headerlink"> <a href="#what-are-we-trying-to-build" title="permalink">#</a></span></h2>
-<p>We want a way of building SQL strings that takes care of formatting:</p>
+<p>We want a way to build SQL strings that takes care of formatting:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;one&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;table&#39;</span><span class="p">)</span>
 <span class="go">&lt;builder.Query object at 0x7fc953e60640&gt;</span>
@@ -147,41 +149,45 @@ the current one is simply <em>good enough</em>.</p>
 <span class="go">WHERE</span>
 <span class="go">    condition</span>
 </code></pre></div>
-<p>As discussed <a href="/own-query-builder#requirements-and-existing-libraries">previously</a>,
-it should:</p>
+<p>While not required,
+I recommend reading the previous articles
+to get a sense of <a href="/query-builder-why">the problem we're trying to solve</a>,
+and <a href="/own-query-builder#background">the context we're solving it in</a>.</p>
+<p>In short, whatever we build <a href="/own-query-builder#requirements-and-existing-libraries">should</a>:</p>
 <ul>
 <li>support SELECT with conditional WITH, WHERE, ORDER BY, JOIN etc.</li>
 <li>expose the names of the result columns</li>
 <li>be easy to use, understand and maintain</li>
 </ul>
-<h2 id="trade-offs">Trade-offs<span class="headerlink"> <a href="#trade-offs" title="permalink">#</a></span></h2>
-<p>As mentioned <a href="/own-query-builder#background">previously</a>,
-this query builder does not exist in a void,
+<h3 id="trade-offs">Trade-offs<span class="headerlink"> <a href="#trade-offs" title="permalink">#</a></span></h3>
+<p>Our solution does not exist in a void;
 it exists to be used by my feed <a href="https://github.com/lemon24/reader">reader</a> library.</p>
-<p>To keep the query builder easy to maintain, we'll make these decisions upfront:</p>
+<p>Notably, we're <em>not</em> making a general-purpose library with external users
+whose needs we're trying to anticipate;
+there's exactly one user with a pretty well-defined use case,
+and strict backwards compatibility is not necessary.</p>
+<p>This allows us to make some upfront decisions to help with maintainability:</p>
 <ul>
-<li>No more customization than strictly required.
-There's exactly one user for this.
-if I want to change something, we can change it in the code.</li>
+<li>No needless customization. We can change the code directly if we need to.</li>
 <li>No other features except the known requirements.
-If we need something else, we can add it when we need it.</li>
-<li>No effort to support other syntax than SQLite's.</li>
-<li>Don't test too much.
-The feed reader already has comprehensive functional tests and 100% coverage,
-we can rely on the exitings tests.</li>
-<li>No SQL validation; the database does this already.<ul>
-<li>However, it would be nice to get at least a little error checking
-(e.g. catch stuff like <code>query.ESLECT()</code>);
-it's acceptable for them to not be &quot;nice&quot; (e.g. KeyError is OK),
+We'll add feature as needed.</li>
+<li>No effort to support other syntax than SQLite.</li>
+<li>No extensive testing.
+We can rely on the exising comprehensive functional tests.</li>
+<li>No SQL validation. The database does this already.<ul>
+<li>However, it would be nice to get at least a little error checking.
+No need for custom exceptions, any type is acceptable –
 they should come up only during development and testing anyway.</li>
 </ul>
 </li>
 </ul>
-<h2 id="data-representation">data representation<span class="headerlink"> <a href="#data-representation" title="permalink">#</a></span></h2>
-<p>As mentioned in the <a href="/own-query-builder#the-first-prototype">previous article</a>,
-my prototype query builder was based on the idea that
+<h2 id="a-minimal-plausible-solution">A minimal plausible solution<span class="headerlink"> <a href="#a-minimal-plausible-solution" title="permalink">#</a></span></h2>
+<h3 id="data-representation">Data representation<span class="headerlink"> <a href="#data-representation" title="permalink">#</a></span></h3>
+<p>As mentioned <a href="/own-query-builder#the-first-prototype">before</a>,
+my prototype was based on the idea that
 <em>queries can be represented as plain data structures</em>.</p>
-<p>Looking at a query, a more or less natural representation may come to mind:</p>
+<p>Looking at a nicely formatted query,
+a natural representation may come to mind:</p>
 <div class="highlight code-container"><pre class="code" data-lang="SQL"><span></span><code><span class="k">SELECT</span>
     <span class="n">one</span><span class="p">,</span>
     <span class="n">two</span>
@@ -192,7 +198,7 @@ my prototype query builder was based on the idea that
     <span class="n">another</span><span class="o">-</span><span class="n">condition</span>
 </code></pre></div>
 <p>See it?</p>
-<p>It's a dict with a list of strings for each clause:</p>
+<p>It's a mapping with a list of strings for each clause:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="p">{</span>
     <span class="s1">&#39;SELECT&#39;</span><span class="p">:</span> <span class="p">[</span>
         <span class="s1">&#39;one&#39;</span><span class="p">,</span>
@@ -207,10 +213,9 @@ my prototype query builder was based on the idea that
     <span class="p">],</span>
 <span class="p">}</span>
 </code></pre></div>
-<p>Let's start from this model, and build ourselves a query builder.</p>
-<h2 id="a-minimal-plausible-solution">a minimal plausible solution<span class="headerlink"> <a href="#a-minimal-plausible-solution" title="permalink">#</a></span></h2>
-<h3 id="class">class<span class="headerlink"> <a href="#class" title="permalink">#</a></span></h3>
-<p>We start by adding a class:</p>
+<p>Let's use this as our starting model, and build ourselves a query builder :)</p>
+<h3 id="classes">Classes<span class="headerlink"> <a href="#classes" title="permalink">#</a></span></h3>
+<p>We start with a class:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 2</span>
 <span class="normal"> 3</span>
 <span class="normal"> 4</span>
@@ -242,14 +247,27 @@ my prototype query builder was based on the idea that
         <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">keywords</span><span class="p">}</span>
 </code></pre></div>
 </td></tr></table>
-<ul>
-<li>as mentioned in the previous article, we don't want to work with the underlying data structure; we want <code>query.SELECT('one', 'two')</code> instead of <code>query['SELECT'].extend(['one', 'two'])</code></li>
-<li>no customization in the constructor, for now; if we need more clauses, we can add them to <code>keywords</code> directly</li>
-<li>not subclassing dict, to keep the API tight</li>
-<li>we build the dict upfront; this means we can use the dict order directly (py36+, insertion order), and we get some free error checking (<code>data[keyword]</code> for the wrong keyword )</li>
-<li>we could use dataclasses, but most of the time the repr() is too long to be useful, and we don't need any other magic methods</li>
-</ul>
-<h3 id="adding-stuff">adding stuff<span class="headerlink"> <a href="#adding-stuff" title="permalink">#</a></span></h3>
+<p>We use a class because most of the time
+we don't want to interact with the underlying data structure,
+since it's more likely to change.
+We're not subclassing <a href="https://docs.python.org/3/library/stdtypes.html#mapping-types-dict">dict</a>,
+since that would unintentionally expose its methods (and thus, behavior),
+and we may need those names for something else.</p>
+<p>Also, a class allows us to reduce verbosity:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="c1"># we want</span>
+<span class="n">query</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;one&#39;</span><span class="p">,</span> <span class="s1">&#39;two&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;table&#39;</span><span class="p">)</span>
+<span class="c1"># not</span>
+<span class="n">query</span><span class="p">[</span><span class="s1">&#39;SELECT&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s1">&#39;one&#39;</span><span class="p">,</span> <span class="s1">&#39;two&#39;</span><span class="p">])</span>
+<span class="n">query</span><span class="p">[</span><span class="s1">&#39;FROM&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;table&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p>For now, we refrain from any customization in the initializer;
+if we need more clauses, we can add them to <code>keywords</code> directly.</p>
+<p>We add all the known keywords upfront to get free error checking –
+we can rely on <code>data[keyword]</code> raising a KeyError for unknown keywords.</p>
+<p>We could use <a href="https://docs.python.org/3/library/dataclasses.html">dataclasses</a>,
+but of the generated magic methods, we'd only use the <code>__repr__()</code>,
+and most of the time it would be too long to be useful.</p>
+<h3 id="adding-things">Adding things<span class="headerlink"> <a href="#adding-things" title="permalink">#</a></span></h3>
 <p>Next, we add code to add stuff:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span>
 <span class="normal">19</span>
@@ -363,13 +381,17 @@ my prototype query builder was based on the idea that
 </code></pre></div>
 </td></tr></table>
 <ul>
-<li>to get an SQL string, the user calls <code>str(query)</code>, which ends up calling <code>__str__</code> on our object<ul>
+<li><p>to get an SQL string, the user calls <code>str(query)</code>, which ends up calling <code>__str__</code> on our object</p>
+<ul>
 <li>instead of doing everything in <code>__str__</code>, we farm most of the work to <code>_lines()</code>, which generates output lines; the main benefit of this is that it allows us to write <code>yield line</code> instead of <code>rv.append(line)</code>; a second benefit is that we could, in theory, pass it directly to an open file's writelines() method, and never have to build a whole string (although we won't actually need this); same goes for subqueries</li>
 <li>we also split the output for each clause into <code>_lines_keyword()</code>, since we'll add more stuff over time, and they're both gonna get more complicated (I initially left everything in _lines(), and had to refactor afterwards)</li>
 <li>because we may want to change how indenting happens, we make it a method using a partial</li>
 </ul>
 </li>
-<li>we store the separator as a class attribute, both to document what it is, and in case it ever needs to be overridden</li>
+<li><p>we store the separator as a class attribute, both to document what it is, and in case it ever needs to be overridden</p>
+</li>
+<li><p>Since we know we only need to support Python 3.6 or newer, we can rely on its <a href="https://docs.python.org/3.7/whatsnew/3.7.html#summary-release-highlights">guaranteed insertion order</a>.</p>
+</li>
 </ul>
 <h3 id="test">test<span class="headerlink"> <a href="#test" title="permalink">#</a></span></h3>
 <p>For a minimal thing, we're mostly done.</p>
@@ -1521,13 +1543,6 @@ that's nor very <em>convenient</em>.</p>
 </ul>
 <h2 id="wrapping-up">wrapping up<span class="headerlink"> <a href="#wrapping-up" title="permalink">#</a></span></h2>
 <p><a href="/_file/query-builder-how/07-more-init/builder.py">final thing</a></p>
-<section class="footnotes">
-<ol>
-<li id="fn-1"><p>For a higher-level view, see the previous articles about
-<a href="/query-builder-why">why use a query builder in the first place</a>,
-and <a href="/own-query-builder">why and how I decided to write my own</a>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-</ol>
-</section>
 
 
 
