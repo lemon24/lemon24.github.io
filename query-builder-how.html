@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ 17 minute read
+∙ 18 minute read
 
 
 </small></p>
@@ -260,6 +260,9 @@ and we may need those names for something else.</p>
 <span class="n">query</span><span class="p">[</span><span class="s1">&#39;SELECT&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s1">&#39;one&#39;</span><span class="p">,</span> <span class="s1">&#39;two&#39;</span><span class="p">])</span>
 <span class="n">query</span><span class="p">[</span><span class="s1">&#39;FROM&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;table&#39;</span><span class="p">)</span>
 </code></pre></div>
+<p>We store various data as class attributes
+instead of hardcoding it or using module variables
+as a cheap way to customize things (more on that later).</p>
 <p>For now, we refrain from any customization in the initializer;
 if we need more clauses, we can add them to <code>keywords</code> directly.</p>
 <p>We add all the known keywords upfront to get free error checking –
@@ -267,8 +270,9 @@ we can rely on <code>data[keyword]</code> raising a KeyError for unknown keyword
 <p>We could use <a href="https://docs.python.org/3/library/dataclasses.html">dataclasses</a>,
 but of the generated magic methods, we'd only use the <code>__repr__()</code>,
 and most of the time it would be too long to be useful.</p>
+<!-- TODO: note clause and keyword are used interchangably to mean "the keys of self.data", not SQL clauses/keywords -->
 <h3 id="adding-things">Adding things<span class="headerlink"> <a href="#adding-things" title="permalink">#</a></span></h3>
-<p>Next, we add code to add stuff:</p>
+<p>Next, we add code for adding stuff:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span>
 <span class="normal">19</span>
 <span class="normal">20</span>
@@ -302,32 +306,37 @@ and most of the time it would be too long to be useful.</p>
     <span class="k">return</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">dedent</span><span class="p">(</span><span class="n">thing</span><span class="o">.</span><span class="n">rstrip</span><span class="p">())</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
 </code></pre></div>
 </td></tr></table>
-<ul>
-<li><p><code>add()</code> appends all its arguments to the list corresponding to <code>keyword</code></p>
-<ul>
-<li>note <code>self.data[keyword]</code> (free keyerror for bad keywords)</li>
-<li>upfront decision: we clean everything up and make as many choices here; this allows the part that generates the output to not care about any of that, and ensures error checking happens as early as possible (when building the query, not when converting it to a string); I initially didnt' do this</li>
-<li>we return self, to allow for chaining (<code>query.add(...).add(...)</code>)</li>
-<li>add() is also an escape hatch for when we want to use a &quot;clause&quot; that's not a python identifier</li>
-</ul>
-</li>
-<li><p><code>__getattr__()</code> fabricates &quot;methods&quot; on the fly</p>
-<ul>
-<li>this is a form of metaprogramming</li>
-<li>we make a stylistic choice, and require all keywords to be uppercase (<code>query.GROUP_BY()</code>, not <code>query.group_by()</code>)<ul>
-<li>makes it clearer to the user these are special methods</li>
-<li>it also has the benfit of us not having to avoid shadowing dunder methods like <code>__deepcopy__</code></li>
-<li>we don't bother raising AttributeError explicitly, we just let getattr() do it for us</li>
-</ul>
-</li>
-<li><code>__getattr__()</code> gets called for attributes that don't exist</li>
-<li>we return a <code>KEYWORD(*args)</code> callable by wrapping add() in a <code>partial</code><ul>
-<li>we could save the partial on the object (<code>setattr(self, name.replace('_', ' '), functools(...)</code>); this would side-step <code>__getattr__()</code> on subsequent calls, and return the stored partial; premature optimization</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
+<p><code>add()</code> is roughly equivalent to <code>data[keyword].extend(args)</code>.</p>
+<p>The main difference is that we first dedent the arguments and remove trailing whitespace.
+This is an upfront decision: we clean everything up and make as many choices when <em>adding things</em>,
+so the part that <em>generates output</em> doesn't have to care about any of that,
+and error checking happens as early as possible<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>.</p>
+<p>Another difference is that it returns <code>self</code>,
+which enables <a href="https://en.wikipedia.org/wiki/Method_chaining">method chaining</a>: <code>query.add(...).add(...)</code>.</p>
+<p><a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__"><code>__getattr__()</code></a> gets called when an attribute does not exist,
+and allows us to return <em>something</em> instead of getting the default AttributeError.</p>
+<p>What we return is a <code>KEYWORD(*args)</code> callable made on the fly
+by wrapping <code>add()</code> in a <a href="https://docs.python.org/3/library/functools.html#functools.partial">partial</a> (this is the <a href="https://en.wikipedia.org/wiki/Metaprogramming">metaprogramming</a> part);
+a <a href="https://en.wikipedia.org/wiki/Closure_(computer_programming)">closure</a> would be functionally equivalent.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
+<p>Requiring the keywords to be uppercase is mostly a stylistic choice,
+but it does have two benefits:
+it signals to the reader these are special &quot;methods&quot;,
+and avoids shadowing dunder methods like <code>__deepcopy__()</code> with no extra code.</p>
+<p>We don't even bother raising AttributeError explicitly,
+we just let <a href="https://docs.python.org/3/library/functions.html#getattr">getattr()</a> do it for us.</p>
+<p>We could store the partial on the instance,
+which would side-step <code>__getattr__()</code> on subsequent calls,
+so we only make one partial per keyword;
+we could do it upfront, in the constructor;
+we could even generate actual methods,
+so there's only one per keyword per class!
+Or we can do nothing – they're likely premature optimization, and not worth the effort.</p>
+<!-- TODO: don't say benefits twice ("Requiring the keywords ...") -->
+<p>Doing most of the work in <code>add()</code> does have some benefits:
+it allows it to be used with <a href="https://docs.python.org/3/library/functools.html#functools.partial">partial</a>,
+and it's an escape hatch for when we want
+to use a &quot;keyword&quot; that's not a Python identifier
+(it'll be useful later).</p>
 <h3 id="printing-stuff">printing stuff<span class="headerlink"> <a href="#printing-stuff" title="permalink">#</a></span></h3>
 <p>Finally, we turn the thing back into a string:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">default_separator</span> <span class="o">=</span> <span class="s1">&#39;,&#39;</span>
@@ -1543,6 +1552,15 @@ that's nor very <em>convenient</em>.</p>
 </ul>
 <h2 id="wrapping-up">wrapping up<span class="headerlink"> <a href="#wrapping-up" title="permalink">#</a></span></h2>
 <p><a href="/_file/query-builder-how/07-more-init/builder.py">final thing</a></p>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>... almost as early.
+If you look carefully at the code,
+you may notice <code>query.ESLECT</code> doesn't raise an exception
+until called, <code>query.ESLECT()</code>. ¯\_(ツ)_/¯ <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>I'm sorry. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
 
 
 
