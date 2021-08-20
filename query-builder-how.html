@@ -110,8 +110,8 @@ the current one is simply <em>good enough</em>.</p>
 <li><a href="#data-representation">Data representation</a></li>
 <li><a href="#classes">Classes</a></li>
 <li><a href="#adding-things">Adding things</a></li>
-<li><a href="#printing-stuff">printing stuff</a></li>
-<li><a href="#test">test</a></li>
+<li><a href="#output">Output</a></li>
+<li><a href="#testing">Testing</a></li>
 </ul>
 </li>
 <li><a href="#separators">separators</a></li>
@@ -260,9 +260,10 @@ and we may need those names for something else.</p>
 <span class="n">query</span><span class="p">[</span><span class="s1">&#39;SELECT&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s1">&#39;one&#39;</span><span class="p">,</span> <span class="s1">&#39;two&#39;</span><span class="p">])</span>
 <span class="n">query</span><span class="p">[</span><span class="s1">&#39;FROM&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;table&#39;</span><span class="p">)</span>
 </code></pre></div>
-<p>We store various data as class attributes
+<p>We store various data as class variables
 instead of hardcoding it or using module variables
-as a cheap way to customize things (more on that later).</p>
+as a cheap way to customize things (more on that later).
+Also, using a variable makes it clearer what those things are.</p>
 <p>For now, we refrain from any customization in the initializer;
 if we need more clauses, we can add them to <code>keywords</code> directly.</p>
 <p>We add all the known keywords upfront to get free error checking –
@@ -343,8 +344,8 @@ it allows it to be used with <a href="https://docs.python.org/3/library/functool
 and it's an escape hatch for when we want
 to use a &quot;keyword&quot; that's not a Python identifier
 (it'll be useful later).</p>
-<h3 id="printing-stuff">printing stuff<span class="headerlink"> <a href="#printing-stuff" title="permalink">#</a></span></h3>
-<p>Finally, we turn the thing back into a string:</p>
+<h3 id="output">Output<span class="headerlink"> <a href="#output" title="permalink">#</a></span></h3>
+<p>Finally, we turn what we have back into an SQL string:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">default_separator</span> <span class="o">=</span> <span class="s1">&#39;,&#39;</span>
 </code></pre></div>
 </td></tr></table>
@@ -395,22 +396,36 @@ to use a &quot;keyword&quot; that's not a Python identifier
     <span class="n">_indent</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s1">&#39;    &#39;</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<ul>
-<li><p>to get an SQL string, the user calls <code>str(query)</code>, which ends up calling <code>__str__</code> on our object</p>
-<ul>
-<li>instead of doing everything in <code>__str__</code>, we farm most of the work to <code>_lines()</code>, which generates output lines; the main benefit of this is that it allows us to write <code>yield line</code> instead of <code>rv.append(line)</code>; a second benefit is that we could, in theory, pass it directly to an open file's writelines() method, and never have to build a whole string (although we won't actually need this); same goes for subqueries</li>
-<li>we also split the output for each clause into <code>_lines_keyword()</code>, since we'll add more stuff over time, and they're both gonna get more complicated (I initially left everything in _lines(), and had to refactor afterwards)</li>
-<li>because we may want to change how indenting happens, we make it a method using a partial</li>
-</ul>
-</li>
-<li><p>we store the separator as a class attribute, both to document what it is, and in case it ever needs to be overridden</p>
-</li>
-<li><p>Since we know we only need to support Python 3.6 or newer, we can rely on its <a href="https://docs.python.org/3.7/whatsnew/3.7.html#summary-release-highlights">guaranteed insertion order</a>.</p>
-</li>
-</ul>
-<h3 id="test">test<span class="headerlink"> <a href="#test" title="permalink">#</a></span></h3>
-<p>For a minimal thing, we're mostly done.</p>
-<p>To make sure we don't break stuff that works in the future, we add a basic test:</p>
+<p>The main API is <a href="https://docs.python.org/3/library/functions.html#func-str">str()</a>;
+this requires almost zero effort to learn,
+since it's the standard way of turning things into strings in Python.</p>
+<p><code>str(query)</code> calls <code>__str__</code>, which delegates the work to the <code>_lines()</code> generator.
+We use a generator mainly because it allows writing
+<code>yield line</code> instead of <code>rv.append(line)</code>,
+making for somewhat cleaner code.</p>
+<p>A second benefit of a generator is that it's lazy:
+this means we can pass it around
+without having to build an intermediary list or string;
+for example, to an open file's <a href="https://docs.python.org/3/library/io.html#io.IOBase.writelines">writelines()</a> method,
+or in <code>yield from</code> in another generator
+(e.g. if we allow nested subqueries).
+We don't need any of this here,
+but it can be useful when generating a lot of values.</p>
+<p>We split the logic for individual clauses into a separate generator, <code>_lines_keyword()</code>,
+because we'll keep adding stuff to it.
+(I initially left everything in <code>_lines()</code>,
+and refactored when things got too complicated;
+no need to do that now.)</p>
+<p>Since we'll want to indent things in the same way in more than one place,
+we make it a static &quot;method&quot; using <a href="https://docs.python.org/3/library/functools.html#functools.partial">partial</a>.</p>
+<p>You may notice we're not sorting the clauses in any way;
+dicts guarantee insertion order in Python 3.6 or newer<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>,
+and we add them to <code>data</code> upfront,
+so the order in <code>keywords</code> is maintained.</p>
+<h3 id="testing">Testing<span class="headerlink"> <a href="#testing" title="permalink">#</a></span></h3>
+<p>For a minimal solution, we're done.</p>
+<p>To make sure we don't break stuff that's already working,
+let's add a simple test:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -434,6 +449,8 @@ to use a &quot;keyword&quot; that's not a Python identifier
     <span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+<p>We'll keep adding to it at the end of each section,
+but since it's not all that interesting feel free to skip that.</p>
 <h2 id="separators">separators<span class="headerlink"> <a href="#separators" title="permalink">#</a></span></h2>
 <p>At this point, the WHERE output doesn't really make sense:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">))</span>
@@ -1561,6 +1578,9 @@ that's nor very <em>convenient</em>.</p>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>I'm sorry. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>The guaranteed insertion order was actually added
+to the language specification in 3.7,
+but in 3.6 both CPython and PyPy had it as an implementation detail. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
