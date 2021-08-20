@@ -38,6 +38,15 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
 
 
 
@@ -58,11 +67,11 @@ window.addEventListener('resize', set_vh);
 <h1 class="heading-noindex">Write an SQL query builder in 150 lines Python!</h1>
 
 <p class="text-gray"><small>
-<span>2021-08-08</span>
+<span>2021-08-20</span>
 
 
 
-∙ 18 minute read
+∙ 20 minute read
 
 
 </small></p>
@@ -78,7 +87,6 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<!-- TODO: links from query-builder and own-query-builder -->
 <p><strong><a href="/own-query-builder">Previously</a></strong></p>
 <p>This is the fourth article <a href="/query-builder">in a series</a> about
 writing an SQL query builder for my feed <a href="https://github.com/lemon24/reader">reader</a> library.</p>
@@ -111,21 +119,28 @@ the current one is simply <em>good enough</em>.</p>
 <li><a href="#classes">Classes</a></li>
 <li><a href="#adding-things">Adding things</a></li>
 <li><a href="#output">Output</a></li>
-<li><a href="#testing">Testing</a></li>
+<li><a href="#tests">Tests</a></li>
 </ul>
 </li>
-<li><a href="#separators">separators</a></li>
-<li><a href="#aliases">aliases</a></li>
-<li><a href="#subqueries">subqueries</a></li>
-<li><a href="#joins">joins</a></li>
-<li><a href="#distinct">distinct</a></li>
-<li><a href="#more-tests">more tests</a></li>
-<li><a href="#more-init">more init</a></li>
-<li><a href="#features-that-didn-t-make-the-cut">features that didn't make the cut</a></li>
-<li><a href="#wrapping-up">wrapping up</a></li>
+<li><a href="#separators">Separators</a></li>
+<li><a href="#aliases">Aliases</a></li>
+<li><a href="#subqueries">Subqueries</a></li>
+<li><a href="#joins">Joins</a></li>
+<li><a href="#distinct">Distinct</a></li>
+<li><a href="#more-tests">More tests</a></li>
+<li><a href="#more-init">More init</a></li>
+<li><a href="#things-that-didn-t-make-the-cut">Things that didn't make the cut</a>
+<ul>
+<li><a href="#insert-update-delete">Insert / update / delete</a></li>
+<li><a href="#arbitrary-strings-as-subqueries">Arbitrary strings as subqueries</a></li>
+<li><a href="#query-objects-as-subqueries">Query objects as subqueries</a></li>
+<li><a href="#union-intersect-except">Union / intersect / except</a></li>
+</ul>
+</li>
 </ul>
 </section>
 </details>
+<!-- TODO: more editing, summary, and article tag -->
 <h2 id="what-are-we-trying-to-build">What are we trying to build?<span class="headerlink"> <a href="#what-are-we-trying-to-build" title="permalink">#</a></span></h2>
 <p>We want a way to build SQL strings that takes care of formatting:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span>
@@ -156,7 +171,7 @@ and <a href="/own-query-builder#background">the context we're solving it in</a>.
 <p>In short, whatever we build <a href="/own-query-builder#requirements-and-existing-libraries">should</a>:</p>
 <ul>
 <li>support SELECT with conditional WITH, WHERE, ORDER BY, JOIN etc.</li>
-<li>expose the names of the result columns</li>
+<li>expose the names of the result columns (for scrolling window queries)</li>
 <li>be easy to use, understand and maintain</li>
 </ul>
 <h3 id="trade-offs">Trade-offs<span class="headerlink"> <a href="#trade-offs" title="permalink">#</a></span></h3>
@@ -307,13 +322,13 @@ and most of the time it would be too long to be useful.</p>
     <span class="k">return</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">dedent</span><span class="p">(</span><span class="n">thing</span><span class="o">.</span><span class="n">rstrip</span><span class="p">())</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
 </code></pre></div>
 </td></tr></table>
-<p><code>add()</code> is roughly equivalent to <code>data[keyword].extend(args)</code>.</p>
+<p><code>add()</code> is roughly equivalent to <code>data[keyword]​.extend(args)</code>.</p>
 <p>The main difference is that we first dedent the arguments and remove trailing whitespace.
 This is an upfront decision: we clean everything up and make as many choices when <em>adding things</em>,
 so the part that <em>generates output</em> doesn't have to care about any of that,
 and error checking happens as early as possible.</p>
 <p>Another difference is that it returns <code>self</code>,
-which enables <a href="https://en.wikipedia.org/wiki/Method_chaining">method chaining</a>: <code>query.add(...).add(...)</code>.</p>
+which enables <a href="https://en.wikipedia.org/wiki/Method_chaining">method chaining</a>: <code>query​.add(...)​.add(...)</code>.</p>
 <hr />
 <p><a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__"><code>__getattr__()</code></a> gets called when an attribute does not exist,
 and allows us to return <em>something</em> instead of getting the default AttributeError.</p>
@@ -337,8 +352,8 @@ Or we can do nothing – they're likely premature optimization, and not worth th
 <p>I said error checking error checking happens as early as possible;
 that's <em>almost</em> true:
 if you look carefully at the code,
-you may notice <code>query.ESLECT</code> doesn't raise an exception
-until called, <code>query.ESLECT()</code>.</p>
+you may notice <code>query​.ESLECT</code> doesn't raise an exception
+until called, <code>query​.ESLECT()</code>.</p>
 <p>Doing most of the work in <code>add()</code> does some benefits, though:
 it allows it to be used with <a href="https://docs.python.org/3/library/functools.html#functools.partial">partial</a>,
 and it's an escape hatch for when we want
@@ -422,8 +437,7 @@ we make it a static &quot;method&quot; using <a href="https://docs.python.org/3/
 dicts guarantee insertion order in Python 3.6 or newer<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>,
 and we add them to <code>data</code> upfront,
 so the order in <code>keywords</code> is maintained.</p>
-<h3 id="testing">Testing<span class="headerlink"> <a href="#testing" title="permalink">#</a></span></h3>
-<p>For a minimal solution, we're done.</p>
+<h3 id="tests">Tests<span class="headerlink"> <a href="#tests" title="permalink">#</a></span></h3>
 <p>To make sure we don't break stuff that's already working,
 let's add a simple test:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
@@ -451,15 +465,19 @@ let's add a simple test:</p>
 </td></tr></table>
 <p>We'll keep adding to it at the end of each section,
 but since it's not all that interesting feel free to skip that.</p>
-<h2 id="separators">separators<span class="headerlink"> <a href="#separators" title="permalink">#</a></span></h2>
+<hr />
+<p>For a minimal solution, we're done; we have 62 lines / 38 statements.</p>
+<p>The code so far:
+<a href="/_file/query-builder-how/00-begin/builder.py">builder.py</a>,
+<a href="/_file/query-builder-how/00-begin/test_builder.py">test_builder.py</a>.</p>
+<h2 id="separators">Separators<span class="headerlink"> <a href="#separators" title="permalink">#</a></span></h2>
 <p>At this point, the WHERE output doesn't really make sense:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">WHERE</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">))</span>
 <span class="go">WHERE</span>
 <span class="go">    a,</span>
 <span class="go">    b</span>
 </code></pre></div>
-<p>We fix this by special-casing the separators for a few clauses,
-and storing them as a class attribute.</p>
+<p>We fix it by special-casing the separators for a few clauses:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">separators</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">WHERE</span><span class="o">=</span><span class="s1">&#39;AND&#39;</span><span class="p">,</span> <span class="n">HAVING</span><span class="o">=</span><span class="s1">&#39;AND&#39;</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
@@ -491,14 +509,14 @@ and storing them as a class attribute.</p>
 </code></pre></div>
 </td></tr></table>
 <p>We could've used defaultdict and gotten rid of <code>default_separator</code>,
-but then we'd have to remember that the non-comma separators need a space – <code>' AND'</code>;
-it's clearer to put this directly in code.</p>
-<p>Also, we could've put the special separator on a new line (<code>'one\nAND two'</code> vs. <code>'one AND\ntwo'</code>).
+but then we'd have to remember that the non-comma separators need a space (<code>' AND'</code>);
+it's clearer to put it directly in code.</p>
+<p>Also, we could've put the special separator on a new line (<code>'one\n​AND two'</code> vs. <code>'one AND\n​two'</code>).
 While this is recommended by some <a href="https://docs.telemetry.mozilla.org/concepts/sql_style.html#boolean-at-the-beginning-of-line">style guides</a>,
 it makes the code a bit more complicated for little benefit, <!-- TODO link -->
 and (maybe) makes it less obvious that AND is just another separator.</p>
 <details>
-<summary>We mark our progress in the test.</summary>
+<summary>We add WHERE to the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -539,11 +557,16 @@ and (maybe) makes it less obvious that AND is just another separator.</p>
 </code></pre></div>
 </td></tr></table>
 </details>
-<h2 id="aliases">aliases<span class="headerlink"> <a href="#aliases" title="permalink">#</a></span></h2>
+<p>The code so far:
+<a href="/_file/query-builder-how/01-separators/builder.py">builder.py</a>,
+<a href="/_file/query-builder-how/01-separators/test_builder.py">test_builder.py</a>.</p>
+<h2 id="aliases">Aliases<span class="headerlink"> <a href="#aliases" title="permalink">#</a></span></h2>
 <p>One of the requirements is making it possible to implement on top of our builder
 <a href="/query-builder-why#intermission-scrolling-window-queries">scrolling window queries</a>.</p>
-<p>For this to happen, that code needs to be able to introspect
-the aliases we use in SELECT, so it can use them in the generated WHERE condition.</p>
+<p>For this to happen,
+code needs to get the result column names
+(the SELECT expressions or their aliases),
+so it can use them in the generated WHERE condition.</p>
 <p>The output of the following looks OK, but to extract <code>alias</code> programmatically,
 we'd need to parse <code>column AS alias</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;column AS alias&#39;</span><span class="p">)</span>
@@ -559,11 +582,11 @@ we'll make the alias the first thing in the pair.</p>
 <span class="go">    two</span>
 </code></pre></div>
 <p>As mentioned earlier, we'll store the data in cleaned up and standard form,
-so the output code doesn't have to care about that.
-A 2-tuple seems like a decent choice.</p>
-<p>Here we depart a tiny bit from plain data structures:
-to make the code easier to read,
-we'll use a named tuple instead of a plain tuple.</p>
+so the output code doesn't have to care about that.</p>
+<p>A 2-tuple is a decent choice,
+but to make the code easier to read,
+we'll depart a tiny bit from plain data structures,
+and use a named tuple instead.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">66</span>
 <span class="normal">67</span>
 <span class="normal">68</span>
@@ -601,7 +624,7 @@ but this makes clearer what's being returned.</p>
  In general, it's a good idea to distinguish this kind of absence by using None,
  since the empty string may be a valid input,
  and None can prevent some bugs – e.g. you can't concatenate None to a string.
- Here, we know an empty string cannot be a valid alias, so we don't bother.</p>
+ Here, an empty string cannot be a valid alias, so we don't bother.</p>
 </div>
 </section>
 <p>Using it is just a one-line change to <code>add()</code>:</p>
@@ -624,8 +647,8 @@ but this makes clearer what's being returned.</p>
 <ol>
 <li>there may or may not be an alias</li>
 <li>the order differs:
- you have <code>select expr as column-alias</code>,
- but you have <code>with table-name as (stmt)</code>
+ you have <code>SELECT expr AS column-alias</code>,
+ but <code>WITH table-name AS (stmt)</code>
  (we treat the CTE table name as an alias)</li>
 </ol>
 <p>We can model this with mostly-empty <a href="https://docs.python.org/3/library/collections.html#collections.defaultdict">defaultdict</a>s with per-clause format strings:</p>
@@ -640,7 +663,7 @@ but this makes clearer what's being returned.</p>
 </td></tr></table>
 <p>To choose between &quot;has alias&quot; and &quot;doesn't have alias&quot;,
 we take advantage of True and False being equal to 1 and 0
-(this may be to clever for our own good, but eh).</p>
+(this may be too clever for our own good, but eh).</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">55</span>
 <span class="normal">56</span>
 <span class="normal">57</span>
@@ -671,7 +694,7 @@ we take advantage of True and False being equal to 1 and 0
 </code></pre></div>
 </td></tr></table>
 <details>
-<summary>We mark our progress in the test.</summary>
+<summary>We add an aliased expression to the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -714,29 +737,30 @@ we take advantage of True and False being equal to 1 and 0
 </code></pre></div>
 </td></tr></table>
 </details>
-<h2 id="subqueries">subqueries<span class="headerlink"> <a href="#subqueries" title="permalink">#</a></span></h2>
-<p>Currently, WITH is a little broken:</p>
+<p>The code so far:
+<a href="/_file/query-builder-how/02-aliases/builder.py">builder.py</a>,
+<a href="/_file/query-builder-how/02-aliases/test_builder.py">test_builder.py</a>.</p>
+<h2 id="subqueries">Subqueries<span class="headerlink"> <a href="#subqueries" title="permalink">#</a></span></h2>
+<p>Currently, WITH is still a little broken:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">WITH</span><span class="p">((</span><span class="s1">&#39;table-name&#39;</span><span class="p">,</span> <span class="s1">&#39;SELECT 1&#39;</span><span class="p">)))</span>
 <span class="go">WITH</span>
 <span class="go">    table-name AS SELECT 1</span>
 </code></pre></div>
-<p>Since common table expressions always have the select statement paranthesized,
-we'd like to have it out of the box as well;
-also, it should be indented properly:</p>
-<pre class="code code-container"><code>WITH
-    table-name AS (
-        SELECT 1
-    )
-</code></pre>
+<p>Since common table expressions always have the SELECT statement paranthesized,
+we'd like to have that out of the box, and be indented properly:</p>
+<div class="highlight code-container"><pre class="code" data-lang="SQL"><span></span><code><span class="k">WITH</span>
+    <span class="k">table</span><span class="o">-</span><span class="n">name</span> <span class="k">AS</span> <span class="p">(</span>
+        <span class="k">SELECT</span> <span class="mi">1</span>
+    <span class="p">)</span>
+</code></pre></div>
 <p>A simple way of handling this is to change the WITH format string to
-<code>'{alias} AS (\n{indented_value}\n)'</code>,
-where <code>indented_value</code> is the value, but indented.</p>
-<!-- TODO: link to old version -->
+<code>'{alias} AS (\n{indented}\n)'</code>,
+where <code>indented</code> is the value, but indented.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
 <p>This kinda works, but is somewhat limited in usefulness;
-for instance, we can't build something like this on top:</p>
+for instance, we can't easily build something like this on top:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">FROM</span><span class="p">((</span><span class="s1">&#39;alias&#39;</span><span class="p">,</span> <span class="s1">&#39;SELECT 1&#39;</span><span class="p">),</span> <span class="n">is_subquery</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
-<p>Instead, let's refining our model about values,
+<p>Instead, let's keep refining our model about values,
 and indicate something is a subquery using a flag:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">73</span>
 <span class="normal">74</span>
@@ -767,7 +791,7 @@ and indicate something is a subquery using a flag:</p>
 <span class="hll">        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">_clean_up</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">_clean_up</span><span class="p">(</span><span class="n">alias</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 </span></code></pre></div>
 </td></tr></table>
-<p>We can then decide decide if a clause always has subqueries,
+<p>We can then decide if a clause always has subqueries,
 and set it accordingly:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">28</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">subquery_keywords</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;WITH&#39;</span><span class="p">}</span>
 </code></pre></div>
@@ -795,7 +819,7 @@ and set it accordingly:</p>
         <span class="k">return</span> <span class="bp">self</span>
 </code></pre></div>
 </td></tr></table>
-<p>Using it for output is also straightforward:</p>
+<p>Using it for output is just an extra if:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">61</span>
 <span class="normal">62</span>
 <span class="normal">63</span>
@@ -817,12 +841,12 @@ and set it accordingly:</p>
             <span class="n">last</span> <span class="o">=</span> <span class="n">i</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">things</span><span class="p">)</span>
 
             <span class="nb">format</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">formats</span><span class="p">[</span><span class="nb">bool</span><span class="p">(</span><span class="n">thing</span><span class="o">.</span><span class="n">alias</span><span class="p">)][</span><span class="n">keyword</span><span class="p">]</span>
-<span class="hll">            <span class="n">value</span> <span class="o">=</span> <span class="n">thing</span><span class="o">.</span><span class="n">value</span>
-</span><span class="hll">            <span class="k">if</span> <span class="n">thing</span><span class="o">.</span><span class="n">is_subquery</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">thing</span><span class="o">.</span><span class="n">value</span>
+<span class="hll">            <span class="k">if</span> <span class="n">thing</span><span class="o">.</span><span class="n">is_subquery</span><span class="p">:</span>
 </span><span class="hll">                <span class="n">value</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;(</span><span class="se">\n</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_indent</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s1">)&#39;</span>
-</span><span class="hll">            <span class="k">yield</span> <span class="bp">self</span><span class="o">.</span><span class="n">_indent</span><span class="p">(</span><span class="nb">format</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">value</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="n">thing</span><span class="o">.</span><span class="n">alias</span><span class="p">))</span>
-</span><span class="hll">
-</span>            <span class="k">if</span> <span class="ow">not</span> <span class="n">last</span><span class="p">:</span>
+</span>            <span class="k">yield</span> <span class="bp">self</span><span class="o">.</span><span class="n">_indent</span><span class="p">(</span><span class="nb">format</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">value</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="n">thing</span><span class="o">.</span><span class="n">alias</span><span class="p">))</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">last</span><span class="p">:</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="k">yield</span> <span class="s1">&#39; &#39;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">separators</span><span class="p">[</span><span class="n">keyword</span><span class="p">]</span>
                 <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
@@ -832,7 +856,7 @@ and set it accordingly:</p>
 </code></pre></div>
 </td></tr></table>
 <details>
-<summary>We mark our progress in the test.</summary>
+<summary>We add WITH to our test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -885,30 +909,29 @@ and set it accordingly:</p>
 </code></pre></div>
 </td></tr></table>
 </details>
-<h2 id="joins">joins<span class="headerlink"> <a href="#joins" title="permalink">#</a></span></h2>
+<p>The code so far:
+<a href="/_file/query-builder-how/03-subqueries/builder.py">builder.py</a>,
+<a href="/_file/query-builder-how/03-subqueries/test_builder.py">test_builder.py</a>.</p>
+<h2 id="joins">Joins<span class="headerlink"> <a href="#joins" title="permalink">#</a></span></h2>
 <p>One clause that's missing is JOIN.
-And it's important, needing to change your mind about what you're selecting from
+And it's important, changing your mind about what you're selecting from
 <a href="/query-builder-why#composition-and-reuse">happens quite often</a>.</p>
 <p>JOIN is a bit more complicated,
-mostly because it has different forms – JOIN, LEFT JOIN, etc.;
-for SQLite, there are at least 10 supported variations.</p>
-<p>I initially handled it by special-casing the keyword,
+mostly because it has different forms – JOIN, LEFT JOIN and so on;
+SQLite supports at least 10 variations.</p>
+<p>I initially handled it by special-casing,
 considering any keyword that contained <code>JOIN</code> a separate keyword.
 This has a few drawbacks, though;
-aside from making the code somewhat complicated,
+aside from making the code more complicated,
 it reorders some of the tables:
-<code>query.JOIN('a').LEFT_JOIN('b').JOIN('c')</code>
-resulted in
-<code>JOIN a JOIN b LEFT JOIN c</code>.</p>
+<code>query​.JOIN('a')​.LEFT_JOIN('b')​.JOIN('c')</code>
+results in <code>JOIN a JOIN b LEFT JOIN c</code>.</p>
 <!-- TODO: link to old version -->
-<p>A better solution is to continue refining our model about values.</p>
-<p>If you look at these railroad diagrams for the SELECT statement,
-you may notice that the table-or-subquery followed by comma in FROM
-is actually a subset of the table-or-subquery followed by join-operator in join-clause.
-That is, for SQLite, a comma is just another join operator.</p>
+<p>A better solution is to continue refining our model.</p>
+<p>Take a look at these railroad diagrams for the SELECT statement:</p>
 <figure class="figure">
 <figcaption class="figure-caption text-center text-small">
-<p><a href="https://www.sqlite.org/syntax/select-core.html">select-core</a> (from clause)</p>
+<p><a href="https://www.sqlite.org/syntax/select-core.html">select-core</a> (FROM clause)</p>
 </figcaption>
 <p><img class="img-responsive" src="/_file/query-builder-how/select-core.svg" alt="select-core" /></p>
 </figure>
@@ -924,8 +947,10 @@ That is, for SQLite, a comma is just another join operator.</p>
 </figcaption>
 <p><img class="img-responsive" src="/_file/query-builder-how/join-operator.svg" alt="join-operator" /></p>
 </figure>
-<p>Put the other way around, a join operator is just another separator,
-so we can model it as such.</p>
+<p>You may notice the table-or-subquery followed by comma in FROM
+is actually a subset of the table-or-subquery followed by join-operator in join-clause.
+That is, for SQLite, a comma is just another join operator.</p>
+<p>Put the other way around, <em>a join operator is just another separator</em>.</p>
 <p>First, let's record which join operator a value has:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">82</span>
 <span class="normal">83</span>
@@ -984,7 +1009,7 @@ so we can model it as such.</p>
 </td></tr></table>
 <p>We could've probably just hardcoded this in <code>add()</code>
 (<code>if 'JOIN' in keyword: ...</code>),
-but doing it like this maybe makes it easier to see at a glance that
+but doing it like this makes it easier to see at a glance that
 &quot;JOIN is a fake FROM&quot;.</p>
 <p>Using <code>keyword</code> as a separator is relatively straightforward:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">63</span>
@@ -1055,7 +1080,7 @@ but doing it like this maybe makes it easier to see at a glance that
 </code></pre></div>
 </td></tr></table>
 <details>
-<summary>We mark our progress in the test.</summary>
+<summary>We add a JOIN to the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -1114,10 +1139,13 @@ but doing it like this maybe makes it easier to see at a glance that
 </code></pre></div>
 </td></tr></table>
 </details>
-<h2 id="distinct">distinct<span class="headerlink"> <a href="#distinct" title="permalink">#</a></span></h2>
+<p>The code so far:
+<a href="/_file/query-builder-how/04-join/builder.py">builder.py</a>,
+<a href="/_file/query-builder-how/04-join/test_builder.py">test_builder.py</a>.</p>
+<h2 id="distinct">Distinct<span class="headerlink"> <a href="#distinct" title="permalink">#</a></span></h2>
 <p>The final adjustment to our model is to support SELECT DISTINCT.</p>
-<p>DISTINCT (or ALL) is like a flag that applies to the whole clause.
-We'll model it just like that:</p>
+<p>DISTINCT (or ALL) is like a flag that applies to the whole clause;
+we'll model it as such:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">117</span>
 <span class="normal">118</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">_FlagList</span><span class="p">(</span><span class="nb">list</span><span class="p">):</span>
     <span class="n">flag</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
@@ -1129,8 +1157,8 @@ We'll model it just like that:</p>
 </span></code></pre></div>
 </td></tr></table>
 <p>Since most of the time we're OK with the default value of <code>flag</code>,
-we don't bother setting it as an instance variable in <code>__init__</code>;
-instead, we just set it as a class variable;
+we don't bother using an instance variable in <code>__init__</code>;
+instead, we use a class variable;
 setting <code>flag</code> on an instance will then shadow the class variable.</p>
 <p>We set the flag based on a known list of keywords for each clause;
 like with fake keywords, we pull the flag &quot;parsing&quot; logic into a separate method:</p>
@@ -1226,7 +1254,7 @@ like with fake keywords, we pull the flag &quot;parsing&quot; logic into a separ
 </code></pre></div>
 </td></tr></table>
 <details>
-<summary>We mark our progress in the test.</summary>
+<summary>We add a SELECT DISTINCT to our test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
@@ -1289,11 +1317,14 @@ like with fake keywords, we pull the flag &quot;parsing&quot; logic into a separ
 </code></pre></div>
 </td></tr></table>
 </details>
-<h2 id="more-tests">more tests<span class="headerlink"> <a href="#more-tests" title="permalink">#</a></span></h2>
-<p>Since now our test is not really simple anymore, we split it in two:
+<p>The code so far:
+<a href="/_file/query-builder-how/05-distinct/builder.py">builder.py</a>,
+<a href="/_file/query-builder-how/05-distinct/test_builder.py">test_builder.py</a>.</p>
+<h2 id="more-tests">More tests<span class="headerlink"> <a href="#more-tests" title="permalink">#</a></span></h2>
+<p>Since now the simple test isn't that simple anymore, we split it in two:
 one with a really simple query, and one with a really complicated query.</p>
 <details>
-<summary>long tests</summary>
+<summary>Like so.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">  6</span>
 <span class="normal">  7</span>
 <span class="normal">  8</span>
@@ -1496,11 +1527,13 @@ one with a really simple query, and one with a really complicated query.</p>
 </code></pre></div>
 </td></tr></table>
 </details>
-<h2 id="more-init">more init<span class="headerlink"> <a href="#more-init" title="permalink">#</a></span></h2>
-<p>Finally, we get to the last feature:
-I'd like to be able to reuse the cleanup and indent logic
-to write paranthesized lists.</p>
-<p>Good thing the constructor doesn't do anything yet,
+<p>The code so far:
+<a href="/_file/query-builder-how/06-more-tests/builder.py">builder.py</a>,
+<a href="/_file/query-builder-how/06-more-tests/test_builder.py">test_builder.py</a>.</p>
+<h2 id="more-init">More init<span class="headerlink"> <a href="#more-init" title="permalink">#</a></span></h2>
+<p>One last feature:
+I'd like to reuse the cleanup and indent logic to write paranthesized lists.
+Good thing <code>__init__</code> doesn't do anything yet,
 and we can add such conveniences there:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">32</span>
 <span class="normal">33</span>
@@ -1534,11 +1567,11 @@ and we can add such conveniences there:</p>
 however, that's quite verbose to write,
 and I'd have to instantiate <code>_Thing</code>s and clean up strings myself;
 that's nor very <em>convenient</em>.</p>
-<p>Instead, we take it to mean &quot;here's some strings to be <code>add()</code>-ed for these keywords&quot;.</p>
-<p>Note that is we ever do want to set the entire datastructure, we still can, with a tiny detour:
-<code>q = Query(); q.data.update(...)</code>.</p>
+<p>Instead, we take it to mean &quot;here's some strings to <code>add()</code> for these keywords&quot;.</p>
+<p>Note that if we ever do want to set the entire data structure,
+we still can, with a tiny detour: <code>q = Query(); q​.data​.update(...)</code>.</p>
 <details>
-<summary>We mark our progress in the test.</summary>
+<summary>We add a separate test for the fancy <code>__init__</code>.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">108</span>
 <span class="normal">109</span>
 <span class="normal">110</span>
@@ -1565,22 +1598,84 @@ that's nor very <em>convenient</em>.</p>
 </code></pre></div>
 </td></tr></table>
 </details>
-<h2 id="features-that-didn-t-make-the-cut">features that didn't make the cut<span class="headerlink"> <a href="#features-that-didn-t-make-the-cut" title="permalink">#</a></span></h2>
-<p>https://github.com/lemon24/reader/blob/2.0/src/reader/_sql_utils.py#L9-L63</p>
+<hr />
+<p>We're done; we have 148 lines / 101 statements.</p>
+<p>Throughout this, even with the most basic of tests, coverage did not drop below 96%.</p>
+<p>The final version of the code:
+<a href="/_file/query-builder-how/07-more-init/builder.py">builder.py</a>,
+<a href="/_file/query-builder-how/07-more-init/test_builder.py">test_builder.py</a>.</p>
+<h2 id="things-that-didn-t-make-the-cut">Things that didn't make the cut<span class="headerlink"> <a href="#things-that-didn-t-make-the-cut" title="permalink">#</a></span></h2>
+<p>When talking about <a href="#trade-offs">trade-offs</a>,
+I said we'll only add features as needed;
+this may seem a bit handwavy –
+how can I tell adding them won't make the code explode?</p>
+<p>Because I <em>did</em> add them;
+that's what <a href="/own-query-builder#the-second-prototype">prototyping</a> was for.
+But since they weren't actually used, I removed them.
+There's no point in them rotting away in there.
+They're in git, we can always add them back later.</p>
+<p>Here's how you'd go about implementing a few of them.</p>
+<h3 id="insert-update-delete">Insert / update / delete<span class="headerlink"> <a href="#insert-update-delete" title="permalink">#</a></span></h3>
+<p>Make them flag keywords, to support the <code>OR $ACTION</code> variants.</p>
+<p>To make VALUES bake in the parentheses, set its <code>format</code> to <code>({value})</code>.
+That's to add one values tuple at a time.</p>
+<p>To add one column at a time, we could do this:</p>
 <ul>
-<li>UNIONs</li>
-<li>INSERT/UPDATE/DELETE</li>
-<li>using arbitrary strings as subqueries</li>
-<li>using Query objects as arguments directly, without having to convert them explicitly to strings</li>
+<li>allow <code>add()</code>ing INSERT with arbitrary flags</li>
+<li>make <code>INSERT('column', into='table')</code>
+a synonym of <code>add('INSERT INTO table', 'column')</code></li>
+<li>classify INSERT and VALUES as <code>parens_keywords</code>
+– like <code>subquery_keywords</code>, but they apply once per keyword, not per value</li>
 </ul>
-<h2 id="wrapping-up">wrapping up<span class="headerlink"> <a href="#wrapping-up" title="permalink">#</a></span></h2>
-<p><a href="/_file/query-builder-how/07-more-init/builder.py">final thing</a></p>
+<p>It'd look like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="c1"># first insert sets flag</span>
+<span class="n">query</span><span class="o">.</span><span class="n">INSERT</span><span class="p">(</span><span class="s1">&#39;one&#39;</span><span class="p">,</span> <span class="n">into</span><span class="o">=</span><span class="s1">&#39;table&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">VALUES</span><span class="p">(</span><span class="s1">&#39;:one&#39;</span><span class="p">)</span>
+<span class="c1"># later we just add stuff</span>
+<span class="n">query</span><span class="o">.</span><span class="n">INSERT</span><span class="p">(</span><span class="s1">&#39;two&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">VALUES</span><span class="p">(</span><span class="s1">&#39;:two&#39;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="arbitrary-strings-as-subqueries">Arbitrary strings as subqueries<span class="headerlink"> <a href="#arbitrary-strings-as-subqueries" title="permalink">#</a></span></h3>
+<p>Allow setting <code>add(..., is_subquery=True)</code>; you'd then do:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">query</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;subquery&#39;</span><span class="p">,</span> <span class="n">is_subquery</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">query</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;not subquery&#39;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="query-objects-as-subqueries">Query objects as subqueries<span class="headerlink"> <a href="#query-objects-as-subqueries" title="permalink">#</a></span></h3>
+<p>Using Query objects as subqueries
+without having to convert them explicitly to strings
+would allow changing them <em>after</em> being <code>add()</code>ed.</p>
+<p>To do it, we just need to allow <code>_Thing.value</code> to be a Query,
+and override its <code>is_subquery</code> based on an <a href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a> check.</p>
+<h3 id="union-intersect-except">Union / intersect / except<span class="headerlink"> <a href="#union-intersect-except" title="permalink">#</a></span></h3>
+<p>This one goes a bit meta:</p>
+<ul>
+<li>add a &quot;virtual&quot; COMPOUND keyword</li>
+<li>add a new <code>compound(keyword)</code> method,
+which moves everything except WITH and ORDER BY to a subquery,
+and then appends it to <code>data['COMPOUND']</code> with the appropriate fake keyword</li>
+<li>make <code>__getattr__</code> return a <code>compound()</code> partial for compound keywords</li>
+<li>special-case COMPOUND in <code>_lines()</code></li>
+</ul>
+<!-- TODO: wrapping up / conclusion section -->
+<hr />
+<p>That's it for now. :)</p>
+<p><strong>Learned something new today?</strong> Share this with others, it really helps!</p>
+<p><strong>Want more?</strong> Get updates via <a href="#embedded-subscribe-form">email</a>
+or <a href="https://death.andgravity.com/_feed/index.xml">Atom feed</a>.</p>
+<section class="admonition note">
+<div class="admonition-text">
+<p>This is my first <em>planned</em> series, and still a work in progress.</p>
+<p>This means <strong>you get a say</strong> in it.
+ <a href="/about#contact">Email me</a> your questions or comments,
+ and I'll do my best to address them in one of the future articles.</p>
+</div>
+</section>
+<hr />
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>I'm sorry. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-2"><p>The guaranteed insertion order was actually added
 to the language specification in 3.7,
 but in 3.6 both CPython and PyPy had it as an implementation detail. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>That's <a href="https://github.com/lemon24/reader/blob/44d1f9af31dcb5bed80b4d798206bd02ae59d127/src/reader/_sql_utils.py#L77-L83">what I did initially</a>. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
@@ -1592,6 +1687,90 @@ but in 3.6 both CPython and PyPy had it as an implementation detail. <a href="#f
 
 
 
+
+<hr>
+<p>This is part of a series:</p>
+
+<ul>
+
+
+<li>
+    <a href="/query-builder">SQL query builder in 150 lines of Python</a>
+
+
+
+<li>
+    <a href="/query-builder-why">Why use an SQL query builder in the first place?</a>
+
+
+
+<li>
+    <a href="/own-query-builder">Why I wrote my own SQL query builder (in Python)</a>
+
+
+
+<li>
+    <a href="/query-builder-how">Write an SQL query builder in 150 lines Python!</a> <small class="text-gray">(this article)</small>
+
+
+</ul>
+
+
+
+
+
+
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=query-builder-how"
+    method="post"
+    id="embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 
 
 
