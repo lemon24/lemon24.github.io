@@ -288,7 +288,7 @@ but of the generated magic methods, we'd only use <code>__repr__()</code>,
 and its output would be too long to be useful anyway.</p>
 <!-- TODO: note clause and keyword are used interchangably to mean "the keys of self.data", not SQL clauses/keywords -->
 <h3 id="adding-things">Adding things<span class="headerlink"> <a href="#adding-things" title="permalink">#</a></span></h3>
-<p>Next, we add code for adding stuff:</p>
+<p>Next, we add code for adding string fragments to each clause:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span>
 <span class="normal">19</span>
 <span class="normal">20</span>
@@ -323,42 +323,46 @@ and its output would be too long to be useful anyway.</p>
 </code></pre></div>
 </td></tr></table>
 <p><code>add()</code> is roughly equivalent to <code>data[keyword]​.extend(args)</code>.</p>
-<p>The main difference is that we first dedent the arguments and remove trailing whitespace.
-This is an upfront decision: we clean everything up and make as many choices when <em>adding things</em>,
-so the part that <em>generates output</em> doesn't have to care about any of that,
-and error checking happens as early as possible.</p>
-<p>Another difference is that it returns <code>self</code>,
-which enables <a href="https://en.wikipedia.org/wiki/Method_chaining">method chaining</a>: <code>query​.add(...)​.add(...)</code>.</p>
+<p>The main difference is that
+we dedent the arguments and remove trailing whitespace.
+This is intentional:
+we clean everything up and make as many choices when <em>adding things</em>,
+so we don't have to care about that when <em>generating output</em>,
+and so error checking happens as early as possible.</p>
+<p>Also, <code>add()</code> returns <code>self</code> to enable <a href="https://en.wikipedia.org/wiki/Method_chaining">method chaining</a>: <code>query​.add(...)​.add(...)</code>.</p>
 <hr />
-<p><a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__"><code>__getattr__()</code></a> gets called when an attribute does not exist,
+<p><a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__"><code>__getattr__()</code></a> is called when an attribute does not exist,
 and allows us to return <em>something</em> instead of getting the default AttributeError.</p>
 <p>What we return is a <code>KEYWORD(*args)</code> callable made on the fly
-by wrapping <code>add()</code> in a <a href="https://docs.python.org/3/library/functools.html#functools.partial">partial</a> (this is the <a href="https://en.wikipedia.org/wiki/Metaprogramming">metaprogramming</a> part);
-a <a href="https://en.wikipedia.org/wiki/Closure_(computer_programming)">closure</a> would be functionally equivalent.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
-<p>Requiring the keywords to be uppercase is mostly a stylistic choice,
-but it does advantages:
+by wrapping <code>add()</code> in a <a href="https://docs.python.org/3/library/functools.html#functools.partial">partial</a>;
+a <a href="https://en.wikipedia.org/wiki/Closure_(computer_programming)">closure</a> capturing <code>name</code> would be functionally equivalent.</p>
+<p>Requiring the keywords to be uppercase is a stylistic choice,
+but does have advantages:
 it signals to the reader these are special &quot;methods&quot;,
-and avoids shadowing dunder methods like <code>__deepcopy__()</code> with no extra code.</p>
-<p>We don't even bother raising AttributeError explicitly,
-we just let <a href="https://docs.python.org/3/library/functions.html#getattr">getattr()</a> do it for us.</p>
-<p>We could store the partial on the instance,
+and avoids shadowing dunder methods like <code>__deepcopy__()</code> without extra checks.</p>
+<p>To indicate the attribute really doesn't exist,
+we need to raise AttributeError;
+we let <a href="https://docs.python.org/3/library/functions.html#getattr">getattr()</a> do it for us
+(the parent <a href="https://docs.python.org/3/library/functions.html#object">object</a> doesn't have a custom <code>__getattr__()</code>).</p>
+<p>We <em>could</em> store the partial on the instance,
 which would side-step <code>__getattr__()</code> on subsequent calls,
 so we only make one partial per keyword;
-we could do it upfront, in the constructor;
-we could even generate actual methods,
+we could do it in <code>__init__()</code>, and not use <code>__getattr__()</code> at all;
+we could even use <a href="https://docs.python.org/3/library/functools.html#functools.partialmethod">partialmethod</a>,
 so there's only one per keyword per class!
-Or we can do nothing – they're likely premature optimization, and not worth the effort.</p>
+Or we can do nothing – they're likely premature optimization,
+and what we're doing now is more flexible anyway.</p>
 <hr />
-<p>I said error checking error checking happens as early as possible;
+<p>I said error checking happens as early as possible;
 that's <em>almost</em> true:
 if you look carefully at the code,
 you may notice <code>query​.ESLECT</code> doesn't raise an exception
-until called, <code>query​.ESLECT()</code>.</p>
-<p>Doing most of the work in <code>add()</code> does some benefits, though:
-it allows it to be used with <a href="https://docs.python.org/3/library/functools.html#functools.partial">partial</a>,
+until called – <code>query​.ESLECT()</code>.</p>
+<p>Doing most of the work in <code>add()</code> does have some benefits, though:
+we can use it with <a href="https://docs.python.org/3/library/functools.html#functools.partial">partial</a> and get chaining for free,
 and it's an escape hatch for when we want
 to use a &quot;keyword&quot; that's not a Python identifier
-(it'll be useful later).</p>
+(this will be useful later).</p>
 <h3 id="output">Output<span class="headerlink"> <a href="#output" title="permalink">#</a></span></h3>
 <p>Finally, we turn what we have back into an SQL string:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">default_separator</span> <span class="o">=</span> <span class="s1">&#39;,&#39;</span>
@@ -434,7 +438,7 @@ no need to do that now.)</p>
 <p>Since we'll want to indent things in the same way in more than one place,
 we make it a static &quot;method&quot; using <a href="https://docs.python.org/3/library/functools.html#functools.partial">partial</a>.</p>
 <p>You may notice we're not sorting the clauses in any way;
-dicts guarantee insertion order in Python 3.6 or newer<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>,
+dicts guarantee insertion order in Python 3.6 or newer<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
 and we add them to <code>data</code> upfront,
 so the order in <code>keywords</code> is maintained.</p>
 <h3 id="tests">Tests<span class="headerlink"> <a href="#tests" title="permalink">#</a></span></h3>
@@ -755,7 +759,7 @@ we'd like to have that out of the box, and be indented properly:</p>
 </code></pre></div>
 <p>A simple way of handling this is to change the WITH format string to
 <code>'{alias} AS (\n{indented}\n)'</code>,
-where <code>indented</code> is the value, but indented.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
+where <code>indented</code> is the value, but indented.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
 <p>This kinda works, but is somewhat limited in usefulness;
 for instance, we can't easily build something like this on top:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">FROM</span><span class="p">((</span><span class="s1">&#39;alias&#39;</span><span class="p">,</span> <span class="s1">&#39;SELECT 1&#39;</span><span class="p">),</span> <span class="n">is_subquery</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -1671,11 +1675,10 @@ or <a href="https://death.andgravity.com/_feed/index.xml">Atom feed</a>.</p>
 <hr />
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>I'm sorry. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>The guaranteed insertion order was actually added
+<li id="fn-1"><p>The guaranteed insertion order was actually added
 to the language specification in 3.7,
-but in 3.6 both CPython and PyPy had it as an implementation detail. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-3"><p>That's <a href="https://github.com/lemon24/reader/blob/44d1f9af31dcb5bed80b4d798206bd02ae59d127/src/reader/_sql_utils.py#L77-L83">what I did initially</a>. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
+but in 3.6 both CPython and PyPy had it as an implementation detail. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>That's <a href="https://github.com/lemon24/reader/blob/44d1f9af31dcb5bed80b4d798206bd02ae59d127/src/reader/_sql_utils.py#L77-L83">what I did initially</a>. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 

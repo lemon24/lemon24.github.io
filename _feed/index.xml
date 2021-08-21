@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity</title>
-  <updated>2021-08-21T16:00:00+00:00</updated>
+  <updated>2021-08-21T16:28:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
@@ -12,7 +12,7 @@
   <entry xml:base="https://death.andgravity.com/query-builder-how">
     <id>https://death.andgravity.com/query-builder-how</id>
     <title>Write an SQL query builder in 150 lines of Python!</title>
-    <updated>2021-08-21T16:00:00+00:00</updated>
+    <updated>2021-08-21T16:28:00+00:00</updated>
     <content type="html">&lt;p&gt;&lt;strong&gt;&lt;a href="/own-query-builder"&gt;Previously&lt;/a&gt;&lt;/strong&gt;&lt;/p&gt;
 &lt;p&gt;This is the fourth article &lt;a href="/query-builder"&gt;in a series&lt;/a&gt; about
 writing an SQL query builder for my feed &lt;a href="https://github.com/lemon24/reader"&gt;reader&lt;/a&gt; library.&lt;/p&gt;
@@ -214,7 +214,7 @@ but of the generated magic methods, we'd only use &lt;code&gt;__repr__()&lt;/cod
 and its output would be too long to be useful anyway.&lt;/p&gt;
 &lt;!-- TODO: note clause and keyword are used interchangably to mean "the keys of self.data", not SQL clauses/keywords --&gt;
 &lt;h3 id="adding-things"&gt;Adding things&lt;span class="headerlink"&gt; &lt;a href="#adding-things" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
-&lt;p&gt;Next, we add code for adding stuff:&lt;/p&gt;
+&lt;p&gt;Next, we add code for adding string fragments to each clause:&lt;/p&gt;
 &lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;18&lt;/span&gt;
 &lt;span class="normal"&gt;19&lt;/span&gt;
 &lt;span class="normal"&gt;20&lt;/span&gt;
@@ -249,42 +249,46 @@ and its output would be too long to be useful anyway.&lt;/p&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
 &lt;p&gt;&lt;code&gt;add()&lt;/code&gt; is roughly equivalent to &lt;code&gt;data[keyword]​.extend(args)&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;The main difference is that we first dedent the arguments and remove trailing whitespace.
-This is an upfront decision: we clean everything up and make as many choices when &lt;em&gt;adding things&lt;/em&gt;,
-so the part that &lt;em&gt;generates output&lt;/em&gt; doesn't have to care about any of that,
-and error checking happens as early as possible.&lt;/p&gt;
-&lt;p&gt;Another difference is that it returns &lt;code&gt;self&lt;/code&gt;,
-which enables &lt;a href="https://en.wikipedia.org/wiki/Method_chaining"&gt;method chaining&lt;/a&gt;: &lt;code&gt;query​.add(...)​.add(...)&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;The main difference is that
+we dedent the arguments and remove trailing whitespace.
+This is intentional:
+we clean everything up and make as many choices when &lt;em&gt;adding things&lt;/em&gt;,
+so we don't have to care about that when &lt;em&gt;generating output&lt;/em&gt;,
+and so error checking happens as early as possible.&lt;/p&gt;
+&lt;p&gt;Also, &lt;code&gt;add()&lt;/code&gt; returns &lt;code&gt;self&lt;/code&gt; to enable &lt;a href="https://en.wikipedia.org/wiki/Method_chaining"&gt;method chaining&lt;/a&gt;: &lt;code&gt;query​.add(...)​.add(...)&lt;/code&gt;.&lt;/p&gt;
 &lt;hr /&gt;
-&lt;p&gt;&lt;a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__"&gt;&lt;code&gt;__getattr__()&lt;/code&gt;&lt;/a&gt; gets called when an attribute does not exist,
+&lt;p&gt;&lt;a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__"&gt;&lt;code&gt;__getattr__()&lt;/code&gt;&lt;/a&gt; is called when an attribute does not exist,
 and allows us to return &lt;em&gt;something&lt;/em&gt; instead of getting the default AttributeError.&lt;/p&gt;
 &lt;p&gt;What we return is a &lt;code&gt;KEYWORD(*args)&lt;/code&gt; callable made on the fly
-by wrapping &lt;code&gt;add()&lt;/code&gt; in a &lt;a href="https://docs.python.org/3/library/functools.html#functools.partial"&gt;partial&lt;/a&gt; (this is the &lt;a href="https://en.wikipedia.org/wiki/Metaprogramming"&gt;metaprogramming&lt;/a&gt; part);
-a &lt;a href="https://en.wikipedia.org/wiki/Closure_(computer_programming)"&gt;closure&lt;/a&gt; would be functionally equivalent.&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
-&lt;p&gt;Requiring the keywords to be uppercase is mostly a stylistic choice,
-but it does advantages:
+by wrapping &lt;code&gt;add()&lt;/code&gt; in a &lt;a href="https://docs.python.org/3/library/functools.html#functools.partial"&gt;partial&lt;/a&gt;;
+a &lt;a href="https://en.wikipedia.org/wiki/Closure_(computer_programming)"&gt;closure&lt;/a&gt; capturing &lt;code&gt;name&lt;/code&gt; would be functionally equivalent.&lt;/p&gt;
+&lt;p&gt;Requiring the keywords to be uppercase is a stylistic choice,
+but does have advantages:
 it signals to the reader these are special &amp;quot;methods&amp;quot;,
-and avoids shadowing dunder methods like &lt;code&gt;__deepcopy__()&lt;/code&gt; with no extra code.&lt;/p&gt;
-&lt;p&gt;We don't even bother raising AttributeError explicitly,
-we just let &lt;a href="https://docs.python.org/3/library/functions.html#getattr"&gt;getattr()&lt;/a&gt; do it for us.&lt;/p&gt;
-&lt;p&gt;We could store the partial on the instance,
+and avoids shadowing dunder methods like &lt;code&gt;__deepcopy__()&lt;/code&gt; without extra checks.&lt;/p&gt;
+&lt;p&gt;To indicate the attribute really doesn't exist,
+we need to raise AttributeError;
+we let &lt;a href="https://docs.python.org/3/library/functions.html#getattr"&gt;getattr()&lt;/a&gt; do it for us
+(the parent &lt;a href="https://docs.python.org/3/library/functions.html#object"&gt;object&lt;/a&gt; doesn't have a custom &lt;code&gt;__getattr__()&lt;/code&gt;).&lt;/p&gt;
+&lt;p&gt;We &lt;em&gt;could&lt;/em&gt; store the partial on the instance,
 which would side-step &lt;code&gt;__getattr__()&lt;/code&gt; on subsequent calls,
 so we only make one partial per keyword;
-we could do it upfront, in the constructor;
-we could even generate actual methods,
+we could do it in &lt;code&gt;__init__()&lt;/code&gt;, and not use &lt;code&gt;__getattr__()&lt;/code&gt; at all;
+we could even use &lt;a href="https://docs.python.org/3/library/functools.html#functools.partialmethod"&gt;partialmethod&lt;/a&gt;,
 so there's only one per keyword per class!
-Or we can do nothing – they're likely premature optimization, and not worth the effort.&lt;/p&gt;
+Or we can do nothing – they're likely premature optimization,
+and what we're doing now is more flexible anyway.&lt;/p&gt;
 &lt;hr /&gt;
-&lt;p&gt;I said error checking error checking happens as early as possible;
+&lt;p&gt;I said error checking happens as early as possible;
 that's &lt;em&gt;almost&lt;/em&gt; true:
 if you look carefully at the code,
 you may notice &lt;code&gt;query​.ESLECT&lt;/code&gt; doesn't raise an exception
-until called, &lt;code&gt;query​.ESLECT()&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;Doing most of the work in &lt;code&gt;add()&lt;/code&gt; does some benefits, though:
-it allows it to be used with &lt;a href="https://docs.python.org/3/library/functools.html#functools.partial"&gt;partial&lt;/a&gt;,
+until called – &lt;code&gt;query​.ESLECT()&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Doing most of the work in &lt;code&gt;add()&lt;/code&gt; does have some benefits, though:
+we can use it with &lt;a href="https://docs.python.org/3/library/functools.html#functools.partial"&gt;partial&lt;/a&gt; and get chaining for free,
 and it's an escape hatch for when we want
 to use a &amp;quot;keyword&amp;quot; that's not a Python identifier
-(it'll be useful later).&lt;/p&gt;
+(this will be useful later).&lt;/p&gt;
 &lt;h3 id="output"&gt;Output&lt;span class="headerlink"&gt; &lt;a href="#output" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
 &lt;p&gt;Finally, we turn what we have back into an SQL string:&lt;/p&gt;
 &lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;18&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="n"&gt;default_separator&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;,&amp;#39;&lt;/span&gt;
@@ -360,7 +364,7 @@ no need to do that now.)&lt;/p&gt;
 &lt;p&gt;Since we'll want to indent things in the same way in more than one place,
 we make it a static &amp;quot;method&amp;quot; using &lt;a href="https://docs.python.org/3/library/functools.html#functools.partial"&gt;partial&lt;/a&gt;.&lt;/p&gt;
 &lt;p&gt;You may notice we're not sorting the clauses in any way;
-dicts guarantee insertion order in Python 3.6 or newer&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt;,
+dicts guarantee insertion order in Python 3.6 or newer&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;,
 and we add them to &lt;code&gt;data&lt;/code&gt; upfront,
 so the order in &lt;code&gt;keywords&lt;/code&gt; is maintained.&lt;/p&gt;
 &lt;h3 id="tests"&gt;Tests&lt;span class="headerlink"&gt; &lt;a href="#tests" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
@@ -681,7 +685,7 @@ we'd like to have that out of the box, and be indented properly:&lt;/p&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;A simple way of handling this is to change the WITH format string to
 &lt;code&gt;'{alias} AS (\n{indented}\n)'&lt;/code&gt;,
-where &lt;code&gt;indented&lt;/code&gt; is the value, but indented.&lt;sup class="footnote-ref" id="fnref-3"&gt;&lt;a href="#fn-3"&gt;3&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+where &lt;code&gt;indented&lt;/code&gt; is the value, but indented.&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
 &lt;p&gt;This kinda works, but is somewhat limited in usefulness;
 for instance, we can't easily build something like this on top:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;Query&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;FROM&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;alias&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;SELECT 1&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;is_subquery&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
@@ -1597,11 +1601,10 @@ or &lt;a href="https://death.andgravity.com/_feed/index.xml"&gt;Atom feed&lt;/a&
 &lt;hr /&gt;
 &lt;section class="footnotes"&gt;
 &lt;ol&gt;
-&lt;li id="fn-1"&gt;&lt;p&gt;I'm sorry. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
-&lt;li id="fn-2"&gt;&lt;p&gt;The guaranteed insertion order was actually added
+&lt;li id="fn-1"&gt;&lt;p&gt;The guaranteed insertion order was actually added
 to the language specification in 3.7,
-but in 3.6 both CPython and PyPy had it as an implementation detail. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
-&lt;li id="fn-3"&gt;&lt;p&gt;That's &lt;a href="https://github.com/lemon24/reader/blob/44d1f9af31dcb5bed80b4d798206bd02ae59d127/src/reader/_sql_utils.py#L77-L83"&gt;what I did initially&lt;/a&gt;. &lt;a href="#fnref-3" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+but in 3.6 both CPython and PyPy had it as an implementation detail. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-2"&gt;&lt;p&gt;That's &lt;a href="https://github.com/lemon24/reader/blob/44d1f9af31dcb5bed80b4d798206bd02ae59d127/src/reader/_sql_utils.py#L77-L83"&gt;what I did initially&lt;/a&gt;. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;/ol&gt;
 &lt;/section&gt;
 </content>
