@@ -67,11 +67,11 @@ window.addEventListener('resize', set_vh);
 <h1 class="heading-noindex">Write an SQL query builder in 150 lines of Python!</h1>
 
 <p class="text-gray"><small>
-<span>2021-08-20</span>
+<span class="tooltip" data-tooltip="updated on 2021-08-21">2021-08-20</span>
 
 
 
-∙ 20 minute read
+∙ 19 minute read
 
 
 </small></p>
@@ -98,12 +98,12 @@ along the way, we'll talk about:</p>
 <li>knowing <strong>when to be lazy</strong></li>
 <li>worse (and better) ways of doing things</li>
 </ul>
-<p>As you read this, keep in mind that it is <em>linear</em> by necessity.
-Development was <em>not</em> linear:
+<p>As you read this, keep in mind it is a story, thus <em>linear</em> by necessity.
+Development was decidedly <em>not</em> so:
 I tried things out, I changed my mind multiple times,
-and I <a href="https://programmingisterrible.com/post/176657481103/repeat-yourself-do-more-than-one-thing-and">rewrote everything</a> at least once.
-Even now, there may be equally-good – or better – implementations;
-the current one is simply <em>good enough</em>.</p>
+and I <a href="https://programmingisterrible.com/post/176657481103/repeat-yourself-do-more-than-one-thing-and">rewrote everything</a> once.
+Even now, there are equally-good – or better – implementations;
+this one is simply <em>good enough</em>.</p>
 <details>
 <summary>Contents</summary>
 <section class="toc">
@@ -142,7 +142,7 @@ the current one is simply <em>good enough</em>.</p>
 </details>
 <!-- TODO: more editing, summary, and article tag -->
 <h2 id="what-are-we-trying-to-build">What are we trying to build?<span class="headerlink"> <a href="#what-are-we-trying-to-build" title="permalink">#</a></span></h2>
-<p>We want a way to build SQL strings that takes care of formatting:</p>
+<p>We want a way of building SQL strings that takes care of formatting:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;one&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">FROM</span><span class="p">(</span><span class="s1">&#39;table&#39;</span><span class="p">)</span>
 <span class="go">&lt;builder.Query object at 0x7fc953e60640&gt;</span>
@@ -166,7 +166,7 @@ the current one is simply <em>good enough</em>.</p>
 </code></pre></div>
 <p>While not required,
 I recommend reading the previous articles
-to get a sense of <a href="/query-builder-why">the problem we're trying to solve</a>,
+to get a better idea of <a href="/query-builder-why">the problem we're trying to solve</a>,
 and <a href="/own-query-builder#background">the context we're solving it in</a>.</p>
 <p>In short, whatever we build <a href="/own-query-builder#requirements-and-existing-libraries">should</a>:</p>
 <ul>
@@ -185,13 +185,13 @@ and strict backwards compatibility is not necessary.</p>
 <ul>
 <li>No needless customization. We can change the code directly if we need to.</li>
 <li>No other features except the known requirements.
-We'll add feature as needed.</li>
+We can add new ones when we need them.</li>
 <li>No effort to support other syntax than SQLite.</li>
 <li>No extensive testing.
 We can rely on the exising comprehensive functional tests.</li>
 <li>No SQL validation. The database does this already.<ul>
 <li>However, it would be nice to get at least a little error checking.
-No need for custom exceptions, any type is acceptable –
+No need for custom exceptions, any kind is acceptable –
 they should come up only during development and testing anyway.</li>
 </ul>
 </li>
@@ -202,7 +202,7 @@ they should come up only during development and testing anyway.</li>
 my prototype was based on the idea that
 <em>queries can be represented as plain data structures</em>.</p>
 <p>Looking at a nicely formatted query,
-a natural representation may come to mind:</p>
+a natural representation may reveal itself:</p>
 <div class="highlight code-container"><pre class="code" data-lang="SQL"><span></span><code><span class="k">SELECT</span>
     <span class="n">one</span><span class="p">,</span>
     <span class="n">two</span>
@@ -228,7 +228,7 @@ a natural representation may come to mind:</p>
     <span class="p">],</span>
 <span class="p">}</span>
 </code></pre></div>
-<p>Let's use this as our starting model, and build ourselves a query builder :)</p>
+<p>Let's use this as our starting model, and make ourselves a query builder.</p>
 <h3 id="classes">Classes<span class="headerlink"> <a href="#classes" title="permalink">#</a></span></h3>
 <p>We start with a class:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 2</span>
@@ -275,17 +275,17 @@ and we may need those names for something else.</p>
 <span class="n">query</span><span class="p">[</span><span class="s1">&#39;SELECT&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s1">&#39;one&#39;</span><span class="p">,</span> <span class="s1">&#39;two&#39;</span><span class="p">])</span>
 <span class="n">query</span><span class="p">[</span><span class="s1">&#39;FROM&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;table&#39;</span><span class="p">)</span>
 </code></pre></div>
-<p>We store various data as class variables
-instead of hardcoding it or using module variables
-as a cheap way to customize things (more on that later).
-Also, using a variable makes it clearer what those things are.</p>
-<p>For now, we refrain from any customization in the initializer;
+<p>We use class variables for &quot;static&quot; data
+instead of hardcoding or module variables
+so it's easy to override (more on that later).</p>
+<p>We don't customize anything in <code>__init__()</code> fow now;
 if we need more clauses, we can add them to <code>keywords</code> directly.</p>
-<p>We add all the known keywords upfront to get free error checking –
-we can rely on <code>data[keyword]</code> raising a KeyError for unknown keywords.</p>
+<!-- TODO: note about terminology -->
+<p>Adding all known keywords to <code>data</code> upfront gets us free error checking –
+<code>data[keyword]</code> raises KeyError for unknown keywords.</p>
 <p>We could use <a href="https://docs.python.org/3/library/dataclasses.html">dataclasses</a>,
-but of the generated magic methods, we'd only use the <code>__repr__()</code>,
-and most of the time it would be too long to be useful.</p>
+but of the generated magic methods, we'd only use <code>__repr__()</code>,
+and its output would be too long to be useful anyway.</p>
 <!-- TODO: note clause and keyword are used interchangably to mean "the keys of self.data", not SQL clauses/keywords -->
 <h3 id="adding-things">Adding things<span class="headerlink"> <a href="#adding-things" title="permalink">#</a></span></h3>
 <p>Next, we add code for adding stuff:</p>
