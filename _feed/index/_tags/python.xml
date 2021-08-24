@@ -1082,9 +1082,9 @@ we make sure to output the real ones first.&lt;/p&gt;
 &lt;a href="/_file/query-builder-how/04-join/builder.py"&gt;builder.py&lt;/a&gt;,
 &lt;a href="/_file/query-builder-how/04-join/test_builder.py"&gt;test_builder.py&lt;/a&gt;.&lt;/p&gt;
 &lt;h2 id="distinct"&gt;Distinct&lt;span class="headerlink"&gt; &lt;a href="#distinct" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
-&lt;p&gt;The final adjustment to our model is to support SELECT DISTINCT.&lt;/p&gt;
-&lt;p&gt;DISTINCT (or ALL) is like a flag that applies to the whole clause;
-we'll model it as such:&lt;/p&gt;
+&lt;p&gt;The final model change is to support SELECT DISTINCT.&lt;/p&gt;
+&lt;p&gt;DISTINCT and ALL are flags that apply to the whole clause;
+we'll model them as such:&lt;/p&gt;
 &lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;117&lt;/span&gt;
 &lt;span class="normal"&gt;118&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;_FlagList&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
     &lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;&amp;#39;&lt;/span&gt;
@@ -1095,12 +1095,15 @@ we'll model it as such:&lt;/p&gt;
 &lt;span class="hll"&gt;        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="n"&gt;k&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;_FlagList&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;k&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;keywords&lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;
 &lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
-&lt;p&gt;Since most of the time we're OK with the default value of &lt;code&gt;flag&lt;/code&gt;,
-we don't bother using an instance variable in &lt;code&gt;__init__&lt;/code&gt;;
-instead, we use a class variable;
-setting &lt;code&gt;flag&lt;/code&gt; on an instance will then shadow the class variable.&lt;/p&gt;
-&lt;p&gt;We set the flag based on a known list of keywords for each clause;
-like with fake keywords, we pull the flag &amp;quot;parsing&amp;quot; logic into a separate method:&lt;/p&gt;
+&lt;p&gt;Since most of the time we're OK with the default &lt;code&gt;flag&lt;/code&gt;,
+we don't bother setting it in &lt;code&gt;__init__&lt;/code&gt;,
+and use a class variable instead.
+If we need to customize it,
+we can set &lt;code&gt;flag&lt;/code&gt; on the instance, shadowing the class variable.&lt;/p&gt;
+&lt;p&gt;A &lt;code&gt;__repr__&lt;/code&gt; showing the flag would be nice,
+but it'd only be useful during debugging, so we skip it as well.&lt;/p&gt;
+&lt;p&gt;We set the flag based on a known set for each clause;
+like with fake keywords, we pull the &amp;quot;parsing&amp;quot; logic into a separate method:&lt;/p&gt;
 &lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;30&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="n"&gt;flag_keywords&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;SELECT&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;DISTINCT&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;ALL&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
@@ -1160,7 +1163,7 @@ like with fake keywords, we pull the flag &amp;quot;parsing&amp;quot; logic into
         &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;keyword&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;&amp;#39;&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
-&lt;p&gt;Using the flag for output is again straightforward:&lt;/p&gt;
+&lt;p&gt;Using it for output is again straightforward:&lt;/p&gt;
 &lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;78&lt;/span&gt;
 &lt;span class="normal"&gt;79&lt;/span&gt;
 &lt;span class="normal"&gt;80&lt;/span&gt;
