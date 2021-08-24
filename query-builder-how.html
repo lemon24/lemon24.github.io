@@ -594,7 +594,7 @@ we'll make the alias the first thing in the pair.</p>
 <span class="go">    one AS alias,</span>
 <span class="go">    two</span>
 </code></pre></div>
-<p>As mentioned earlier, 
+<p>As mentioned earlier,
 we store everything in a standard way
 to keep output code simpler.
 A plain 2-tuple is a decent choice,
@@ -636,7 +636,7 @@ but this way it's easier to see what type is being returned.</p>
  In general, it's a good idea to distinguish this kind of absence by using None,
  since the empty string may be a valid input,
  and None can prevent some bugs – e.g. you can't concatenate None to a string.
- Here, an empty string cannot be a valid alias, and we use format strings, 
+ Here, an empty string cannot be a valid alias, and we use format strings,
  so we don't bother.</p>
 </div>
 </section>
@@ -924,21 +924,20 @@ and set the flag accordingly:</p>
 <a href="/_file/query-builder-how/03-subqueries/builder.py">builder.py</a>,
 <a href="/_file/query-builder-how/03-subqueries/test_builder.py">test_builder.py</a>.</p>
 <h2 id="joins">Joins<span class="headerlink"> <a href="#joins" title="permalink">#</a></span></h2>
-<p>One clause that's missing is JOIN.
+<p>One clause that's entirely missing is JOIN.
 And it's important, changing your mind about what you're selecting from
 <a href="/query-builder-why#composition-and-reuse">happens quite often</a>.</p>
 <p>JOIN is a bit more complicated,
 mostly because it has different forms – JOIN, LEFT JOIN and so on;
 SQLite supports at least 10 variations.</p>
-<p>I initially handled it by special-casing,
-considering any keyword that contained <code>JOIN</code> a separate keyword.
+<p>I initially treated any keyword containing <code>JOIN</code> as a separate keyword,
+and <a href="https://github.com/lemon24/reader/blob/1.11/src/reader/_sql_utils.py#L97-L103">dealing with it during output</a>.
 This has a few drawbacks, though;
 aside from making the code more complicated,
-it reorders some of the tables:
+it reorders the tables:
 <code>query​.JOIN('a')​.LEFT_JOIN('b')​.JOIN('c')</code>
-results in <code>JOIN a JOIN b LEFT JOIN c</code>.</p>
-<!-- TODO: link to old version -->
-<p>A better solution is to continue refining our model.</p>
+results in <code>JOIN a JOIN c LEFT JOIN b</code>.</p>
+<p>A better solution is to refine our model even further.</p>
 <p>Take a look at these railroad diagrams for the SELECT statement:</p>
 <figure class="figure">
 <figcaption class="figure-caption text-center text-small">
@@ -958,11 +957,14 @@ results in <code>JOIN a JOIN b LEFT JOIN c</code>.</p>
 </figcaption>
 <p><img class="img-responsive" src="/_file/query-builder-how/join-operator.svg" alt="join-operator" /></p>
 </figure>
-<p>You may notice the table-or-subquery followed by comma in FROM
-is actually a subset of the table-or-subquery followed by join-operator in join-clause.
+<p>You may notice <code>table-or-subquery</code> followed by <code>,</code> in FROM
+is actually a subset of <code>table-or-subquery</code> followed by <code>join-operator</code> in <code>join-clause</code>.
 That is, for SQLite, a comma is just another join operator.</p>
 <p>Put the other way around, <em>a join operator is just another separator</em>.</p>
-<p>First, let's record which join operator a value has:</p>
+<p>Because our separators come <em>after</em> things, not before,
+we'll model join operators separately, as <em>fake keywords</em>
+(that is, not used to index into <code>data</code>).</p>
+<p>First, let's set them:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">82</span>
 <span class="normal">83</span>
 <span class="normal">84</span>
@@ -1090,6 +1092,8 @@ but doing it like this makes it easier to see at a glance that
             <span class="k">yield</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
 </code></pre></div>
 </td></tr></table>
+<p>Since FROM always comes before JOIN,
+we make sure to output the real ones first.</p>
 <details>
 <summary>We add a JOIN to the test.</summary>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
