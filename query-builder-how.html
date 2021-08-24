@@ -576,13 +576,17 @@ on top.
 For this, code needs to get the result column names
 – the SELECT expressions <em>or</em> their aliases –
 and add them to a generated WHERE condition.</p>
-<p>The output of the following looks OK, but to extract <code>alias</code> programmatically,
-we'd need to parse <code>column AS alias</code>:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span><span class="s1">&#39;column AS alias&#39;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;SELECT&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
-<span class="go">&#39;column AS alias&#39;</span>
+<p>Parsing the result column is straightforward only for simple cases:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">query</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">(</span>
+<span class="gp">... </span>  <span class="s1">&#39;column&#39;</span><span class="p">,</span>
+<span class="gp">... </span>  <span class="s1">&#39;column AS alias&#39;</span><span class="p">,</span>
+<span class="gp">... </span>  <span class="s1">&#39;column as alias&#39;</span><span class="p">,</span>
+<span class="gp">... </span>  <span class="s1">&#39;(SELECT column FROM table AS another-table)&#39;</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">rpartition</span><span class="p">(</span><span class="s1">&#39; AS &#39;</span><span class="p">)[</span><span class="mi">2</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;SELECT&#39;</span><span class="p">]]</span>
+<span class="go">[&#39;column&#39;, &#39;alias&#39;, &#39;column as alias&#39;, &#39;another-table)&#39;]</span>
 </code></pre></div>
-<p>Passing a pair of strings when we want an aliased column seems like an acceptable thing.
+<p>An acceptable compromise is using pairs of strings for aliased columns.
 Since the column expression might be quite long,
 we'll make the alias the first thing in the pair.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">SELECT</span><span class="p">((</span><span class="s1">&#39;alias&#39;</span><span class="p">,</span> <span class="s1">&#39;one&#39;</span><span class="p">),</span> <span class="s1">&#39;two&#39;</span><span class="p">))</span>
@@ -590,12 +594,11 @@ we'll make the alias the first thing in the pair.</p>
 <span class="go">    one AS alias,</span>
 <span class="go">    two</span>
 </code></pre></div>
-<p>As mentioned earlier, we'll store the data in cleaned up and standard form,
-so the output code doesn't have to care about that.</p>
-<p>A 2-tuple is a decent choice,
-but to make the code easier to read,
-we'll depart a tiny bit from plain data structures,
-and use a named tuple instead.</p>
+<p>As mentioned earlier, 
+we store everything in a standard way
+to keep output code simpler.
+A plain 2-tuple is a decent choice,
+but a <a href="https://docs.python.org/3/glossary.html#term-named-tuple">named tuple</a> is more readable.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">66</span>
 <span class="normal">67</span>
 <span class="normal">68</span>
@@ -623,17 +626,18 @@ and use a named tuple instead.</p>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">_clean_up</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">_clean_up</span><span class="p">(</span><span class="n">alias</span><span class="p">))</span>
 </code></pre></div>
 </td></tr></table>
-<p>Conveniently, this also gives us a place where to convert the string-or-pair,
-in the form of the <code>from_arg()</code> alternate constructor.
+<p>Conveniently, this gives us a place where to convert the string-or-pair:
+the <code>from_arg()</code> alternate constructor.
 We could've made it a stand-alone function,
-but this makes clearer what's being returned.</p>
+but this way it's easier to see what type is being returned.</p>
 <section class="admonition note">
 <div class="admonition-text">
 <p>Note that we use an empty string to mean &quot;no alias&quot;.
  In general, it's a good idea to distinguish this kind of absence by using None,
  since the empty string may be a valid input,
  and None can prevent some bugs – e.g. you can't concatenate None to a string.
- Here, an empty string cannot be a valid alias, so we don't bother.</p>
+ Here, an empty string cannot be a valid alias, and we use format strings, 
+ so we don't bother.</p>
 </div>
 </section>
 <p>Using it is just a one-line change to <code>add()</code>:</p>
@@ -655,7 +659,7 @@ but this makes clearer what's being returned.</p>
 <p>On output, we have two concerns:</p>
 <ol>
 <li>there may or may not be an alias</li>
-<li>the order differs:
+<li>the order differs depending on the keyword:
  you have <code>SELECT expr AS column-alias</code>,
  but <code>WITH table-name AS (stmt)</code>
  (we treat the CTE table name as an alias)</li>
@@ -670,9 +674,7 @@ but this makes clearer what's being returned.</p>
     <span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<p>To choose between &quot;has alias&quot; and &quot;doesn't have alias&quot;,
-we take advantage of True and False being equal to 1 and 0
-(this may be too clever for our own good, but eh).</p>
+<p>... and choose the right one based on the boolean value of the alias:<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">55</span>
 <span class="normal">56</span>
 <span class="normal">57</span>
@@ -764,7 +766,7 @@ we'd like to have that out of the box, and be indented properly:</p>
 </code></pre></div>
 <p>A simple way of handling this is to change the WITH format string to
 <code>'{alias} AS (\n{indented}\n)'</code>,
-where <code>indented</code> is the value, but indented.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
+where <code>indented</code> is the value, but indented.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
 <p>This kinda works, but is somewhat limited in usefulness;
 for instance, we can't easily build something like this on top:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">FROM</span><span class="p">((</span><span class="s1">&#39;alias&#39;</span><span class="p">,</span> <span class="s1">&#39;SELECT 1&#39;</span><span class="p">),</span> <span class="n">is_subquery</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -1683,7 +1685,8 @@ or <a href="https://death.andgravity.com/_feed/index.xml">Atom feed</a>.</p>
 <li id="fn-1"><p>The guaranteed insertion order was actually added
 to the language specification in 3.7,
 but in 3.6 both CPython and PyPy had it as an implementation detail. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>That's <a href="https://github.com/lemon24/reader/blob/44d1f9af31dcb5bed80b4d798206bd02ae59d127/src/reader/_sql_utils.py#L77-L83">what I did initially</a>. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>This works because <code>False == 0</code> and <code>True == 1</code>, and is likely too clever. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>That's <a href="https://github.com/lemon24/reader/blob/44d1f9af31dcb5bed80b4d798206bd02ae59d127/src/reader/_sql_utils.py#L77-L83">what I did initially</a>. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 

@@ -500,13 +500,17 @@ on top.
 For this, code needs to get the result column names
 – the SELECT expressions &lt;em&gt;or&lt;/em&gt; their aliases –
 and add them to a generated WHERE condition.&lt;/p&gt;
-&lt;p&gt;The output of the following looks OK, but to extract &lt;code&gt;alias&lt;/code&gt; programmatically,
-we'd need to parse &lt;code&gt;column AS alias&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;query&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;Query&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;SELECT&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;column AS alias&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;SELECT&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;][&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;span class="go"&gt;&amp;#39;column AS alias&amp;#39;&lt;/span&gt;
+&lt;p&gt;Parsing the result column is straightforward only for simple cases:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;query&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;Query&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;SELECT&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;  &lt;span class="s1"&gt;&amp;#39;column&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;  &lt;span class="s1"&gt;&amp;#39;column AS alias&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;  &lt;span class="s1"&gt;&amp;#39;column as alias&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;  &lt;span class="s1"&gt;&amp;#39;(SELECT column FROM table AS another-table)&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;rpartition&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39; AS &amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)[&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;SELECT&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]]&lt;/span&gt;
+&lt;span class="go"&gt;[&amp;#39;column&amp;#39;, &amp;#39;alias&amp;#39;, &amp;#39;column as alias&amp;#39;, &amp;#39;another-table)&amp;#39;]&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;Passing a pair of strings when we want an aliased column seems like an acceptable thing.
+&lt;p&gt;An acceptable compromise is using pairs of strings for aliased columns.
 Since the column expression might be quite long,
 we'll make the alias the first thing in the pair.&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Query&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;SELECT&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;alias&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;one&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;two&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
@@ -514,12 +518,11 @@ we'll make the alias the first thing in the pair.&lt;/p&gt;
 &lt;span class="go"&gt;    one AS alias,&lt;/span&gt;
 &lt;span class="go"&gt;    two&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;As mentioned earlier, we'll store the data in cleaned up and standard form,
-so the output code doesn't have to care about that.&lt;/p&gt;
-&lt;p&gt;A 2-tuple is a decent choice,
-but to make the code easier to read,
-we'll depart a tiny bit from plain data structures,
-and use a named tuple instead.&lt;/p&gt;
+&lt;p&gt;As mentioned earlier, 
+we store everything in a standard way
+to keep output code simpler.
+A plain 2-tuple is a decent choice,
+but a &lt;a href="https://docs.python.org/3/glossary.html#term-named-tuple"&gt;named tuple&lt;/a&gt; is more readable.&lt;/p&gt;
 &lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;66&lt;/span&gt;
 &lt;span class="normal"&gt;67&lt;/span&gt;
 &lt;span class="normal"&gt;68&lt;/span&gt;
@@ -547,17 +550,18 @@ and use a named tuple instead.&lt;/p&gt;
         &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="bp"&gt;cls&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_clean_up&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;_clean_up&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;alias&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
-&lt;p&gt;Conveniently, this also gives us a place where to convert the string-or-pair,
-in the form of the &lt;code&gt;from_arg()&lt;/code&gt; alternate constructor.
+&lt;p&gt;Conveniently, this gives us a place where to convert the string-or-pair:
+the &lt;code&gt;from_arg()&lt;/code&gt; alternate constructor.
 We could've made it a stand-alone function,
-but this makes clearer what's being returned.&lt;/p&gt;
+but this way it's easier to see what type is being returned.&lt;/p&gt;
 &lt;section class="admonition note"&gt;
 &lt;div class="admonition-text"&gt;
 &lt;p&gt;Note that we use an empty string to mean &amp;quot;no alias&amp;quot;.
  In general, it's a good idea to distinguish this kind of absence by using None,
  since the empty string may be a valid input,
  and None can prevent some bugs – e.g. you can't concatenate None to a string.
- Here, an empty string cannot be a valid alias, so we don't bother.&lt;/p&gt;
+ Here, an empty string cannot be a valid alias, and we use format strings, 
+ so we don't bother.&lt;/p&gt;
 &lt;/div&gt;
 &lt;/section&gt;
 &lt;p&gt;Using it is just a one-line change to &lt;code&gt;add()&lt;/code&gt;:&lt;/p&gt;
@@ -579,7 +583,7 @@ but this makes clearer what's being returned.&lt;/p&gt;
 &lt;p&gt;On output, we have two concerns:&lt;/p&gt;
 &lt;ol&gt;
 &lt;li&gt;there may or may not be an alias&lt;/li&gt;
-&lt;li&gt;the order differs:
+&lt;li&gt;the order differs depending on the keyword:
  you have &lt;code&gt;SELECT expr AS column-alias&lt;/code&gt;,
  but &lt;code&gt;WITH table-name AS (stmt)&lt;/code&gt;
  (we treat the CTE table name as an alias)&lt;/li&gt;
@@ -594,9 +598,7 @@ but this makes clearer what's being returned.&lt;/p&gt;
     &lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
-&lt;p&gt;To choose between &amp;quot;has alias&amp;quot; and &amp;quot;doesn't have alias&amp;quot;,
-we take advantage of True and False being equal to 1 and 0
-(this may be too clever for our own good, but eh).&lt;/p&gt;
+&lt;p&gt;... and choose the right one based on the boolean value of the alias:&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
 &lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;55&lt;/span&gt;
 &lt;span class="normal"&gt;56&lt;/span&gt;
 &lt;span class="normal"&gt;57&lt;/span&gt;
@@ -688,7 +690,7 @@ we'd like to have that out of the box, and be indented properly:&lt;/p&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;A simple way of handling this is to change the WITH format string to
 &lt;code&gt;'{alias} AS (\n{indented}\n)'&lt;/code&gt;,
-where &lt;code&gt;indented&lt;/code&gt; is the value, but indented.&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+where &lt;code&gt;indented&lt;/code&gt; is the value, but indented.&lt;sup class="footnote-ref" id="fnref-3"&gt;&lt;a href="#fn-3"&gt;3&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
 &lt;p&gt;This kinda works, but is somewhat limited in usefulness;
 for instance, we can't easily build something like this on top:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;Query&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;FROM&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;alias&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;SELECT 1&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;is_subquery&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
@@ -1607,7 +1609,8 @@ or &lt;a href="https://death.andgravity.com/_feed/index.xml"&gt;Atom feed&lt;/a&
 &lt;li id="fn-1"&gt;&lt;p&gt;The guaranteed insertion order was actually added
 to the language specification in 3.7,
 but in 3.6 both CPython and PyPy had it as an implementation detail. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
-&lt;li id="fn-2"&gt;&lt;p&gt;That's &lt;a href="https://github.com/lemon24/reader/blob/44d1f9af31dcb5bed80b4d798206bd02ae59d127/src/reader/_sql_utils.py#L77-L83"&gt;what I did initially&lt;/a&gt;. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-2"&gt;&lt;p&gt;This works because &lt;code&gt;False == 0&lt;/code&gt; and &lt;code&gt;True == 1&lt;/code&gt;, and is likely too clever. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-3"&gt;&lt;p&gt;That's &lt;a href="https://github.com/lemon24/reader/blob/44d1f9af31dcb5bed80b4d798206bd02ae59d127/src/reader/_sql_utils.py#L77-L83"&gt;what I did initially&lt;/a&gt;. &lt;a href="#fnref-3" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;/ol&gt;
 &lt;/section&gt;
 </content>
