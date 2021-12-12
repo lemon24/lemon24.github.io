@@ -1,0 +1,440 @@
+
+
+
+
+
+
+
+<!doctype html>
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+
+
+
+
+
+
+<title>any-yaml - death and gravity</title>
+
+
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1 class="heading-noindex">any-yaml</h1>
+
+<p class="text-gray"><small>
+
+
+
+
+
+</small></p>
+
+
+
+
+
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<p>YAML, am i right?</p>
+<p>but user-defined data types, am i right?</p>
+<p>YAML is a JSON superset in more ways than syntax alone</p>
+<p>There should be an easy way to parse and emit this kind of YAML without having to know/wrap each tag.</p>
+<!--
+# yaml: could not determine a constructor for the tag
+# yaml: while constructing a mapping found unhashable key
+-->
+<details>
+<summary>Contents</summary>
+<section class="toc">
+<ul>
+<li><a href="#problem-etc">problem etc...</a></li>
+<li><a href="#nodes">nodes</a></li>
+<li><a href="#a-note-on-pyyaml-extensibility">a note on pyyaml extensibility</a></li>
+<li><a href="#preserving-tags">preserving tags</a>
+<ul>
+<li><a href="#tagged-wrapper">tagged wrapper</a></li>
+<li><a href="#wrapping-unknown-objects">wrapping unknown objects</a></li>
+<li><a href="#representing-tagged-objects">representing tagged objects</a></li>
+</ul>
+</li>
+<li><a href="#unhashable-keys">unhashable keys</a>
+<ul>
+<li><a href="#pairs-object">pairs object</a></li>
+<li><a href="#handling-mappings-with-unhashable-keys">handling mappings with unhashable keys</a></li>
+<li><a href="#representing-pairs">representing pairs</a></li>
+</ul>
+</li>
+<li><a href="#conclusion">conclusion</a></li>
+<li><a href="#bonus-hashable-wrapper">bonus: hashable wrapper</a></li>
+</ul>
+</section>
+</details>
+<h2 id="problem-etc">problem etc...<span class="headerlink"> <a href="#problem-etc" title="permalink">#</a></span></h2>
+<p>(with local / application-specific tags)</p>
+<p>I mean stuff like in AWS Cloud Formation templates: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-ec2.html</p>
+<div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="nt">EC2Instance</span><span class="p">:</span>
+  <span class="nt">Type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">AWS::EC2::Instance</span>
+  <span class="nt">Properties</span><span class="p">:</span>
+    <span class="nt">ImageId</span><span class="p">:</span> <span class="kt">!FindInMap</span> <span class="p p-Indicator">[</span>
+      <span class="nv">AWSRegionArch2AMI</span><span class="p p-Indicator">,</span>
+      <span class="kt">!Ref</span> <span class="s">&#39;AWS::Region&#39;</span> <span class="p p-Indicator">,</span>
+      <span class="kt">!FindInMap</span> <span class="p p-Indicator">[</span> <span class="nv">AWSInstanceType2Arch</span><span class="p p-Indicator">,</span> <span class="kt">!Ref</span> <span class="nv">InstanceType</span><span class="p p-Indicator">,</span> <span class="nv">Arch</span> <span class="p p-Indicator">]</span>
+    <span class="p p-Indicator">]</span>
+    <span class="nt">InstanceType</span><span class="p">:</span> <span class="kt">!Ref</span> <span class="l l-Scalar l-Scalar-Plain">InstanceType</span>
+    <span class="nt">SecurityGroups</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="kt">!Ref</span> <span class="l l-Scalar l-Scalar-Plain">Ec2SecurityGroup</span>
+        <span class="l l-Scalar l-Scalar-Plain">...</span>
+</code></pre></div>
+<p>I also mean native data types (!!python/object:<strong>main</strong>.Hero);</p>
+<div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="kt">!!python/object:module.Class</span> <span class="p p-Indicator">{</span><span class="nt"> attribute</span><span class="p">:</span> <span class="nv">value</span><span class="p p-Indicator">,</span> <span class="nv">...</span> <span class="p p-Indicator">}</span>
+</code></pre></div>
+<p>Aside:</p>
+<p>you can use load() for these, but it's pretty unsafe with older pyyaml</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!!python/object/new:os.system [echo EXPLOIT!]&quot;</span><span class="p">)</span>
+<span class="go">EXPLOIT!</span>
+<span class="go">0</span>
+</code></pre></div>
+<p>startint with 5.1, you (may) have to opt into the new behavior, but your best bet is to use safe_yaml or load(Loader=...).</p>
+<p>while the pyyaml follows the yaml spec:</p>
+<blockquote>
+<p>That said, tag resolution is specific to the application. YAML processors should therefore provide a mechanism allowing the application to override and expand these default tag resolution rules.</p>
+<p>If a document contains unresolved tags, the YAML processor is unable to compose a complete representation graph. In such a case, the YAML processor may compose a partial representation, based on each node’s kind and allowing for non-specific tags.</p>
+</blockquote>
+<p>... doing the first is complicated, and doing the second is unnecessarily verbose (yaml.compose, yaml.serialize).</p>
+<p>Mind you, it's not complicated because pyyaml is complicated, but because yaml itself is; here's all the steps to load yaml:</p>
+<!-- TODO: picture: https://yaml.org/spec/1.2.2/#33-loading-failure-points -->
+<p>There should be an easy way to parse and emit this kind of YAML without having to know/wrap each tag.</p>
+<p>One way of doing it is to convert everything to almost-native types, but keep the tag for things with custom ones.</p>
+<p>And this is what we're gonna do!</p>
+<p>TODO: try to emit untagged things first (to show how to do it), and then wrap them</p>
+<p>https://yaml.org/spec/1.2.2/</p>
+<p>https://www.google.com/search?q=custom+yaml+parser+python</p>
+<h2 id="nodes">nodes<span class="headerlink"> <a href="#nodes" title="permalink">#</a></span></h2>
+<p>TODO example of parsing code with nodes (compose/serialize)</p>
+<h2 id="a-note-on-pyyaml-extensibility">a note on pyyaml extensibility<span class="headerlink"> <a href="#a-note-on-pyyaml-extensibility" title="permalink">#</a></span></h2>
+<p>blah blah we subclass</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span>
+<span class="normal">6</span>
+<span class="normal">7</span>
+<span class="normal">8</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">yaml</span> <span class="kn">import</span> <span class="n">SafeDumper</span><span class="p">,</span> <span class="n">SafeLoader</span>
+
+
+<span class="k">class</span> <span class="nc">Loader</span><span class="p">(</span><span class="n">SafeLoader</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="k">class</span> <span class="nc">Dumper</span><span class="p">(</span><span class="n">SafeDumper</span><span class="p">):</span>
+    <span class="k">pass</span>
+</code></pre></div>
+</td></tr></table>
+<p>pyyaml is weird; the multiple roles above are provided by methods
+provided multiple parent classes – Constructor, Representer etc.</p>
+<p>the Loader/Dumper subclasses all the required classes</p>
+<p>however, extensibility does not happen through subclasses;
+each Loader/Dumper has a class-level registry of constructors, representers etc.
+... but, they are bit method-like, in that they receive the Loader/Dumper as the first argument</p>
+<p>on first use, it gets copied from the next parent class onto the child;
+we can't merge functionality by subclassing multiple Loader subclasses,
+because we'd have to merge the registries of the multiple subclasses by hands</p>
+<h2 id="preserving-tags">preserving tags<span class="headerlink"> <a href="#preserving-tags" title="permalink">#</a></span></h2>
+<h3 id="tagged-wrapper">tagged wrapper<span class="headerlink"> <a href="#tagged-wrapper" title="permalink">#</a></span></h3>
+<p>use wrapt proxy to add an extra attribute to any object</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Tagged</span><span class="p">(</span><span class="n">wrapt</span><span class="o">.</span><span class="n">ObjectProxy</span><span class="p">):</span>
+
+    <span class="c1"># needed to set the attribute on the proxy and not the wrapped object</span>
+    <span class="n">tag</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wrapped</span><span class="p">,</span> <span class="n">tag</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">wrapped</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tag</span> <span class="o">=</span> <span class="n">tag</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">__wrapped__</span><span class="si">!r}</span><span class="s2">, </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tag</span><span class="si">!r}</span><span class="s2">)&quot;</span>
+</code></pre></div>
+</td></tr></table>
+<p>the proxy behaves identical to the proxied object
+(including things like isinstance()!),
+with two differences:</p>
+<ul>
+<li>the proxy has a <code>tag</code> attribute</li>
+<li>the repr()</li>
+</ul>
+<h3 id="wrapping-unknown-objects">wrapping unknown objects<span class="headerlink"> <a href="#wrapping-unknown-objects" title="permalink">#</a></span></h3>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">construct_undefined</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">ScalarNode</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">construct_scalar</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">SequenceNode</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">construct_sequence</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">MappingNode</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">construct_mapping</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="kc">False</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;unexpected node: </span><span class="si">{</span><span class="n">node</span><span class="si">!r}</span><span class="s2">&quot;</span>
+    <span class="k">return</span> <span class="n">Tagged</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">tag</span><span class="p">)</span>
+
+<span class="n">Loader</span><span class="o">.</span><span class="n">add_constructor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">construct_undefined</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table>
+<p>TODO example</p>
+<h3 id="representing-tagged-objects">representing tagged objects<span class="headerlink"> <a href="#representing-tagged-objects" title="permalink">#</a></span></h3>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">40</span>
+<span class="normal">41</span>
+<span class="normal">42</span>
+<span class="normal">43</span>
+<span class="normal">44</span>
+<span class="normal">45</span>
+<span class="normal">46</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">represent_undefined</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Tagged</span><span class="p">),</span> <span class="n">data</span>
+    <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">represent_data</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">__wrapped__</span><span class="p">)</span>
+    <span class="n">node</span><span class="o">.</span><span class="n">tag</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">tag</span>
+    <span class="k">return</span> <span class="n">node</span>
+
+<span class="n">Dumper</span><span class="o">.</span><span class="n">add_representer</span><span class="p">(</span><span class="n">Tagged</span><span class="p">,</span> <span class="n">represent_undefined</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table>
+<p>TODO example</p>
+<hr />
+<details>
+<summary>TESTS</summary>
+<p>data:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 7</span>
+<span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">BASIC_TEXT</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
+<span class="s2">one: !myscalar string</span>
+<span class="s2">two: !mymapping</span>
+<span class="s2">  three: !mysequence [1, 2]</span>
+
+<span class="s2">&quot;&quot;&quot;</span>
+
+<span class="n">BASIC_DATA</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;one&#39;</span><span class="p">:</span> <span class="n">Tagged</span><span class="p">(</span><span class="s1">&#39;string&#39;</span><span class="p">,</span> <span class="s1">&#39;!myscalar&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;two&#39;</span><span class="p">:</span> <span class="n">Tagged</span><span class="p">({</span><span class="s1">&#39;three&#39;</span><span class="p">:</span> <span class="n">Tagged</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="s1">&#39;!mysequence&#39;</span><span class="p">)},</span> <span class="s1">&#39;!mymapping&#39;</span><span class="p">),</span>
+<span class="p">}</span>
+
+<span class="n">DATA</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="n">BASIC_TEXT</span><span class="p">,</span> <span class="n">BASIC_DATA</span><span class="p">),</span>
+<span class="p">]</span>
+</code></pre></div>
+</td></tr></table>
+<p>loading:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s1">&#39;text, data&#39;</span><span class="p">,</span> <span class="n">DATA</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">test_load</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+    <span class="k">assert</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span> <span class="o">==</span> <span class="n">data</span>
+</code></pre></div>
+</td></tr></table>
+<p>dumping:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s1">&#39;text&#39;</span><span class="p">,</span> <span class="p">[</span><span class="n">t</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">DATA</span><span class="p">])</span>
+<span class="k">def</span> <span class="nf">test_roundtrip</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">data</span> <span class="o">==</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Dumper</span><span class="o">=</span><span class="n">Dumper</span><span class="p">),</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table>
+<p>not dumping:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_dump_error</span><span class="p">():</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">representer</span><span class="o">.</span><span class="n">RepresenterError</span><span class="p">):</span>
+        <span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="nb">object</span><span class="p">(),</span> <span class="n">Dumper</span><span class="o">=</span><span class="n">Dumper</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table>
+</details>
+<h2 id="unhashable-keys">unhashable keys<span class="headerlink"> <a href="#unhashable-keys" title="permalink">#</a></span></h2>
+<h3 id="pairs-object">pairs object<span class="headerlink"> <a href="#pairs-object" title="permalink">#</a></span></h3>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Pairs</span><span class="p">(</span><span class="nb">list</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__repr__</span><span class="p">()</span><span class="si">}</span><span class="s2">)&quot;</span>
+</code></pre></div>
+</td></tr></table>
+<h3 id="handling-mappings-with-unhashable-keys">handling mappings with unhashable keys<span class="headerlink"> <a href="#handling-mappings-with-unhashable-keys" title="permalink">#</a></span></h3>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">54</span>
+<span class="normal">55</span>
+<span class="normal">56</span>
+<span class="normal">57</span>
+<span class="normal">58</span>
+<span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span>
+<span class="normal">62</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">construct_mapping</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">):</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">construct_pairs</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Pairs</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+<span class="n">Loader</span><span class="o">.</span><span class="n">construct_mapping</span> <span class="o">=</span> <span class="n">construct_mapping</span>
+<span class="n">Loader</span><span class="o">.</span><span class="n">add_constructor</span><span class="p">(</span><span class="s1">&#39;tag:yaml.org,2002:map&#39;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">.</span><span class="n">construct_mapping</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table>
+<p>We also set Loader.construct_mapping so construct_undefined can take advantage of it too.
+It's a method, we could've put it in the Loader class definition, but we'll keep the style.</p>
+<p>TODO example</p>
+<h3 id="representing-pairs">representing pairs<span class="headerlink"> <a href="#representing-pairs" title="permalink">#</a></span></h3>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">65</span>
+<span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span>
+<span class="normal">69</span>
+<span class="normal">70</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">represent_pairs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Pairs</span><span class="p">),</span> <span class="n">data</span>
+    <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">represent_dict</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">node</span>
+
+<span class="n">Dumper</span><span class="o">.</span><span class="n">add_representer</span><span class="p">(</span><span class="n">Pairs</span><span class="p">,</span> <span class="n">represent_pairs</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table>
+<p>TODO example</p>
+<hr />
+<details>
+<summary>TESTS</summary>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">UNHASHABLE_TEXT</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
+<span class="s2">[0,0]: one</span>
+<span class="s2">!key </span><span class="si">{0: 1}</span><span class="s2">: {[]: !value three}</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+<span class="n">UNHASHABLE_DATA</span> <span class="o">=</span> <span class="n">Pairs</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="s1">&#39;one&#39;</span><span class="p">),</span>
+        <span class="p">(</span><span class="n">Tagged</span><span class="p">({</span><span class="mi">0</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="s1">&#39;!key&#39;</span><span class="p">),</span> <span class="n">Pairs</span><span class="p">([([],</span> <span class="n">Tagged</span><span class="p">(</span><span class="s1">&#39;three&#39;</span><span class="p">,</span> <span class="s1">&#39;!value&#39;</span><span class="p">))])),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+
+<span class="n">DATA</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="n">BASIC_TEXT</span><span class="p">,</span> <span class="n">BASIC_DATA</span><span class="p">),</span>
+<span class="hll">    <span class="p">(</span><span class="n">UNHASHABLE_TEXT</span><span class="p">,</span> <span class="n">UNHASHABLE_DATA</span><span class="p">),</span>
+</span><span class="p">]</span>
+</code></pre></div>
+</td></tr></table>
+</details>
+<h2 id="conclusion">conclusion<span class="headerlink"> <a href="#conclusion" title="permalink">#</a></span></h2>
+<p>TODO</p>
+<h2 id="bonus-hashable-wrapper">bonus: hashable wrapper<span class="headerlink"> <a href="#bonus-hashable-wrapper" title="permalink">#</a></span></h2>
+<p>TODO</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+
+
+
+</footer>
+
+
+</div>
