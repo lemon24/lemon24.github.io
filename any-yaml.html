@@ -58,9 +58,11 @@ window.addEventListener('resize', set_vh);
 <h1 class="heading-noindex">any-yaml</h1>
 
 <p class="text-gray"><small>
+<span>2021-12-15</span>
 
 
 
+∙ five minute read
 
 
 </small></p>
@@ -81,6 +83,7 @@ window.addEventListener('resize', set_vh);
 <p>YAML is a JSON superset in more ways than syntax alone</p>
 <p>There should be an easy way to parse and emit this kind of YAML without having to know/wrap each tag.</p>
 <!--
+https://www.google.com/search?q=custom+yaml+parser+python
 # yaml: could not determine a constructor for the tag
 # yaml: while constructing a mapping found unhashable key
 -->
@@ -89,7 +92,6 @@ window.addEventListener('resize', set_vh);
 <section class="toc">
 <ul>
 <li><a href="#problem-etc">problem etc...</a></li>
-<li><a href="#nodes">nodes</a></li>
 <li><a href="#a-note-on-pyyaml-extensibility">a note on pyyaml extensibility</a></li>
 <li><a href="#preserving-tags">preserving tags</a>
 <ul>
@@ -107,6 +109,7 @@ window.addEventListener('resize', set_vh);
 </li>
 <li><a href="#conclusion">conclusion</a></li>
 <li><a href="#bonus-hashable-wrapper">bonus: hashable wrapper</a></li>
+<li><a href="#bonus-others-things-not-so-easy-to-do">bonus: others things not so easy to do</a></li>
 </ul>
 </section>
 </details>
@@ -124,34 +127,74 @@ window.addEventListener('resize', set_vh);
     <span class="nt">InstanceType</span><span class="p">:</span> <span class="kt">!Ref</span> <span class="l l-Scalar l-Scalar-Plain">InstanceType</span>
     <span class="nt">SecurityGroups</span><span class="p">:</span>
       <span class="p p-Indicator">-</span> <span class="kt">!Ref</span> <span class="l l-Scalar l-Scalar-Plain">Ec2SecurityGroup</span>
-        <span class="l l-Scalar l-Scalar-Plain">...</span>
 </code></pre></div>
 <p>I also mean native data types (!!python/object:<strong>main</strong>.Hero);</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="kt">!!python/object:module.Class</span> <span class="p p-Indicator">{</span><span class="nt"> attribute</span><span class="p">:</span> <span class="nv">value</span><span class="p p-Indicator">,</span> <span class="nv">...</span> <span class="p p-Indicator">}</span>
 </code></pre></div>
-<p>Aside:</p>
+<section class="admonition note">
+<div class="admonition-text">
 <p>you can use load() for these, but it's pretty unsafe with older pyyaml</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!!python/object/new:os.system [echo EXPLOIT!]&quot;</span><span class="p">)</span>
 <span class="go">EXPLOIT!</span>
 <span class="go">0</span>
 </code></pre></div>
 <p>startint with 5.1, you (may) have to opt into the new behavior, but your best bet is to use safe_yaml or load(Loader=...).</p>
+</div>
+</section>
 <p>while the pyyaml follows the yaml spec:</p>
 <blockquote>
 <p>That said, tag resolution is specific to the application. YAML processors should therefore provide a mechanism allowing the application to override and expand these default tag resolution rules.</p>
 <p>If a document contains unresolved tags, the YAML processor is unable to compose a complete representation graph. In such a case, the YAML processor may compose a partial representation, based on each node’s kind and allowing for non-specific tags.</p>
 </blockquote>
-<p>... doing the first is complicated, and doing the second is unnecessarily verbose (yaml.compose, yaml.serialize).</p>
+<p>... doing the first for each tag is not possible, since we don't necessarily know ahead of time what we'll get.</p>
+<p>... doing the second is possible, but what we get out of the box is unnecessarily verbose:</p>
+<!--
+
+text = """\
+one: !myscalar string
+two: !mysequence [1, 2]
+"""
+
+-->
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">text</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
+<span class="gp">... </span><span class="s2">one: !myscalar string</span>
+<span class="gp">... </span><span class="s2">two: !mysequence [1, 2]</span>
+<span class="gp">... </span><span class="s2">&quot;&quot;&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">compose</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+<span class="go">MappingNode(</span>
+<span class="go">    tag=&#39;tag:yaml.org,2002:map&#39;,</span>
+<span class="go">    value=[</span>
+<span class="go">        (</span>
+<span class="go">            ScalarNode(tag=&#39;tag:yaml.org,2002:str&#39;, value=&#39;one&#39;),</span>
+<span class="go">            ScalarNode(tag=&#39;!myscalar&#39;, value=&#39;string&#39;),</span>
+<span class="go">        ),</span>
+<span class="go">        (</span>
+<span class="go">            ScalarNode(tag=&#39;tag:yaml.org,2002:str&#39;, value=&#39;two&#39;),</span>
+<span class="go">            SequenceNode(</span>
+<span class="go">                tag=&#39;!mysequence&#39;,</span>
+<span class="go">                value=[</span>
+<span class="go">                    ScalarNode(tag=&#39;tag:yaml.org,2002:int&#39;, value=&#39;1&#39;),</span>
+<span class="go">                    ScalarNode(tag=&#39;tag:yaml.org,2002:int&#39;, value=&#39;2&#39;),</span>
+<span class="go">                ],</span>
+<span class="go">            ),</span>
+<span class="go">        ),</span>
+<span class="go">    ],</span>
+<span class="go">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">serialize</span><span class="p">(</span><span class="n">_</span><span class="p">))</span>
+<span class="go">one: !myscalar &#39;string&#39;</span>
+<span class="go">two: !mysequence [1, 2]</span>
+</code></pre></div>
 <p>Mind you, it's not complicated because pyyaml is complicated, but because yaml itself is; here's all the steps to load yaml:</p>
-<!-- TODO: picture: https://yaml.org/spec/1.2.2/#33-loading-failure-points -->
+<!-- from  -->
+<figure class="figure">
+<figcaption class="figure-caption text-center text-small">
+<p>Loading Failure Points (from the <a href="https://yaml.org/spec/1.2.2/#33-loading-failure-points">YAML spec</a>)</p>
+</figcaption>
+<p><img class="img-responsive" src="/_file/any-yaml/validity2.svg" alt="YAML Loading Failure Points Diagram" /></p>
+</figure>
 <p>There should be an easy way to parse and emit this kind of YAML without having to know/wrap each tag.</p>
 <p>One way of doing it is to convert everything to almost-native types, but keep the tag for things with custom ones.</p>
 <p>And this is what we're gonna do!</p>
-<p>TODO: try to emit untagged things first (to show how to do it), and then wrap them</p>
-<p>https://yaml.org/spec/1.2.2/</p>
-<p>https://www.google.com/search?q=custom+yaml+parser+python</p>
-<h2 id="nodes">nodes<span class="headerlink"> <a href="#nodes" title="permalink">#</a></span></h2>
-<p>TODO example of parsing code with nodes (compose/serialize)</p>
 <h2 id="a-note-on-pyyaml-extensibility">a note on pyyaml extensibility<span class="headerlink"> <a href="#a-note-on-pyyaml-extensibility" title="permalink">#</a></span></h2>
 <p>blah blah we subclass</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">1</span>
@@ -274,12 +317,10 @@ with two differences:</p>
 <span class="normal">17</span>
 <span class="normal">18</span>
 <span class="normal">19</span>
-<span class="normal">20</span>
-<span class="normal">21</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">BASIC_TEXT</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
+<span class="normal">20</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">BASIC_TEXT</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
 <span class="s2">one: !myscalar string</span>
 <span class="s2">two: !mymapping</span>
 <span class="s2">  three: !mysequence [1, 2]</span>
-
 <span class="s2">&quot;&quot;&quot;</span>
 
 <span class="n">BASIC_DATA</span> <span class="o">=</span> <span class="p">{</span>
@@ -293,27 +334,27 @@ with two differences:</p>
 </code></pre></div>
 </td></tr></table>
 <p>loading:</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">24</span>
-<span class="normal">25</span>
-<span class="normal">26</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s1">&#39;text, data&#39;</span><span class="p">,</span> <span class="n">DATA</span><span class="p">)</span>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s1">&#39;text, data&#39;</span><span class="p">,</span> <span class="n">DATA</span><span class="p">)</span>
 <span class="k">def</span> <span class="nf">test_load</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
     <span class="k">assert</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span> <span class="o">==</span> <span class="n">data</span>
 </code></pre></div>
 </td></tr></table>
 <p>dumping:</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">29</span>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">28</span>
+<span class="normal">29</span>
 <span class="normal">30</span>
-<span class="normal">31</span>
-<span class="normal">32</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s1">&#39;text&#39;</span><span class="p">,</span> <span class="p">[</span><span class="n">t</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">DATA</span><span class="p">])</span>
+<span class="normal">31</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s1">&#39;text&#39;</span><span class="p">,</span> <span class="p">[</span><span class="n">t</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">DATA</span><span class="p">])</span>
 <span class="k">def</span> <span class="nf">test_roundtrip</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
     <span class="n">data</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
     <span class="k">assert</span> <span class="n">data</span> <span class="o">==</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Dumper</span><span class="o">=</span><span class="n">Dumper</span><span class="p">),</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
 <p>not dumping:</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">35</span>
-<span class="normal">36</span>
-<span class="normal">37</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_dump_error</span><span class="p">():</span>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_dump_error</span><span class="p">():</span>
     <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">representer</span><span class="o">.</span><span class="n">RepresenterError</span><span class="p">):</span>
         <span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="nb">object</span><span class="p">(),</span> <span class="n">Dumper</span><span class="o">=</span><span class="n">Dumper</span><span class="p">)</span>
 </code></pre></div>
@@ -369,7 +410,8 @@ It's a method, we could've put it in the Loader class definition, but we'll keep
 <hr />
 <details>
 <summary>TESTS</summary>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">19</span>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span>
+<span class="normal">19</span>
 <span class="normal">20</span>
 <span class="normal">21</span>
 <span class="normal">22</span>
@@ -383,8 +425,7 @@ It's a method, we could've put it in the Loader class definition, but we'll keep
 <span class="normal">30</span>
 <span class="normal">31</span>
 <span class="normal">32</span>
-<span class="normal">33</span>
-<span class="normal">34</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">UNHASHABLE_TEXT</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
+<span class="normal">33</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">UNHASHABLE_TEXT</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
 <span class="s2">[0,0]: one</span>
 <span class="s2">!key </span><span class="si">{0: 1}</span><span class="s2">: {[]: !value three}</span>
 <span class="s2">&quot;&quot;&quot;</span>
@@ -407,6 +448,24 @@ It's a method, we could've put it in the Loader class definition, but we'll keep
 <p>TODO</p>
 <h2 id="bonus-hashable-wrapper">bonus: hashable wrapper<span class="headerlink"> <a href="#bonus-hashable-wrapper" title="permalink">#</a></span></h2>
 <p>TODO</p>
+<h2 id="bonus-others-things-not-so-easy-to-do">bonus: others things not so easy to do<span class="headerlink"> <a href="#bonus-others-things-not-so-easy-to-do" title="permalink">#</a></span></h2>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">compose</span><span class="p">(</span><span class="s2">&quot;!x!aaa x&quot;</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">ParserError</span>: <span class="n">while parsing a node</span>
+<span class="go">found undefined tag handle &#39;!x!&#39;</span>
+<span class="go">  in &quot;&lt;unicode string&gt;&quot;, line 1, column 1:</span>
+<span class="go">    !x!aaa x</span>
+<span class="go">    ^</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">compose</span><span class="p">(</span><span class="s2">&quot;key: *alias&quot;</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">ComposerError</span>: <span class="n">found undefined alias &#39;alias&#39;</span>
+<span class="go">  in &quot;&lt;unicode string&gt;&quot;, line 1, column 6:</span>
+<span class="go">    key: *alias</span>
+<span class="go">         ^</span>
+</code></pre></div>
 
 
 
