@@ -80,7 +80,6 @@ window.addEventListener('resize', set_vh);
 
 <p>YAML, am i right?</p>
 <p>but user-defined data types, am i right?</p>
-<p>YAML is a JSON superset in more ways than syntax alone</p>
 <p>There should be an easy way to parse and emit this kind of YAML without having to know/wrap each tag.</p>
 <!--
 https://www.google.com/search?q=custom+yaml+parser+python
@@ -114,8 +113,9 @@ https://www.google.com/search?q=custom+yaml+parser+python
 </section>
 </details>
 <h2 id="problem-etc">problem etc...<span class="headerlink"> <a href="#problem-etc" title="permalink">#</a></span></h2>
-<p>(with local / application-specific tags)</p>
-<p>I mean stuff like in AWS Cloud Formation templates: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-ec2.html</p>
+<p>YAML is a JSON superset in more ways than syntax alone.
+Among other things, it supports custom data types, via local / application-specific tags.</p>
+<p>Say you need to programmatically read (or write) an AWS Cloud Formation <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-ec2.html">template</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="nt">EC2Instance</span><span class="p">:</span>
   <span class="nt">Type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">AWS::EC2::Instance</span>
   <span class="nt">Properties</span><span class="p">:</span>
@@ -128,23 +128,32 @@ https://www.google.com/search?q=custom+yaml+parser+python
     <span class="nt">SecurityGroups</span><span class="p">:</span>
       <span class="p p-Indicator">-</span> <span class="kt">!Ref</span> <span class="l l-Scalar l-Scalar-Plain">Ec2SecurityGroup</span>
 </code></pre></div>
-<p>I also mean native data types (!!python/object:<strong>main</strong>.Hero);</p>
-<div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="kt">!!python/object:module.Class</span> <span class="p p-Indicator">{</span><span class="nt"> attribute</span><span class="p">:</span> <span class="nv">value</span><span class="p p-Indicator">,</span> <span class="nv">...</span> <span class="p p-Indicator">}</span>
+<p>Or you need to <em>safely</em> read YAML containing native Python objects:</p>
+<div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="kt">!!python/object:module.Class</span> <span class="p p-Indicator">{</span><span class="nt"> attribute</span><span class="p">:</span> <span class="nv">value</span> <span class="p p-Indicator">}</span>
 </code></pre></div>
-<section class="admonition note">
-<div class="admonition-text">
-<p>you can use load() for these, but it's pretty unsafe with older pyyaml</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!!python/object/new:os.system [echo EXPLOIT!]&quot;</span><span class="p">)</span>
-<span class="go">EXPLOIT!</span>
+<section class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>From the PyYAML <a href="https://pyyaml.org/wiki/PyYAMLDocumentation#loading-yaml">docs</a>:</p>
+<blockquote>
+<p>It is <strong>not safe</strong> to call <code>yaml.load</code> with any data received from an <strong>untrusted source</strong>! <code>yaml.load</code> is as powerful as <code>pickle.load</code> and so may call any Python function.</p>
+</blockquote>
+<p>Use <code>yaml.safe_load</code> (or a custom loader) instead.</p>
+ <details>
+ <summary>Details.</summary>
+<p>For example:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!!python/object/new:os.system [echo exploit!]&quot;</span><span class="p">)</span>
+<span class="go">exploit!</span>
 <span class="go">0</span>
 </code></pre></div>
-<p>startint with 5.1, you (may) have to opt into the new behavior, but your best bet is to use safe_yaml or load(Loader=...).</p>
-</div>
+<p>Newer PyYAML versions check if the thing is actually a class
+ (so the example above won't work),
+ but it still is possible to instantiate arbitrary classes.</p>
+ </details>
 </section>
-<p>while the pyyaml follows the yaml spec:</p>
+<hr />
+<p>The YAML spec <a href="https://yaml.org/spec/1.2.2/#334-available-tags">says</a>:</p>
 <blockquote>
-<p>That said, tag resolution is specific to the application. YAML processors should therefore provide a mechanism allowing the application to override and expand these default tag resolution rules.</p>
-<p>If a document contains unresolved tags, the YAML processor is unable to compose a complete representation graph. In such a case, the YAML processor may compose a partial representation, based on each node’s kind and allowing for non-specific tags.</p>
+<p>In a given processing environment, there need not be an available native type corresponding to a given tag. If a node’s tag is unavailable, a YAML processor will not be able to construct a native data structure for it. In this case, a complete representation may still be composed and an application may wish to use this representation directly.</p>
 </blockquote>
 <p>... doing the first for each tag is not possible, since we don't necessarily know ahead of time what we'll get.</p>
 <p>... doing the second is possible, but what we get out of the box is unnecessarily verbose:</p>
@@ -184,13 +193,17 @@ two: !mysequence [1, 2]
 <span class="go">one: !myscalar &#39;string&#39;</span>
 <span class="go">two: !mysequence [1, 2]</span>
 </code></pre></div>
+<p>while the pyyaml follows the <a href="https://yaml.org/spec/1.2.2/#332-resolved-tags">yaml spec</a>:</p>
+<blockquote>
+<p>That said, tag resolution is specific to the application. YAML processors should therefore provide a mechanism allowing the application to override and expand these default tag resolution rules.</p>
+</blockquote>
 <p>Mind you, it's not complicated because pyyaml is complicated, but because yaml itself is; here's all the steps to load yaml:</p>
 <!-- from  -->
 <figure class="figure">
 <figcaption class="figure-caption text-center text-small">
-<p>Loading Failure Points (from the <a href="https://yaml.org/spec/1.2.2/#33-loading-failure-points">YAML spec</a>)</p>
+<p><a href="https://yaml.org/spec/1.2.2/#31-processes">YAML Processing Overview</a></p>
 </figcaption>
-<p><img class="img-responsive" src="/_file/any-yaml/validity2.svg" alt="YAML Loading Failure Points Diagram" /></p>
+<p><img class="img-responsive" src="/_file/any-yaml/overview2.svg" alt="YAML Processing Overview Diagram" /></p>
 </figure>
 <p>There should be an easy way to parse and emit this kind of YAML without having to know/wrap each tag.</p>
 <p>One way of doing it is to convert everything to almost-native types, but keep the tag for things with custom ones.</p>
