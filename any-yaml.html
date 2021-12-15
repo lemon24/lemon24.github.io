@@ -115,46 +115,42 @@ https://www.google.com/search?q=custom+yaml+parser+python
 <h2 id="problem-etc">problem etc...<span class="headerlink"> <a href="#problem-etc" title="permalink">#</a></span></h2>
 <p>YAML is a JSON superset in more ways than syntax alone.
 Among other things, it supports custom data types, via local / application-specific tags.</p>
-<p>Say you need to programmatically read (or write) an AWS Cloud Formation <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-ec2.html">template</a>:</p>
+<p>Say you need to read (or write) an AWS Cloud Formation <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-ec2.html">template</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="nt">EC2Instance</span><span class="p">:</span>
   <span class="nt">Type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">AWS::EC2::Instance</span>
   <span class="nt">Properties</span><span class="p">:</span>
     <span class="nt">ImageId</span><span class="p">:</span> <span class="kt">!FindInMap</span> <span class="p p-Indicator">[</span>
       <span class="nv">AWSRegionArch2AMI</span><span class="p p-Indicator">,</span>
-      <span class="kt">!Ref</span> <span class="s">&#39;AWS::Region&#39;</span> <span class="p p-Indicator">,</span>
-      <span class="kt">!FindInMap</span> <span class="p p-Indicator">[</span> <span class="nv">AWSInstanceType2Arch</span><span class="p p-Indicator">,</span> <span class="kt">!Ref</span> <span class="nv">InstanceType</span><span class="p p-Indicator">,</span> <span class="nv">Arch</span> <span class="p p-Indicator">]</span>
+      <span class="kt">!Ref</span> <span class="s">&#39;AWS::Region&#39;</span><span class="p p-Indicator">,</span>
+      <span class="kt">!FindInMap</span> <span class="p p-Indicator">[</span><span class="nv">AWSInstanceType2Arch</span><span class="p p-Indicator">,</span> <span class="kt">!Ref</span> <span class="nv">InstanceType</span><span class="p p-Indicator">,</span> <span class="nv">Arch</span><span class="p p-Indicator">],</span>
     <span class="p p-Indicator">]</span>
     <span class="nt">InstanceType</span><span class="p">:</span> <span class="kt">!Ref</span> <span class="l l-Scalar l-Scalar-Plain">InstanceType</span>
-    <span class="nt">SecurityGroups</span><span class="p">:</span>
-      <span class="p p-Indicator">-</span> <span class="kt">!Ref</span> <span class="l l-Scalar l-Scalar-Plain">Ec2SecurityGroup</span>
 </code></pre></div>
-<p>Or you need to <em>safely</em> read YAML containing native Python objects:</p>
-<div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="kt">!!python/object:module.Class</span> <span class="p p-Indicator">{</span><span class="nt"> attribute</span><span class="p">:</span> <span class="nv">value</span> <span class="p p-Indicator">}</span>
+<p>Or you need to <em>safely</em> read untrusted YAML containing native Python objects:</p>
+<div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="kt">!!python/object/new:module.Class</span> <span class="p p-Indicator">{</span><span class="nt"> attribute</span><span class="p">:</span> <span class="nv">value</span> <span class="p p-Indicator">}</span>
 </code></pre></div>
 <section class="admonition warning">
 <p class="admonition-title">Warning</p>
-<p>From the PyYAML <a href="https://pyyaml.org/wiki/PyYAMLDocumentation#loading-yaml">docs</a>:</p>
-<blockquote>
-<p>It is <strong>not safe</strong> to call <code>yaml.load</code> with any data received from an <strong>untrusted source</strong>! <code>yaml.load</code> is as powerful as <code>pickle.load</code> and so may call any Python function.</p>
-</blockquote>
-<p>Use <code>yaml.safe_load</code> (or a custom loader) instead.</p>
- <details>
+<p>Historically, <code>yaml.load(stream)</code> was <strong>unsafe</strong> for <strong>untrusted data</strong>,
+ because it allowed <strong>running arbitrary code</strong>.
+ Consider using use <code>safe_load()</code> instead.</p>
+ <details open>
  <summary>Details.</summary>
-<p>For example:</p>
+<p>For example, you could do this:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!!python/object/new:os.system [echo exploit!]&quot;</span><span class="p">)</span>
 <span class="go">exploit!</span>
 <span class="go">0</span>
 </code></pre></div>
-<p>Newer (5.1+) PyYAML versions check if the thing is actually a class
- (so the example above won't work),
- but it still is possible to instantiate arbitrary classes.</p>
-<p>TODO: 6.0 requires Loader=, and adds full_load (
- Resolve all tags except those known to be
- unsafe on untrusted input.)</p>
-<p>unsafe_load(  Resolve all tags, even those known to be
- unsafe on untrusted input.)</p>
-<p>safe_load(Resolve only basic YAML tags. This is known
- to be safe for untrusted input.)</p>
+<p>There were a number of <a href="https://www.cvedetails.com/vulnerability-list/vendor_id-13115/Pyyaml.html">CVEs</a> about it.</p>
+<p>Since PyYAML 6.0, <code>yaml.load()</code> requires an explicit <code>Loader</code> argument.</p>
+<p>Also, 5.* added two new functions and corresponding loaders:</p>
+<ul>
+<li><code>full_load()</code> resolves all tags except those known to be unsafe
+(note that this was broken before 5.4, and thus vulnerable)</li>
+<li><code>unsafe_load()</code> resolves all tags, even those known to be unsafe
+(the original <code>load()</code> behavior)</li>
+</ul>
+<p><code>safe_load()</code> resolves only basic YAML tags, and remains the safest.</p>
  </details>
 </section>
 <hr />
