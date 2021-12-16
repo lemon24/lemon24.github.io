@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ five minute read
+∙ six minute read
 
 
 </small></p>
@@ -78,9 +78,9 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>YAML, am i right?</p>
-<p>but user-defined data types, am i right?</p>
-<p>There should be an easy way to parse and emit this kind of YAML without having to know/wrap each tag.</p>
+<p>... in which we safely read and write YAML with any tags,
+in a way that's almost as straightforward as interacting with basic data types.</p>
+<!-- If you're in a hurry, you can find the final version of the code at the end. -->
 <!--
 https://www.google.com/search?q=custom+yaml+parser+python
 # yaml: could not determine a constructor for the tag
@@ -90,7 +90,7 @@ https://www.google.com/search?q=custom+yaml+parser+python
 <summary>Contents</summary>
 <section class="toc">
 <ul>
-<li><a href="#problem-etc">problem etc...</a></li>
+<li><a href="#why-is-this-useful">Why is this useful?</a></li>
 <li><a href="#a-note-on-pyyaml-extensibility">a note on pyyaml extensibility</a></li>
 <li><a href="#preserving-tags">preserving tags</a>
 <ul>
@@ -112,10 +112,8 @@ https://www.google.com/search?q=custom+yaml+parser+python
 </ul>
 </section>
 </details>
-<h2 id="problem-etc">problem etc...<span class="headerlink"> <a href="#problem-etc" title="permalink">#</a></span></h2>
-<p>YAML is a JSON superset in more ways than syntax alone.
-Among other things, it supports custom data types, via local / application-specific tags.</p>
-<p>Say you need to read (or write) an AWS Cloud Formation <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-ec2.html">template</a>:</p>
+<h2 id="why-is-this-useful">Why is this useful?<span class="headerlink"> <a href="#why-is-this-useful" title="permalink">#</a></span></h2>
+<p>Say you need to read (or <em>write</em>) an AWS Cloud Formation <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-ec2.html">template</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="nt">EC2Instance</span><span class="p">:</span>
   <span class="nt">Type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">AWS::EC2::Instance</span>
   <span class="nt">Properties</span><span class="p">:</span>
@@ -126,19 +124,38 @@ Among other things, it supports custom data types, via local / application-speci
     <span class="p p-Indicator">]</span>
     <span class="nt">InstanceType</span><span class="p">:</span> <span class="kt">!Ref</span> <span class="l l-Scalar l-Scalar-Plain">InstanceType</span>
 </code></pre></div>
-<p>Or you need to <em>safely</em> read untrusted YAML containing native Python objects:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">yaml.constructor.ConstructorError</span>: <span class="n">could not determine a constructor for the tag &#39;!FindInMap&#39;</span>
+<span class="go">  in &quot;&lt;unicode string&gt;&quot;, line 4, column 14:</span>
+<span class="go">        ImageId: !FindInMap [</span>
+<span class="go">                 ^</span>
+</code></pre></div>
+<hr />
+<p>Or you need to <em>safely</em> read untrusted YAML,
+and it may contain native Python objects:</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="kt">!!python/object/new:module.Class</span> <span class="p p-Indicator">{</span><span class="nt"> attribute</span><span class="p">:</span> <span class="nv">value</span> <span class="p p-Indicator">}</span>
 </code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+ <span class="c">...</span>
+<span class="gr">yaml.constructor.ConstructorError</span>: <span class="n">could not determine a constructor for the tag &#39;tag:yaml.org,2002:python/object/new:module.Class&#39;</span>
+<span class="go">  in &quot;&lt;unicode string&gt;&quot;, line 1, column 1:</span>
+<span class="go">    !!python/object/new:module.Class ...</span>
+<span class="go">    ^</span>
+</code></pre></div>
+<p>OK, can I just have the data, then?</p>
 <section class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Historically, <code>yaml.load(stream)</code> was <strong>unsafe</strong> for <strong>untrusted data</strong>,
  because it allowed <strong>running arbitrary code</strong>.
  Consider using use <code>safe_load()</code> instead.</p>
- <details open>
+ <details>
  <summary>Details.</summary>
 <p>For example, you could do this:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!!python/object/new:os.system [echo exploit!]&quot;</span><span class="p">)</span>
-<span class="go">exploit!</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!!python/object/new:os.system [echo WOOSH. your system is mine]&quot;</span><span class="p">)</span>
+<span class="go">WOOSH. your system is mine</span>
 <span class="go">0</span>
 </code></pre></div>
 <p>There were a bunch of <a href="https://www.cvedetails.com/vulnerability-list/vendor_id-13115/Pyyaml.html">CVEs</a> about it.</p>
@@ -154,19 +171,27 @@ Among other things, it supports custom data types, via local / application-speci
  </details>
 </section>
 <hr />
+<p>Although YAML is mostly used as a friendlier alternative to JSON
+(and is actually a superset of JSON),
+it can do way more.</p>
+<p>Among others, it can represent:</p>
+<ul>
+<li>user-defined data structures, via local / application-specific tags</li>
+<li>native data structures, via global tags</li>
+</ul>
+<hr />
+<p>So, <em>can I just have the data</em>, then?</p>
 <p>The YAML spec <a href="https://yaml.org/spec/1.2.2/#334-available-tags">says</a>:</p>
 <blockquote>
 <p>In a given processing environment, there need not be an available native type corresponding to a given tag. If a node’s tag is unavailable, a YAML processor will not be able to construct a native data structure for it. In this case, a complete representation may still be composed and an application may wish to use this representation directly.</p>
 </blockquote>
-<p>... doing the first for each tag is not possible, since we don't necessarily know ahead of time what we'll get.</p>
-<p>... doing the second is possible, but what we get out of the box is unnecessarily verbose:</p>
+<p>And PyYAML obliges:</p>
 <!--
 
 text = """\
 one: !myscalar string
 two: !mysequence [1, 2]
 """
-
 -->
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">text</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
 <span class="gp">... </span><span class="s2">one: !myscalar string</span>
@@ -196,21 +221,26 @@ two: !mysequence [1, 2]
 <span class="go">one: !myscalar &#39;string&#39;</span>
 <span class="go">two: !mysequence [1, 2]</span>
 </code></pre></div>
-<p>while the pyyaml follows the <a href="https://yaml.org/spec/1.2.2/#332-resolved-tags">yaml spec</a>:</p>
-<blockquote>
-<p>That said, tag resolution is specific to the application. YAML processors should therefore provide a mechanism allowing the application to override and expand these default tag resolution rules.</p>
-</blockquote>
-<p>Mind you, it's not complicated because pyyaml is complicated, but because yaml itself is; here's all the steps to load yaml:</p>
-<!-- from  -->
+<p>... the spec didn't say the representation has to be concise. ¯\_(ツ)_/¯</p>
+<p>Here's how YAML processing works, to give you an idea what we're looking at:</p>
 <figure class="figure">
 <figcaption class="figure-caption text-center text-small">
 <p><a href="https://yaml.org/spec/1.2.2/#31-processes">YAML Processing Overview</a></p>
 </figcaption>
 <p><img class="img-responsive" src="/_file/any-yaml/overview2.svg" alt="YAML Processing Overview Diagram" /></p>
 </figure>
+<p>The output of <code>compose()</code> above is the representation (node graph).</p>
+<p>With <code>safe_load()</code>,
+PyYAML does its best to convert it to native data structures,
+but it can't do it for things it doesn't know about.</p>
+<hr />
 <p>There should be an easy way to parse and emit this kind of YAML without having to know/wrap each tag.</p>
-<p>One way of doing it is to convert everything to almost-native types, but keep the tag for things with custom ones.</p>
-<p>And this is what we're gonna do!</p>
+<p>Thankfully, the spec also <a href="https://yaml.org/spec/1.2.2/#332-resolved-tags">says</a>:</p>
+<blockquote>
+<p>That said, tag resolution is specific to the application. YAML processors should therefore provide a mechanism allowing the application to override and expand these default tag resolution rules.</p>
+</blockquote>
+<p>We'll use this mechanism to convert everything to almost-native types,
+but keep the tag for things with custom ones.</p>
 <h2 id="a-note-on-pyyaml-extensibility">a note on pyyaml extensibility<span class="headerlink"> <a href="#a-note-on-pyyaml-extensibility" title="permalink">#</a></span></h2>
 <p>blah blah we subclass</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">1</span>
@@ -257,12 +287,12 @@ because we'd have to merge the registries of the multiple subclasses by hands</p
     <span class="c1"># needed to set the attribute on the proxy and not the wrapped object</span>
     <span class="n">tag</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wrapped</span><span class="p">,</span> <span class="n">tag</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tag</span><span class="p">,</span> <span class="n">wrapped</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">wrapped</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">tag</span> <span class="o">=</span> <span class="n">tag</span>
 
     <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">__wrapped__</span><span class="si">!r}</span><span class="s2">, </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tag</span><span class="si">!r}</span><span class="s2">)&quot;</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tag</span><span class="si">!r}</span><span class="s2">, </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">__wrapped__</span><span class="si">!r}</span><span class="s2">)&quot;</span>
 </code></pre></div>
 </td></tr></table>
 <p>the proxy behaves identical to the proxied object
@@ -293,7 +323,7 @@ with two differences:</p>
         <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">construct_mapping</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">assert</span> <span class="kc">False</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;unexpected node: </span><span class="si">{</span><span class="n">node</span><span class="si">!r}</span><span class="s2">&quot;</span>
-    <span class="k">return</span> <span class="n">Tagged</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">tag</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Tagged</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">tag</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
 
 <span class="n">Loader</span><span class="o">.</span><span class="n">add_constructor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">construct_undefined</span><span class="p">)</span>
 </code></pre></div>
@@ -340,8 +370,8 @@ with two differences:</p>
 <span class="s2">&quot;&quot;&quot;</span>
 
 <span class="n">BASIC_DATA</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">&#39;one&#39;</span><span class="p">:</span> <span class="n">Tagged</span><span class="p">(</span><span class="s1">&#39;string&#39;</span><span class="p">,</span> <span class="s1">&#39;!myscalar&#39;</span><span class="p">),</span>
-    <span class="s1">&#39;two&#39;</span><span class="p">:</span> <span class="n">Tagged</span><span class="p">({</span><span class="s1">&#39;three&#39;</span><span class="p">:</span> <span class="n">Tagged</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="s1">&#39;!mysequence&#39;</span><span class="p">)},</span> <span class="s1">&#39;!mymapping&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;one&#39;</span><span class="p">:</span> <span class="n">Tagged</span><span class="p">(</span><span class="s1">&#39;!myscalar&#39;</span><span class="p">,</span> <span class="s1">&#39;string&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;two&#39;</span><span class="p">:</span> <span class="n">Tagged</span><span class="p">(</span><span class="s1">&#39;!mymapping&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;three&#39;</span><span class="p">:</span> <span class="n">Tagged</span><span class="p">(</span><span class="s1">&#39;!mysequence&#39;</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">])}),</span>
 <span class="p">}</span>
 
 <span class="n">DATA</span> <span class="o">=</span> <span class="p">[</span>
@@ -449,7 +479,7 @@ It's a method, we could've put it in the Loader class definition, but we'll keep
 <span class="n">UNHASHABLE_DATA</span> <span class="o">=</span> <span class="n">Pairs</span><span class="p">(</span>
     <span class="p">[</span>
         <span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="s1">&#39;one&#39;</span><span class="p">),</span>
-        <span class="p">(</span><span class="n">Tagged</span><span class="p">({</span><span class="mi">0</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="s1">&#39;!key&#39;</span><span class="p">),</span> <span class="n">Pairs</span><span class="p">([([],</span> <span class="n">Tagged</span><span class="p">(</span><span class="s1">&#39;three&#39;</span><span class="p">,</span> <span class="s1">&#39;!value&#39;</span><span class="p">))])),</span>
+        <span class="p">(</span><span class="n">Tagged</span><span class="p">(</span><span class="s1">&#39;!key&#39;</span><span class="p">,</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="mi">1</span><span class="p">}),</span> <span class="n">Pairs</span><span class="p">([([],</span> <span class="n">Tagged</span><span class="p">(</span><span class="s1">&#39;!value&#39;</span><span class="p">,</span> <span class="s1">&#39;three&#39;</span><span class="p">))])),</span>
     <span class="p">]</span>
 <span class="p">)</span>
 
