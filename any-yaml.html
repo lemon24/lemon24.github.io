@@ -78,7 +78,7 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>... in which we safely read and write YAML with any tags,
+<p>... in which we use PyYAML to safely read and write YAML with <em>any</em> tags,
 in a way that's almost as straightforward as interacting with basic data types.</p>
 <!-- If you're in a hurry, you can find the final version of the code at the end. -->
 <!--
@@ -91,7 +91,7 @@ https://www.google.com/search?q=custom+yaml+parser+python
 <section class="toc">
 <ul>
 <li><a href="#why-is-this-useful">Why is this useful?</a></li>
-<li><a href="#a-note-on-pyyaml-extensibility">a note on pyyaml extensibility</a></li>
+<li><a href="#a-note-on-pyyaml-extensibility">A note on PyYAML extensibility</a></li>
 <li><a href="#preserving-tags">preserving tags</a>
 <ul>
 <li><a href="#tagged-wrapper">tagged wrapper</a></li>
@@ -113,6 +113,14 @@ https://www.google.com/search?q=custom+yaml+parser+python
 </section>
 </details>
 <h2 id="why-is-this-useful">Why is this useful?<span class="headerlink"> <a href="#why-is-this-useful" title="permalink">#</a></span></h2>
+<p>Although YAML is mostly used as a friendlier alternative to JSON
+(and is actually a superset of JSON),
+it can do way more.</p>
+<p>Among others, it can represent:</p>
+<ul>
+<li>user-defined data structures, via local / application-specific tags</li>
+<li>native data structures, via global tags</li>
+</ul>
 <p>Say you need to read (or <em>write</em>) an AWS Cloud Formation <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-ec2.html">template</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="nt">EC2Instance</span><span class="p">:</span>
   <span class="nt">Type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">AWS::EC2::Instance</span>
@@ -132,9 +140,9 @@ https://www.google.com/search?q=custom+yaml+parser+python
 <span class="go">        ImageId: !FindInMap [</span>
 <span class="go">                 ^</span>
 </code></pre></div>
-<hr />
-<p>Or you need to <em>safely</em> read untrusted YAML,
-and it may contain native Python objects:</p>
+<p>OK, can I just have the data, then?</p>
+<p>... or, you need to <em>safely</em> read untrusted YAML,
+which may contain native Python objects:</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="kt">!!python/object/new:module.Class</span> <span class="p p-Indicator">{</span><span class="nt"> attribute</span><span class="p">:</span> <span class="nv">value</span> <span class="p p-Indicator">}</span>
 </code></pre></div>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
@@ -145,7 +153,6 @@ and it may contain native Python objects:</p>
 <span class="go">    !!python/object/new:module.Class ...</span>
 <span class="go">    ^</span>
 </code></pre></div>
-<p>OK, can I just have the data, then?</p>
 <section class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Historically, <code>yaml.load(stream)</code> was <strong>unsafe</strong> for <strong>untrusted data</strong>,
@@ -170,15 +177,6 @@ and it may contain native Python objects:</p>
 <p><code>safe_load()</code> resolves only basic tags, remaining the safest.</p>
  </details>
 </section>
-<hr />
-<p>Although YAML is mostly used as a friendlier alternative to JSON
-(and is actually a superset of JSON),
-it can do way more.</p>
-<p>Among others, it can represent:</p>
-<ul>
-<li>user-defined data structures, via local / application-specific tags</li>
-<li>native data structures, via global tags</li>
-</ul>
 <hr />
 <p>So, <em>can I just have the data</em>, then?</p>
 <p>The YAML spec <a href="https://yaml.org/spec/1.2.2/#334-available-tags">says</a>:</p>
@@ -234,14 +232,36 @@ two: !mysequence [1, 2]
 PyYAML does its best to convert it to native data structures,
 but it can't do it for things it doesn't know about.</p>
 <hr />
-<p>There should be an easy way to parse and emit this kind of YAML without having to know/wrap each tag.</p>
+<p>There must be a better way!</p>
 <p>Thankfully, the spec also <a href="https://yaml.org/spec/1.2.2/#332-resolved-tags">says</a>:</p>
 <blockquote>
 <p>That said, tag resolution is specific to the application. YAML processors should therefore provide a mechanism allowing the application to override and expand these default tag resolution rules.</p>
 </blockquote>
 <p>We'll use this mechanism to convert everything to almost-native types,
 but keep the tag for things with custom ones.</p>
-<h2 id="a-note-on-pyyaml-extensibility">a note on pyyaml extensibility<span class="headerlink"> <a href="#a-note-on-pyyaml-extensibility" title="permalink">#</a></span></h2>
+<h2 id="a-note-on-pyyaml-extensibility">A note on PyYAML extensibility<span class="headerlink"> <a href="#a-note-on-pyyaml-extensibility" title="permalink">#</a></span></h2>
+<p>PyYAML is a bit weird.</p>
+<p>For each direction in the diagram above,
+each processing step is provided by methods
+from a specific parent class,
+e.g. a Loader/Dumper is a Constructor/Representer, ...</p>
+<p>However, extensibility does not happen through subclassing (alone);
+instead, each Loader/Dumper has a class-level registry of constructor/representer (callback) etc.,
+and you register them via <code>add_...()</code> class methods.</p>
+<p>... but, the callbacks are bit method-like, in that they receive the Loader/Dumper as the first argument:</p>
+<pre class="code code-container"><code>&gt;&gt;&gt; def dice_representer(dumper, data):
+...     return dumper.represent_scalar(u'!dice', u'%sd%s' % data)
+...
+&gt;&gt;&gt; yaml.Dumper.add_representer(Dice, dice_representer)
+</code></pre>
+<p>There's also corresponding top-level <code>yaml.add_...()</code> functions, 
+which by default act on the default yaml.Dumper/Loader.</p>
+<p>The astute may notice calling any of them will modify the classes, 
+for <em>everyone</em>.</p>
+<p>Happily,</p>
+<p>on first use, the registry gets copied from the next parent class onto the child;
+we can't merge functionality by subclassing multiple Loader subclasses,
+because we'd have to merge the registries of the multiple subclasses by hands</p>
 <p>blah blah we subclass</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">1</span>
 <span class="normal">2</span>
@@ -260,15 +280,6 @@ but keep the tag for things with custom ones.</p>
     <span class="k">pass</span>
 </code></pre></div>
 </td></tr></table>
-<p>pyyaml is weird; the multiple roles above are provided by methods
-provided multiple parent classes – Constructor, Representer etc.</p>
-<p>the Loader/Dumper subclasses all the required classes</p>
-<p>however, extensibility does not happen through subclasses;
-each Loader/Dumper has a class-level registry of constructors, representers etc.
-... but, they are bit method-like, in that they receive the Loader/Dumper as the first argument</p>
-<p>on first use, it gets copied from the next parent class onto the child;
-we can't merge functionality by subclassing multiple Loader subclasses,
-because we'd have to merge the registries of the multiple subclasses by hands</p>
 <h2 id="preserving-tags">preserving tags<span class="headerlink"> <a href="#preserving-tags" title="permalink">#</a></span></h2>
 <h3 id="tagged-wrapper">tagged wrapper<span class="headerlink"> <a href="#tagged-wrapper" title="permalink">#</a></span></h3>
 <p>use wrapt proxy to add an extra attribute to any object</p>
