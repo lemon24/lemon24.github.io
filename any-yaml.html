@@ -78,8 +78,9 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>... in which we use PyYAML to safely read and write YAML with <em>any</em> tags,
-in a way that's almost as straightforward as interacting with basic data types.</p>
+<p>... in which we use PyYAML to <em>safely</em> read and write YAML with <em>any</em> tags,
+in a way that's as straightforward as interacting with built-in types.</p>
+<p>TODO: also, a short explanation on how to extend PyYAML: #a-note-on-pyyaml-extensibility</p>
 <!-- If you're in a hurry, you can find the final version of the code at the end. -->
 <!--
 https://www.google.com/search?q=custom+yaml+parser+python
@@ -113,15 +114,11 @@ https://www.google.com/search?q=custom+yaml+parser+python
 </section>
 </details>
 <h2 id="why-is-this-useful">Why is this useful?<span class="headerlink"> <a href="#why-is-this-useful" title="permalink">#</a></span></h2>
-<p>Although YAML is mostly used as a friendlier alternative to JSON
-(and is actually a superset of JSON),
+<p>Although YAML is mostly used as a friendlier alternative to JSON<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
 it can do way more.</p>
-<p>Among others, it can represent:</p>
-<ul>
-<li>user-defined data structures, via local / application-specific tags</li>
-<li>native data structures, via global tags</li>
-</ul>
-<p>Say you need to read (or <em>write</em>) an AWS Cloud Formation <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-ec2.html">template</a>:</p>
+<p>Among others, it can represent user-defined and native data structures.</p>
+<p>Say you need to read <em>(or write)</em> an AWS Cloud Formation <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-ec2.html">template</a>
+that uses local, application-specific tags:</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="nt">EC2Instance</span><span class="p">:</span>
   <span class="nt">Type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">AWS::EC2::Instance</span>
   <span class="nt">Properties</span><span class="p">:</span>
@@ -132,26 +129,13 @@ it can do way more.</p>
     <span class="p p-Indicator">]</span>
     <span class="nt">InstanceType</span><span class="p">:</span> <span class="kt">!Ref</span> <span class="l l-Scalar l-Scalar-Plain">InstanceType</span>
 </code></pre></div>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
 <span class="gt">Traceback (most recent call last):</span>
   <span class="c">...</span>
 <span class="gr">yaml.constructor.ConstructorError</span>: <span class="n">could not determine a constructor for the tag &#39;!FindInMap&#39;</span>
 <span class="go">  in &quot;&lt;unicode string&gt;&quot;, line 4, column 14:</span>
 <span class="go">        ImageId: !FindInMap [</span>
 <span class="go">                 ^</span>
-</code></pre></div>
-<p>OK, can I just have the data, then?</p>
-<p>... or, you need to <em>safely</em> read untrusted YAML,
-which may contain native Python objects:</p>
-<div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="kt">!!python/object/new:module.Class</span> <span class="p p-Indicator">{</span><span class="nt"> attribute</span><span class="p">:</span> <span class="nv">value</span> <span class="p p-Indicator">}</span>
-</code></pre></div>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
-<span class="gt">Traceback (most recent call last):</span>
- <span class="c">...</span>
-<span class="gr">yaml.constructor.ConstructorError</span>: <span class="n">could not determine a constructor for the tag &#39;tag:yaml.org,2002:python/object/new:module.Class&#39;</span>
-<span class="go">  in &quot;&lt;unicode string&gt;&quot;, line 1, column 1:</span>
-<span class="go">    !!python/object/new:module.Class ...</span>
-<span class="go">    ^</span>
 </code></pre></div>
 <section class="admonition warning">
 <p class="admonition-title">Warning</p>
@@ -161,8 +145,8 @@ which may contain native Python objects:</p>
  <details>
  <summary>Details.</summary>
 <p>For example, you could do this:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!!python/object/new:os.system [echo WOOSH. your system is mine]&quot;</span><span class="p">)</span>
-<span class="go">WOOSH. your system is mine</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!!python/object/new:os.system [echo WOOSH. YOU HAVE been compromised]&quot;</span><span class="p">)</span>
+<span class="go">WOOSH. YOU HAVE been compromised</span>
 <span class="go">0</span>
 </code></pre></div>
 <p>There were a bunch of <a href="https://www.cvedetails.com/vulnerability-list/vendor_id-13115/Pyyaml.html">CVEs</a> about it.</p>
@@ -177,11 +161,23 @@ which may contain native Python objects:</p>
 <p><code>safe_load()</code> resolves only basic tags, remaining the safest.</p>
  </details>
 </section>
+<p>... or, you need to <em>safely</em> read untrusted YAML
+that represents native Python objects with global tags:</p>
+<div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="kt">!!python/object/new:module.Class</span> <span class="p p-Indicator">{</span><span class="nt"> attribute</span><span class="p">:</span> <span class="nv">value</span> <span class="p p-Indicator">}</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+ <span class="c">...</span>
+<span class="gr">yaml.constructor.ConstructorError</span>: <span class="n">could not determine a constructor for the tag &#39;tag:yaml.org,2002:python/object/new:module.Class&#39;</span>
+<span class="go">  in &quot;&lt;unicode string&gt;&quot;, line 1, column 1:</span>
+<span class="go">    !!python/object/new:module.Class ...</span>
+<span class="go">    ^</span>
+</code></pre></div>
 <hr />
-<p>So, <em>can I just have the data</em>, then?</p>
-<p>The YAML spec <a href="https://yaml.org/spec/1.2.2/#334-available-tags">says</a>:</p>
+<p>Can I just have the data, then?</p>
+<p>Yes! The YAML spec <a href="https://yaml.org/spec/1.2.2/#334-available-tags">says</a>:</p>
 <blockquote>
-<p>In a given processing environment, there need not be an available native type corresponding to a given tag. If a node’s tag is unavailable, a YAML processor will not be able to construct a native data structure for it. In this case, a complete representation may still be composed and an application may wish to use this representation directly.</p>
+<p>In a given processing environment, there need not be an available native type corresponding to a given tag. If a node’s tag is unavailable, a YAML processor will not be able to construct a native data structure for it. In this case, <em>a complete representation may still be composed</em> and an application may wish to use this representation directly.</p>
 </blockquote>
 <p>And PyYAML obliges:</p>
 <!--
@@ -219,7 +215,7 @@ two: !mysequence [1, 2]
 <span class="go">one: !myscalar &#39;string&#39;</span>
 <span class="go">two: !mysequence [1, 2]</span>
 </code></pre></div>
-<p>... the spec didn't say the representation has to be concise. ¯\_(ツ)_/¯</p>
+<p>... the spec didn't say it has to be concise. ¯\_(ツ)_/¯</p>
 <p>Here's how YAML processing works, to give you an idea what we're looking at:</p>
 <figure class="figure">
 <figcaption class="figure-caption text-center text-small">
@@ -228,41 +224,42 @@ two: !mysequence [1, 2]
 <p><img class="img-responsive" src="/_file/any-yaml/overview2.svg" alt="YAML Processing Overview Diagram" /></p>
 </figure>
 <p>The output of <code>compose()</code> above is the representation (node graph).</p>
-<p>With <code>safe_load()</code>,
-PyYAML does its best to convert it to native data structures,
-but it can't do it for things it doesn't know about.</p>
+<p><code>safe_load()</code> does its best to construct native data structures,
+but can't do it for things it doesn't know about.</p>
 <hr />
 <p>There must be a better way!</p>
 <p>Thankfully, the spec also <a href="https://yaml.org/spec/1.2.2/#332-resolved-tags">says</a>:</p>
 <blockquote>
-<p>That said, tag resolution is specific to the application. YAML processors should therefore provide a mechanism allowing the application to override and expand these default tag resolution rules.</p>
+<p>That said, tag resolution is specific to the application. YAML processors should therefore provide <em>a mechanism allowing the application to override and expand</em> these default tag resolution rules.</p>
 </blockquote>
 <p>We'll use this mechanism to convert everything to almost-native types,
 but keep the tag for things with custom ones.</p>
 <h2 id="a-note-on-pyyaml-extensibility">A note on PyYAML extensibility<span class="headerlink"> <a href="#a-note-on-pyyaml-extensibility" title="permalink">#</a></span></h2>
-<p>PyYAML is a bit weird.</p>
-<p>For each direction in the diagram above,
-each processing step is provided by methods
-from a specific parent class,
-e.g. a Loader/Dumper is a Constructor/Representer, ...</p>
-<p>However, extensibility does not happen through subclassing (alone);
-instead, each Loader/Dumper has a class-level registry of constructor/representer (callback) etc.,
-and you register them via <code>add_...()</code> class methods.</p>
-<p>... but, the callbacks are bit method-like, in that they receive the Loader/Dumper as the first argument:</p>
-<pre class="code code-container"><code>&gt;&gt;&gt; def dice_representer(dumper, data):
-...     return dumper.represent_scalar(u'!dice', u'%sd%s' % data)
-...
-&gt;&gt;&gt; yaml.Dumper.add_representer(Dice, dice_representer)
-</code></pre>
-<p>There's also corresponding top-level <code>yaml.add_...()</code> functions, 
-which by default act on the default yaml.Dumper/Loader.</p>
-<p>The astute may notice calling any of them will modify the classes, 
-for <em>everyone</em>.</p>
-<p>Happily,</p>
-<p>on first use, the registry gets copied from the next parent class onto the child;
-we can't merge functionality by subclassing multiple Loader subclasses,
-because we'd have to merge the registries of the multiple subclasses by hands</p>
-<p>blah blah we subclass</p>
+<p>PyYAML is a bit unusual.</p>
+<p>For each processing direction, you have a corresponding Loader/Dumper class.</p>
+<p>For each processing step,
+you can register callbacks using their <code>add_...()</code> methods<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>,
+which get stored in class-level registries.</p>
+<p>The callbacks are method-like –
+they receive the Loader/Dumper as the first argument:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">Dice</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s1">&#39;Dice&#39;</span><span class="p">,</span> <span class="s1">&#39;a b&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">dice_representer</span><span class="p">(</span><span class="n">dumper</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">dumper</span><span class="o">.</span><span class="n">represent_scalar</span><span class="p">(</span><span class="sa">u</span><span class="s1">&#39;!dice&#39;</span><span class="p">,</span> <span class="sa">u</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">d</span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">data</span><span class="p">)</span>
+
+<span class="n">yaml</span><span class="o">.</span><span class="n">Dumper</span><span class="o">.</span><span class="n">add_representer</span><span class="p">(</span><span class="n">Dice</span><span class="p">,</span> <span class="n">dice_representer</span><span class="p">)</span>
+</code></pre></div>
+<p>You may notice the <code>add_...()</code> methods modify the classes for <em>everyone</em>.</p>
+<p>That's not necessarily desirable –
+imagine calling <code>safe_load()</code>,
+expecting to only get built-in types,
+and getting a Dice.</p>
+<p>We can avoid it by subclassing,
+since the registry is copied from the parent.
+Note that because of how <a href="https://github.com/yaml/pyyaml/blob/6.0/lib/yaml/representer.py#L65-L69">copying is implemented</a>,
+registries from two direct parents are <em>not</em> merged –
+you only get the registry of the first parent in the <a href="https://docs.python.org/3/glossary.html#term-method-resolution-order">MRO</a>.</p>
+<p>So, let's start with some subclasses:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">1</span>
 <span class="normal">2</span>
 <span class="normal">3</span>
@@ -270,13 +267,13 @@ because we'd have to merge the registries of the multiple subclasses by hands</p
 <span class="normal">5</span>
 <span class="normal">6</span>
 <span class="normal">7</span>
-<span class="normal">8</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">yaml</span> <span class="kn">import</span> <span class="n">SafeDumper</span><span class="p">,</span> <span class="n">SafeLoader</span>
+<span class="normal">8</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">yaml</span>
 
 
-<span class="k">class</span> <span class="nc">Loader</span><span class="p">(</span><span class="n">SafeLoader</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">Loader</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">SafeLoader</span><span class="p">):</span>
     <span class="k">pass</span>
 
-<span class="k">class</span> <span class="nc">Dumper</span><span class="p">(</span><span class="n">SafeDumper</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">Dumper</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">SafeDumper</span><span class="p">):</span>
     <span class="k">pass</span>
 </code></pre></div>
 </td></tr></table>
@@ -449,6 +446,8 @@ with two differences:</p>
 <p>We also set Loader.construct_mapping so construct_undefined can take advantage of it too.
 It's a method, we could've put it in the Loader class definition, but we'll keep the style.</p>
 <p>TODO example</p>
+<p>TODO: mixins would be nice</p>
+<p>TODO: note that overrideing construct mapping is not enough, we must register explicitly (otherwise we get SafeDumper.construct_mapping)</p>
 <h3 id="representing-pairs">representing pairs<span class="headerlink"> <a href="#representing-pairs" title="permalink">#</a></span></h3>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">65</span>
 <span class="normal">66</span>
@@ -523,6 +522,13 @@ It's a method, we could've put it in the Loader class definition, but we'll keep
 <span class="go">    key: *alias</span>
 <span class="go">         ^</span>
 </code></pre></div>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>And actually is a superset of JSON. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>There are also corresponding <code>yaml.add_...()</code> top-level functions,
+which by default act on <code>yaml.Loader/Dumper</code>. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
 
 
 
