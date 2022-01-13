@@ -97,7 +97,7 @@ https://www.google.com/search?q=custom+yaml+parser+python
 <ul>
 <li><a href="#constructing-unknown-objects">Constructing unknown objects</a></li>
 <li><a href="#a-better-wrapper">A better wrapper</a></li>
-<li><a href="#representing-tagged-objects">representing tagged objects</a></li>
+<li><a href="#representing-tagged-objects">Representing tagged objects</a></li>
 </ul>
 </li>
 <li><a href="#unhashable-keys">unhashable keys</a>
@@ -177,7 +177,7 @@ that represents native Python objects with global tags:</p>
 <p>Can I just have the data, then?</p>
 <p>Yes! The YAML spec <a href="https://yaml.org/spec/1.2.2/#334-available-tags">says</a>:</p>
 <blockquote>
-<p>In a given processing environment, there need not be an available native type corresponding to a given tag. If a node’s tag is unavailable, a YAML processor will not be able to construct a native data structure for it. In this case, <em>a complete representation may still be composed</em> and an application may wish to use this representation directly.</p>
+<p>In a given processing environment, there need not be an available native type corresponding to a given tag. If a node’s tag is unavailable, a YAML processor will not be able to construct a native data structure for it. In this case, <strong>a complete representation may still be composed</strong> and an application may wish to use this representation directly.</p>
 </blockquote>
 <p>And PyYAML obliges:</p>
 <!--
@@ -230,7 +230,7 @@ but can't do it for things it doesn't know about.</p>
 <p>There must be a better way!</p>
 <p>Thankfully, the spec also <a href="https://yaml.org/spec/1.2.2/#332-resolved-tags">says</a>:</p>
 <blockquote>
-<p>That said, tag resolution is specific to the application. YAML processors should therefore provide <em>a mechanism allowing the application to override and expand</em> these default tag resolution rules.</p>
+<p>That said, tag resolution is specific to the application. YAML processors should therefore provide <strong>a mechanism allowing the application to override and expand</strong> these default tag resolution rules.</p>
 </blockquote>
 <p>We'll use this mechanism to convert everything to almost-native types,
 but keep the tag for things with custom ones.</p>
@@ -329,12 +329,28 @@ and then go through <code>value</code>:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">one</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
 <span class="go">&#39;STRING&#39;</span>
 </code></pre></div>
-<p>We <em>could</em> subclass the Python types corresponding to standard YAML tags<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup>
-and add a <code>tag</code> attribute to each, but it would be pretty involved.</p>
+<p>We could <em>subclass</em> the Python types corresponding to standard YAML tags
+and add a <code>tag</code> attribute to each
+– most of them, anyway, neither <code>bool</code> nor <code>NoneType</code> can be subclassed.</p>
+<p>Or, we could <em>wrap</em> tagged objects
+in a class with the same interface,
+that delegates method calls and attribute access to the wrapee,
+with a <code>tag</code> attribute on top.</p>
+<section class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>This is known as the <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/">decorator pattern</a> design pattern
+ (not to be confused with Python <a href="https://docs.python.org/3/glossary.html#term-decorator">decorators</a>).</p>
+</section>
+<p>Doing it naively entails writing one wrapper per type,
+with one wrapper method per method,
+and one property per attribute.
+This is even worse than subclassing!</p>
 <p>There must be a better way!</p>
 <hr />
-<p>Since this is Python, there is.
-We'll use a <a href="https://wrapt.readthedocs.io/en/latest/wrappers.html#object-proxy">wrapt</a> object proxy instead:</p>
+<p>This is Python, so there is.</p>
+<p>We'll use an object proxy (also known as &quot;dynamic wrapper&quot;) instead;
+while <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/#caveat-wrapping-doesnt-actually-work">they're not perfect</a>,
+the one <a href="https://wrapt.readthedocs.io/en/latest/wrappers.html#object-proxy">wrapt</a> provides is damn near perfect enough<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup>:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">12</span>
 <span class="normal">13</span>
 <span class="normal">14</span>
@@ -379,27 +395,32 @@ We'll use a <a href="https://wrapt.readthedocs.io/en/latest/wrappers.html#object
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">one</span><span class="p">,</span> <span class="n">Tagged</span><span class="p">)</span>
 <span class="go">True</span>
 </code></pre></div>
-<h3 id="representing-tagged-objects">representing tagged objects<span class="headerlink"> <a href="#representing-tagged-objects" title="permalink">#</a></span></h3>
+<h3 id="representing-tagged-objects">Representing tagged objects<span class="headerlink"> <a href="#representing-tagged-objects" title="permalink">#</a></span></h3>
+<p>The trip back is exactly the same,
+but much shorter:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">39</span>
 <span class="normal">40</span>
 <span class="normal">41</span>
 <span class="normal">42</span>
 <span class="normal">43</span>
 <span class="normal">44</span>
-<span class="normal">45</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">represent_undefined</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+<span class="normal">45</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">represent_tagged</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
     <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Tagged</span><span class="p">),</span> <span class="n">data</span>
     <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">represent_data</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">__wrapped__</span><span class="p">)</span>
     <span class="n">node</span><span class="o">.</span><span class="n">tag</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">tag</span>
     <span class="k">return</span> <span class="n">node</span>
 
-<span class="n">Dumper</span><span class="o">.</span><span class="n">add_representer</span><span class="p">(</span><span class="n">Tagged</span><span class="p">,</span> <span class="n">represent_undefined</span><span class="p">)</span>
+<span class="n">Dumper</span><span class="o">.</span><span class="n">add_representer</span><span class="p">(</span><span class="n">Tagged</span><span class="p">,</span> <span class="n">represent_tagged</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<p>TODO example</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">Tagged</span><span class="p">(</span><span class="s1">&#39;!hello&#39;</span><span class="p">,</span> <span class="s1">&#39;world&#39;</span><span class="p">),</span> <span class="n">Dumper</span><span class="o">=</span><span class="n">Dumper</span><span class="p">))</span>
+<span class="go">!hello &#39;world&#39;</span>
+</code></pre></div>
 <hr />
 <details>
-<summary>TESTS</summary>
-<p>data:</p>
+<summary>Let's mark the occasion with some tests.</summary>
+<p>Since we'll add a few more things after this,
+we parametrize them when possible:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 7</span>
 <span class="normal"> 8</span>
 <span class="normal"> 9</span>
@@ -429,7 +450,7 @@ We'll use a <a href="https://wrapt.readthedocs.io/en/latest/wrappers.html#object
 <span class="p">]</span>
 </code></pre></div>
 </td></tr></table>
-<p>loading:</p>
+<p>Loading works:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">23</span>
 <span class="normal">24</span>
 <span class="normal">25</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s1">&#39;text, data&#39;</span><span class="p">,</span> <span class="n">DATA</span><span class="p">)</span>
@@ -437,7 +458,7 @@ We'll use a <a href="https://wrapt.readthedocs.io/en/latest/wrappers.html#object
     <span class="k">assert</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span> <span class="o">==</span> <span class="n">data</span>
 </code></pre></div>
 </td></tr></table>
-<p>dumping:</p>
+<p>Dumping works:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">28</span>
 <span class="normal">29</span>
 <span class="normal">30</span>
@@ -447,7 +468,7 @@ We'll use a <a href="https://wrapt.readthedocs.io/en/latest/wrappers.html#object
     <span class="k">assert</span> <span class="n">data</span> <span class="o">==</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Dumper</span><span class="o">=</span><span class="n">Dumper</span><span class="p">),</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<p>not dumping:</p>
+<p>... but only for known types:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">34</span>
 <span class="normal">35</span>
 <span class="normal">36</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_dump_error</span><span class="p">():</span>
@@ -570,7 +591,7 @@ It's a method, we could've put it in the Loader class definition, but we'll keep
 <li id="fn-2"><p>There are also corresponding <code>yaml.add_...()</code> top-level functions,
 which by default act on <code>yaml.Loader/Dumper</code>. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-3"><p>Hmmm… foreshadowing? <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-4"><p>Most of them, anyway – neither <code>bool</code> nor <code>NoneType</code> can be subclassed. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-4"><p><a href="https://www.python.org/dev/peps/pep-0020/">Timothy 20:9</a>. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
