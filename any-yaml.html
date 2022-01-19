@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ seven minute read
+∙ nine minute read
 
 
 </small></p>
@@ -100,11 +100,10 @@ https://www.google.com/search?q=custom+yaml+parser+python
 <li><a href="#representing-tagged-objects">Representing tagged objects</a></li>
 </ul>
 </li>
-<li><a href="#unhashable-keys">unhashable keys</a>
+<li><a href="#unhashable-keys">Unhashable keys</a>
 <ul>
-<li><a href="#pairs-object">pairs object</a></li>
-<li><a href="#handling-mappings-with-unhashable-keys">handling mappings with unhashable keys</a></li>
-<li><a href="#representing-pairs">representing pairs</a></li>
+<li><a href="#constructing-pairs">Constructing pairs</a></li>
+<li><a href="#representing-pairs">Representing pairs</a></li>
 </ul>
 </li>
 <li><a href="#conclusion">conclusion</a></li>
@@ -477,8 +476,48 @@ we parametrize them when possible:</p>
 </code></pre></div>
 </td></tr></table>
 </details>
-<h2 id="unhashable-keys">unhashable keys<span class="headerlink"> <a href="#unhashable-keys" title="permalink">#</a></span></h2>
-<h3 id="pairs-object">pairs object<span class="headerlink"> <a href="#pairs-object" title="permalink">#</a></span></h3>
+<h2 id="unhashable-keys">Unhashable keys<span class="headerlink"> <a href="#unhashable-keys" title="permalink">#</a></span></h2>
+<p>Let's try <a href="https://pyyaml.org/wiki/PyYAMLDocumentation#block-mappings">an example</a> from the PyYAML documentation:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">text</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
+<span class="gp">... </span><span class="s2">? !!python/tuple [0,0]</span>
+<span class="gp">... </span><span class="s2">: The Hero</span>
+<span class="gp">... </span><span class="s2">? !!python/tuple [1,0]</span>
+<span class="gp">... </span><span class="s2">: Treasure</span>
+<span class="gp">... </span><span class="s2">? !!python/tuple [1,1]</span>
+<span class="gp">... </span><span class="s2">: The Dragon</span>
+<span class="gp">... </span><span class="s2">&quot;&quot;&quot;</span>
+</code></pre></div>
+<p>...which is supposed to result in:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">unsafe_load</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+<span class="go">{(0, 0): &#39;The Hero&#39;, (1, 0): &#39;Treasure&#39;, (1, 1): &#39;The Dragon&#39;}</span>
+</code></pre></div>
+<p>Instead, we get:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">TypeError</span>: <span class="n">unhashable type: &#39;list&#39;</span>
+</code></pre></div>
+<p>That's because the keys are tagged lists, and neither type is <a href="https://docs.python.org/3/glossary.html#term-hashable">hashable</a>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!!python/tuple [0,0]&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="go">Tagged(&#39;tag:yaml.org,2002:python/tuple&#39;, [0, 0])</span>
+</code></pre></div>
+<p>This limitation doesn't come from YAML,
+but from how Python dicts are implemented – using a <em>hash</em> table<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup>;
+quoting from the spec <a href="https://yaml.org/spec/1.2.2/#mapping">again</a>:</p>
+<blockquote>
+<p>The content of a mapping node is an unordered set of key/value node pairs, with the restriction that each of the keys is unique. <strong>YAML places no further restrictions on the nodes.</strong> In particular, <strong>keys may be arbitrary nodes</strong>, the same node may be used as the value of several key/value pairs and a mapping could even contain itself as a key or a value.</p>
+</blockquote>
+<p>(For this specific example we could use <code>yaml.FullLoader</code>,
+which does support Python tuples,
+but it doesn't really address the root of the problem.)</p>
+<h3 id="constructing-pairs">Constructing pairs<span class="headerlink"> <a href="#constructing-pairs" title="permalink">#</a></span></h3>
+<p>What now?</p>
+<p>We use the same strategy as before: wrap things we can't handle.</p>
+<p>Specifically,
+whenever we have a mapping with unhashable keys,
+we return a list of pairs instead.
+To tell it apart from plain lists,
+we use a subclass:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">48</span>
 <span class="normal">49</span>
 <span class="normal">50</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Pairs</span><span class="p">(</span><span class="nb">list</span><span class="p">):</span>
@@ -486,7 +525,7 @@ we parametrize them when possible:</p>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__repr__</span><span class="p">()</span><span class="si">}</span><span class="s2">)&quot;</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="handling-mappings-with-unhashable-keys">handling mappings with unhashable keys<span class="headerlink"> <a href="#handling-mappings-with-unhashable-keys" title="permalink">#</a></span></h3>
+<p>Again, we let the loader do most of the work:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">53</span>
 <span class="normal">54</span>
 <span class="normal">55</span>
@@ -506,12 +545,34 @@ we parametrize them when possible:</p>
 <span class="n">Loader</span><span class="o">.</span><span class="n">add_constructor</span><span class="p">(</span><span class="s1">&#39;tag:yaml.org,2002:map&#39;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">.</span><span class="n">construct_mapping</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<p>We also set Loader.construct_mapping so construct_undefined can take advantage of it too.
-It's a method, we could've put it in the Loader class definition, but we'll keep the style.</p>
-<p>TODO example</p>
-<p>TODO: mixins would be nice</p>
-<p>TODO: note that overrideing construct mapping is not enough, we must register explicitly (otherwise we get SafeDumper.construct_mapping)</p>
-<h3 id="representing-pairs">representing pairs<span class="headerlink"> <a href="#representing-pairs" title="permalink">#</a></span></h3>
+<p>We set <code>Loader.construct_mapping</code> so any other constructor
+wanting to make a mapping uses it
+(like our own <code>construct_undefined()</code> above).
+Don't be fooled by the assignment:
+it's a method like any other,<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
+we could've put it in the Loader class definition.
+But we're mutating the class &quot;from outside&quot; anyway,
+so I chose to preserve that style.</p>
+<p>Note that overriding <code>construct_mapping()</code> is not enough;
+we must register the constructor explictly,
+otherwise <code>SafeDumper.construct_mapping</code> will be used.</p>
+<p>(Since this whole unhashable keys thing
+is orthogonal from the unknown object thing,
+we could have had a different base class for this feature.
+However, as mentioned before,
+the constructor registry doesn't work with multiple inheritance,
+so we couldn't use the features <em>together</em>.)</p>
+<p>Anyway, it works:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="go">Pairs(</span>
+<span class="go">    [</span>
+<span class="go">        (Tagged(&#39;tag:yaml.org,2002:python/tuple&#39;, [0, 0]), &#39;The Hero&#39;),</span>
+<span class="go">        (Tagged(&#39;tag:yaml.org,2002:python/tuple&#39;, [1, 0]), &#39;Treasure&#39;),</span>
+<span class="go">        (Tagged(&#39;tag:yaml.org,2002:python/tuple&#39;, [1, 1]), &#39;The Dragon&#39;),</span>
+<span class="go">    ]</span>
+<span class="go">)</span>
+</code></pre></div>
+<h3 id="representing-pairs">Representing pairs<span class="headerlink"> <a href="#representing-pairs" title="permalink">#</a></span></h3>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">64</span>
 <span class="normal">65</span>
 <span class="normal">66</span>
@@ -592,6 +653,13 @@ It's a method, we could've put it in the Loader class definition, but we'll keep
 which by default act on <code>yaml.Loader/Dumper</code>. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-3"><p>Hmmm… foreshadowing? <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-4"><p><a href="https://www.python.org/dev/peps/pep-0020/">Timothy 20:9</a>. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-5"><p>For an explanation of how dicts work underneath,
+check out Raymond Hettinger's
+<a href="https://www.youtube.com/watch?v=npw4s1QTmPg">Modern Python Dictionaries: A confluence of a dozen great ideas</a>
+talk (<a href="https://gist.github.com/gerrymanoim/3519567d6afae5361032c032e0cc44f2">code</a>). <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-6"><p>Almost; the zero argument form of <a href="https://docs.python.org/3/library/functions.html#super">super()</a> won't work
+for methods defined outside of a class definition,
+but we're not using it here. <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
