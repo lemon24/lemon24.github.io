@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ nine minute read
+∙ 10 minute read
 
 
 </small></p>
@@ -80,8 +80,8 @@ window.addEventListener('resize', set_vh);
 
 <p>... in which we use PyYAML to <em>safely</em> read and write YAML with <em>any</em> tags,
 in a way that's as straightforward as interacting with built-in types.</p>
-<p>TODO: also, a short explanation on how to extend PyYAML: #a-note-on-pyyaml-extensibility</p>
-<!-- If you're in a hurry, you can find the final version of the code at the end. -->
+<p>If you're in a hurry,
+you can find the final version of the code <a href="#conclusion">at the end</a>.</p>
 <!--
 https://www.google.com/search?q=custom+yaml+parser+python
 # yaml: could not determine a constructor for the tag
@@ -106,8 +106,8 @@ https://www.google.com/search?q=custom+yaml+parser+python
 <li><a href="#representing-pairs">Representing pairs</a></li>
 </ul>
 </li>
-<li><a href="#conclusion">conclusion</a></li>
-<li><a href="#bonus-hashable-wrapper">bonus: hashable wrapper</a></li>
+<li><a href="#conclusion">Conclusion</a></li>
+<li><a href="#bonus-hashable-wrapper">Bonus: hashable wrapper</a></li>
 <li><a href="#bonus-others-things-not-so-easy-to-do">bonus: others things not so easy to do</a></li>
 </ul>
 </section>
@@ -573,6 +573,7 @@ so we couldn't use the features <em>together</em>.)</p>
 <span class="go">)</span>
 </code></pre></div>
 <h3 id="representing-pairs">Representing pairs<span class="headerlink"> <a href="#representing-pairs" title="permalink">#</a></span></h3>
+<p>Like before, the trip back is quite short:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">64</span>
 <span class="normal">65</span>
 <span class="normal">66</span>
@@ -586,10 +587,13 @@ so we couldn't use the features <em>together</em>.)</p>
 <span class="n">Dumper</span><span class="o">.</span><span class="n">add_representer</span><span class="p">(</span><span class="n">Pairs</span><span class="p">,</span> <span class="n">represent_pairs</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<p>TODO example</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">Pairs</span><span class="p">([([],</span> <span class="s1">&#39;one&#39;</span><span class="p">)]),</span> <span class="n">Dumper</span><span class="o">=</span><span class="n">Dumper</span><span class="p">))</span>
+<span class="go">[]: one</span>
+</code></pre></div>
 <hr />
 <details>
-<summary>TESTS</summary>
+<summary>Let's test this more thoroughly.</summary>
+<p>Because the tests are parametrized, we just need to add more data:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span>
 <span class="normal">19</span>
 <span class="normal">20</span>
@@ -624,10 +628,44 @@ so we couldn't use the features <em>together</em>.)</p>
 </code></pre></div>
 </td></tr></table>
 </details>
-<h2 id="conclusion">conclusion<span class="headerlink"> <a href="#conclusion" title="permalink">#</a></span></h2>
-<p>TODO</p>
-<h2 id="bonus-hashable-wrapper">bonus: hashable wrapper<span class="headerlink"> <a href="#bonus-hashable-wrapper" title="permalink">#</a></span></h2>
-<p>TODO</p>
+<h2 id="conclusion">Conclusion<span class="headerlink"> <a href="#conclusion" title="permalink">#</a></span></h2>
+<p>TODO: ???</p>
+<p>The final version of the code:
+<a href="/_file/any-yaml/any_yaml.py">any_yaml.py</a>,
+<a href="/_file/any-yaml/test_any_yaml.py">test_any_yaml.py</a>.</p>
+<p><strong>Learned something new today?</strong> Share this with others, it really helps!</p>
+<p><strong>Want more?</strong> Get updates via <a href="#embedded-subscribe-form">email</a>
+or <a href="https://death.andgravity.com/_feed/index.xml">Atom feed</a>.</p>
+<h2 id="bonus-hashable-wrapper">Bonus: hashable wrapper<span class="headerlink"> <a href="#bonus-hashable-wrapper" title="permalink">#</a></span></h2>
+<p>You may be asking, why not make the wrapper hashable?</p>
+<p>Most unhashable (data) objects are that for a reason: because they're mutable.</p>
+<p>We have two options:</p>
+<ul>
+<li><p>Make the wrapper hash change with the content.
+This this will break dictionaries in strange and unexpected ways
+(and other things too) –
+the language <a href="https://docs.python.org/3/reference/datamodel.html#object.__hash__">requires</a> mutable objects to be unhashable.</p>
+</li>
+<li><p>Make the wrapper hash <em>not</em> change with the content,
+and wrappers equal only to themselves –
+that's what user-defined classes do by default anyway.</p>
+<p>This works, but it's not very useful,
+because equal values aren't equal anymore (<code>data != load(dump(data))</code>!),
+and you can only get things back from a dict
+if you already have exactly the same object used as key:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="p">{</span><span class="n">Hashable</span><span class="p">([</span><span class="mi">1</span><span class="p">]):</span> <span class="s1">&#39;one&#39;</span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="n">Hashable</span><span class="p">([</span><span class="mi">1</span><span class="p">])]</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">KeyError</span>: <span class="n">Hashable([1])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">key</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+<span class="go">&#39;one&#39;</span>
+</code></pre></div>
+<p>I'd file this under &quot;strange and unexpected&quot; too.</p>
+<p>(You can find the code for the example above <a href="/_file/any-yaml/hashable_wrapper.py">here</a>.)</p>
+</li>
+</ul>
 <h2 id="bonus-others-things-not-so-easy-to-do">bonus: others things not so easy to do<span class="headerlink"> <a href="#bonus-others-things-not-so-easy-to-do" title="permalink">#</a></span></h2>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">compose</span><span class="p">(</span><span class="s2">&quot;!x!aaa x&quot;</span><span class="p">)</span>
 <span class="gt">Traceback (most recent call last):</span>
@@ -671,6 +709,57 @@ but we're not using it here. <a href="#fnref-6" class="footnote"><sup>[return]</
 
 
 
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=any-yaml"
+    method="post"
+    id="embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 
 
 
