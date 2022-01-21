@@ -81,9 +81,8 @@ window.addEventListener('resize', set_vh);
 <p>... in which we use PyYAML to <em>safely</em> read and write YAML with <em>any</em> tags,
 in a way that's as straightforward as interacting with built-in types.</p>
 <p>If you're in a hurry,
-you can find the final version of the code <a href="#conclusion">at the end</a>.</p>
+you can find the code <a href="#conclusion">at the end</a>.</p>
 <!--
-https://www.google.com/search?q=custom+yaml+parser+python
 # yaml: could not determine a constructor for the tag
 # yaml: while constructing a mapping found unhashable key
 -->
@@ -113,11 +112,10 @@ https://www.google.com/search?q=custom+yaml+parser+python
 </section>
 </details>
 <h2 id="why-is-this-useful">Why is this useful?<span class="headerlink"> <a href="#why-is-this-useful" title="permalink">#</a></span></h2>
-<p>Although YAML is mostly used as a friendlier alternative to JSON<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
-it can do way more.</p>
+<p>People mostly use YAML as a friendlier alternative to JSON<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
+but it can do way more.</p>
 <p>Among others, it can represent user-defined and native data structures.</p>
-<p>Say you need to read <em>(or write)</em> an AWS Cloud Formation <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-ec2.html">template</a>
-that uses local, application-specific tags:</p>
+<p>Say you need to read <em>(or write)</em> an AWS Cloud Formation <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-ec2.html">template</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="nt">EC2Instance</span><span class="p">:</span>
   <span class="nt">Type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">AWS::EC2::Instance</span>
   <span class="nt">Properties</span><span class="p">:</span>
@@ -137,7 +135,7 @@ that uses local, application-specific tags:</p>
 <span class="go">                 ^</span>
 </code></pre></div>
 <p>... or, you need to <em>safely</em> read untrusted YAML
-that represents native Python objects with global tags:</p>
+that represents Python objects:</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="kt">!!python/object/new:module.Class</span> <span class="p p-Indicator">{</span><span class="nt"> attribute</span><span class="p">:</span> <span class="nv">value</span> <span class="p p-Indicator">}</span>
 </code></pre></div>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
@@ -173,8 +171,8 @@ that represents native Python objects with global tags:</p>
  </details>
 </section>
 <hr />
-<p>Can I just have the data, then?</p>
-<p>Yes! The YAML spec <a href="https://yaml.org/spec/1.2.2/#334-available-tags">says</a>:</p>
+<p>Can't I just get the data, without it being turned into objects?</p>
+<p>You can! The YAML spec <a href="https://yaml.org/spec/1.2.2/#334-available-tags">says</a>:</p>
 <blockquote>
 <p>In a given processing environment, there need not be an available native type corresponding to a given tag. If a node’s tag is unavailable, a YAML processor will not be able to construct a native data structure for it. In this case, <strong>a complete representation may still be composed</strong> and an application may wish to use this representation directly.</p>
 </blockquote>
@@ -214,7 +212,7 @@ two: !mysequence [1, 2]
 <span class="go">one: !myscalar &#39;string&#39;</span>
 <span class="go">two: !mysequence [1, 2]</span>
 </code></pre></div>
-<p>... the spec didn't say it has to be concise. ¯\_(ツ)_/¯</p>
+<p>... the spec didn't say the representation has to be concise. ¯\_(ツ)_/¯</p>
 <p>Here's how YAML processing works, to give you an idea what we're looking at:</p>
 <figure class="figure">
 <figcaption class="figure-caption text-center text-small">
@@ -223,22 +221,22 @@ two: !mysequence [1, 2]
 <p><img class="img-responsive" src="/_file/any-yaml/overview2.svg" alt="YAML Processing Overview Diagram" /></p>
 </figure>
 <p>The output of <code>compose()</code> above is the representation (node graph).</p>
-<p><code>safe_load()</code> does its best to construct native data structures,
-but can't do it for things it doesn't know about.</p>
+<p>From that, <code>safe_load()</code> does its best to construct objects,
+but it can't do anything for tags it doesn't know about.</p>
 <hr />
 <p>There must be a better way!</p>
 <p>Thankfully, the spec also <a href="https://yaml.org/spec/1.2.2/#332-resolved-tags">says</a>:</p>
 <blockquote>
 <p>That said, tag resolution is specific to the application. YAML processors should therefore provide <strong>a mechanism allowing the application to override and expand</strong> these default tag resolution rules.</p>
 </blockquote>
-<p>We'll use this mechanism to convert everything to almost-native types,
-but keep the tag for things with custom ones.</p>
+<p>We'll use this mechanism to convert tagged nodes to almost-native types,
+while preserving the tags.</p>
 <h2 id="a-note-on-pyyaml-extensibility">A note on PyYAML extensibility<span class="headerlink"> <a href="#a-note-on-pyyaml-extensibility" title="permalink">#</a></span></h2>
 <p>PyYAML is a bit unusual.</p>
 <p>For each processing direction, you have a corresponding Loader/Dumper class.</p>
 <p>For each processing step,
-you can register callbacks using their <code>add_...()</code> methods<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>,
-which get stored in class-level registries.</p>
+you can add callbacks,
+stored in class-level registries.</p>
 <p>The callbacks are method-like –
 they receive the Loader/Dumper as the first argument:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">Dice</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s1">&#39;Dice&#39;</span><span class="p">,</span> <span class="s1">&#39;a b&#39;</span><span class="p">)</span>
@@ -248,19 +246,18 @@ they receive the Loader/Dumper as the first argument:</p>
 
 <span class="n">yaml</span><span class="o">.</span><span class="n">Dumper</span><span class="o">.</span><span class="n">add_representer</span><span class="p">(</span><span class="n">Dice</span><span class="p">,</span> <span class="n">dice_representer</span><span class="p">)</span>
 </code></pre></div>
-<p>You may notice the <code>add_...()</code> methods modify the classes for <em>everyone</em>.</p>
-<p>That's not necessarily desirable –
-imagine calling <code>safe_load()</code>,
-expecting to only get built-in types,
-and getting a Dice.</p>
-<p>We can avoid it by subclassing,
+<p>You may notice the <code>add_...()</code> methods modify the class in-place,
+for <em>everyone</em>,
+which isn't necessarily great;
+imagine getting a Dice from <code>safe_load()</code>,
+when you were expecting only built-in types.</p>
+<p>We can avoid this by subclassing,
 since the registry is copied from the parent.
 Note that because of how <a href="https://github.com/yaml/pyyaml/blob/6.0/lib/yaml/representer.py#L65-L69">copying is implemented</a>,
 registries from two direct parents are <em>not</em> merged –
 you only get the registry of the first parent in the <a href="https://docs.python.org/3/glossary.html#term-method-resolution-order">MRO</a>.</p>
-<p>So, let's start with some subclasses;
-we'll use SafeLoader / SafeDumper as bases,
-since they handle only basic tags:</p>
+<hr />
+<p>So, we'll start by subclassing SafeLoader/Dumper:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">4</span>
 <span class="normal">5</span>
 <span class="normal">6</span>
@@ -274,8 +271,9 @@ since they handle only basic tags:</p>
 </td></tr></table>
 <h2 id="preserving-tags">Preserving tags<span class="headerlink"> <a href="#preserving-tags" title="permalink">#</a></span></h2>
 <h3 id="constructing-unknown-objects">Constructing unknown objects<span class="headerlink"> <a href="#constructing-unknown-objects" title="permalink">#</a></span></h3>
-<p>For now, we'll use (tag, value) pairs for unknown objects;
-for convenience<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>, we'll use a named tuple instead of a plain one:</p>
+<p>For now, we can use named tuples for objects with unknown tags,
+since <a href="/namedtuples#the-data-is-naturally-a-tuple">they are naturally</a>
+tag/value pairs:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">12</span>
 <span class="normal">13</span>
 <span class="normal">14</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Tagged</span><span class="p">(</span><span class="n">typing</span><span class="o">.</span><span class="n">NamedTuple</span><span class="p">):</span>
@@ -310,6 +308,7 @@ and wrap the resulting value:</p>
 <span class="n">Loader</span><span class="o">.</span><span class="n">add_constructor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">construct_undefined</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+<p>Constructors are registered by tag, with None meaning &quot;unknown&quot;.</p>
 <p>Things look much better already:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
 <span class="go">{</span>
@@ -319,18 +318,20 @@ and wrap the resulting value:</p>
 </code></pre></div>
 <h3 id="a-better-wrapper">A better wrapper<span class="headerlink"> <a href="#a-better-wrapper" title="permalink">#</a></span></h3>
 <p>That's nice,
-but every time we want to use a value,
-we need to check if it's tagged,
-and then go through <code>value</code>:</p>
+but every time we use any value,
+we have to check if it's tagged,
+and then go through <code>value</code> if is:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">one</span> <span class="o">=</span> <span class="n">_</span><span class="p">[</span><span class="s1">&#39;one&#39;</span><span class="p">]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">one</span><span class="o">.</span><span class="n">tag</span>
 <span class="go">&#39;!myscalar&#39;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">one</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
 <span class="go">&#39;STRING&#39;</span>
 </code></pre></div>
-<p>We could <em>subclass</em> the Python types corresponding to standard YAML tags
-and add a <code>tag</code> attribute to each
-– most of them, anyway, neither <code>bool</code> nor <code>NoneType</code> can be subclassed.</p>
+<p>We could <em>subclass</em> the Python types corresponding to core YAML tags
+(str, list, and so on),
+and add a <code>tag</code> attribute to each.
+We could subclass most of them, anyway
+– neither <code>bool</code> nor <code>NoneType</code> can be subclassed.</p>
 <p>Or, we could <em>wrap</em> tagged objects
 in a class with the same interface,
 that delegates method calls and attribute access to the wrapee,
@@ -340,16 +341,15 @@ with a <code>tag</code> attribute on top.</p>
 <p>This is known as the <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/">decorator pattern</a> design pattern
  (not to be confused with Python <a href="https://docs.python.org/3/glossary.html#term-decorator">decorators</a>).</p>
 </section>
-<p>Doing it naively entails writing one wrapper per type,
-with one wrapper method per method,
-and one property per attribute.
-This is even worse than subclassing!</p>
+<p>Doing this naively entails writing one wrapper per type,
+with one wrapper method per method and one property per attribute.
+That's even worse than subclassing!</p>
 <p>There must be a better way!</p>
 <hr />
-<p>This is Python, so there is.</p>
-<p>We'll use an object proxy (also known as &quot;dynamic wrapper&quot;) instead;
-while <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/#caveat-wrapping-doesnt-actually-work">they're not perfect</a>,
-the one <a href="https://wrapt.readthedocs.io/en/latest/wrappers.html#object-proxy">wrapt</a> provides is damn near perfect enough<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup>:</p>
+<p>Of course, this is Python, so there is.</p>
+<p>We can use an object proxy instead (also known as &quot;dynamic wrapper&quot;).
+While <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/#caveat-wrapping-doesnt-actually-work">they're not perfect</a> in general,
+the one <a href="https://wrapt.readthedocs.io/en/latest/wrappers.html#object-proxy">wrapt</a> provides is damn near perfect enough<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">12</span>
 <span class="normal">13</span>
 <span class="normal">14</span>
@@ -388,12 +388,13 @@ the one <a href="https://wrapt.readthedocs.io/en/latest/wrappers.html#object-pro
 <span class="gp">&gt;&gt;&gt; </span><span class="n">one</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span>
 <span class="go">&#39;str&#39;</span>
 </code></pre></div>
-<p>...including with fancy things like <a href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a>:</p>
+<p>...up to and including fancy things like <a href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">one</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
 <span class="go">True</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">one</span><span class="p">,</span> <span class="n">Tagged</span><span class="p">)</span>
 <span class="go">True</span>
 </code></pre></div>
+<p>And <em>now</em> you don't have to care about tags if you don't want to.</p>
 <h3 id="representing-tagged-objects">Representing tagged objects<span class="headerlink"> <a href="#representing-tagged-objects" title="permalink">#</a></span></h3>
 <p>The trip back is exactly the same,
 but much shorter:</p>
@@ -412,14 +413,14 @@ but much shorter:</p>
 <span class="n">Dumper</span><span class="o">.</span><span class="n">add_representer</span><span class="p">(</span><span class="n">Tagged</span><span class="p">,</span> <span class="n">represent_tagged</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+<p>Representers are registered by type.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">Tagged</span><span class="p">(</span><span class="s1">&#39;!hello&#39;</span><span class="p">,</span> <span class="s1">&#39;world&#39;</span><span class="p">),</span> <span class="n">Dumper</span><span class="o">=</span><span class="n">Dumper</span><span class="p">))</span>
 <span class="go">!hello &#39;world&#39;</span>
 </code></pre></div>
 <hr />
 <details>
 <summary>Let's mark the occasion with some tests.</summary>
-<p>Since we'll add a few more things after this,
-we parametrize them when possible:</p>
+<p>Since we still have stuff to do, we parametrize the tests from the start.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 7</span>
 <span class="normal"> 8</span>
 <span class="normal"> 9</span>
@@ -457,7 +458,7 @@ we parametrize them when possible:</p>
     <span class="k">assert</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span> <span class="o">==</span> <span class="n">data</span>
 </code></pre></div>
 </td></tr></table>
-<p>Dumping works:</p>
+<p>And dumping works:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">28</span>
 <span class="normal">29</span>
 <span class="normal">30</span>
@@ -487,7 +488,14 @@ we parametrize them when possible:</p>
 <span class="gp">... </span><span class="s2">: The Dragon</span>
 <span class="gp">... </span><span class="s2">&quot;&quot;&quot;</span>
 </code></pre></div>
-<p>...which is supposed to result in:</p>
+<!--
+
+[^7]: For this specific example, we could've used `yaml.FullLoader`,
+  which does support tuples,
+  but that doesn't really address the root of the problem.
+
+-->
+<p>This is supposed to result in:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">unsafe_load</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
 <span class="go">{(0, 0): &#39;The Hero&#39;, (1, 0): &#39;Treasure&#39;, (1, 1): &#39;The Dragon&#39;}</span>
 </code></pre></div>
@@ -501,18 +509,15 @@ we parametrize them when possible:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!!python/tuple [0,0]&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
 <span class="go">Tagged(&#39;tag:yaml.org,2002:python/tuple&#39;, [0, 0])</span>
 </code></pre></div>
-<p>This limitation doesn't come from YAML,
-but from how Python dicts are implemented – using a <em>hash</em> table<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup>;
-quoting from the spec <a href="https://yaml.org/spec/1.2.2/#mapping">again</a>:</p>
+<p>This limitation comes from how Python dicts are implemented,<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>
+not from YAML;
+quoting from the <a href="https://yaml.org/spec/1.2.2/#mapping">spec</a> again:</p>
 <blockquote>
 <p>The content of a mapping node is an unordered set of key/value node pairs, with the restriction that each of the keys is unique. <strong>YAML places no further restrictions on the nodes.</strong> In particular, <strong>keys may be arbitrary nodes</strong>, the same node may be used as the value of several key/value pairs and a mapping could even contain itself as a key or a value.</p>
 </blockquote>
-<p>(For this specific example we could use <code>yaml.FullLoader</code>,
-which does support Python tuples,
-but it doesn't really address the root of the problem.)</p>
 <h3 id="constructing-pairs">Constructing pairs<span class="headerlink"> <a href="#constructing-pairs" title="permalink">#</a></span></h3>
 <p>What now?</p>
-<p>We use the same strategy as before: wrap things we can't handle.</p>
+<p>Same strategy as before: wrap the things we can't handle.</p>
 <p>Specifically,
 whenever we have a mapping with unhashable keys,
 we return a list of pairs instead.
@@ -545,23 +550,23 @@ we use a subclass:</p>
 <span class="n">Loader</span><span class="o">.</span><span class="n">add_constructor</span><span class="p">(</span><span class="s1">&#39;tag:yaml.org,2002:map&#39;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">.</span><span class="n">construct_mapping</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<p>We set <code>Loader.construct_mapping</code> so any other constructor
-wanting to make a mapping uses it
+<p>We set <code>construct_mapping</code> so that any other Loader constructor
+wanting to make a mapping gets to use it
 (like our own <code>construct_undefined()</code> above).
-Don't be fooled by the assignment:
-it's a method like any other,<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
-we could've put it in the Loader class definition.
-But we're mutating the class &quot;from outside&quot; anyway,
-so I chose to preserve that style.</p>
-<p>Note that overriding <code>construct_mapping()</code> is not enough;
-we must register the constructor explictly,
-otherwise <code>SafeDumper.construct_mapping</code> will be used.</p>
-<p>(Since this whole unhashable keys thing
-is orthogonal from the unknown object thing,
-we could have had a different base class for this feature.
+Don't be fooled by the assignment,
+it's a method like any other.<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup>
+But we're changing the class from outside anyway,
+let's stay consistent.</p>
+<p>Note that overriding <code>construct_mapping()</code> is not enough:
+we have to register the constructor explictly,
+otherwise SafeDumper's <code>construct_mapping()</code> will be used
+(since that's what was in the registry before).</p>
+<p>(In case you're wondering,
+this feature is orthogonal from handling unknown tags;
+we could have used different classes for them.
 However, as mentioned before,
-the constructor registry doesn't work with multiple inheritance,
-so we couldn't use the features <em>together</em>.)</p>
+the constructor registry breaks multiple inheritance,
+so we couldn't use the two features <em>together</em>.)</p>
 <p>Anyway, it works:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
 <span class="go">Pairs(</span>
@@ -573,7 +578,7 @@ so we couldn't use the features <em>together</em>.)</p>
 <span class="go">)</span>
 </code></pre></div>
 <h3 id="representing-pairs">Representing pairs<span class="headerlink"> <a href="#representing-pairs" title="permalink">#</a></span></h3>
-<p>Like before, the trip back is quite short:</p>
+<p>Like before, the trip back short and uneventful:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">64</span>
 <span class="normal">65</span>
 <span class="normal">66</span>
@@ -650,9 +655,10 @@ the language <a href="https://docs.python.org/3/reference/datamodel.html#object.
 and wrappers equal only to themselves –
 that's what user-defined classes do by default anyway.</p>
 <p>This works, but it's not very useful,
-because equal values aren't equal anymore (<code>data != load(dump(data))</code>!),
-and you can only get things back from a dict
-if you already have exactly the same object used as key:</p>
+because equal values don't compare equal anymore
+(<code>data != load(dump(data))</code>).
+Among others, it means you can only get things from a dict
+if you already have the object used as key:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="p">{</span><span class="n">Hashable</span><span class="p">([</span><span class="mi">1</span><span class="p">]):</span> <span class="s1">&#39;one&#39;</span><span class="p">}</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="n">Hashable</span><span class="p">([</span><span class="mi">1</span><span class="p">])]</span>
 <span class="gt">Traceback (most recent call last):</span>
@@ -686,18 +692,16 @@ if you already have exactly the same object used as key:</p>
 </code></pre></div>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>And actually is a superset of JSON. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>There are also corresponding <code>yaml.add_...()</code> top-level functions,
-which by default act on <code>yaml.Loader/Dumper</code>. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-3"><p>Hmmm… foreshadowing? <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-4"><p><a href="https://www.python.org/dev/peps/pep-0020/">Timothy 20:9</a>. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-5"><p>For an explanation of how dicts work underneath,
-check out Raymond Hettinger's
+<li id="fn-1"><p>Of which YAML is actually a superset. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p><a href="https://www.python.org/dev/peps/pep-0020/">Timothy 20:9</a>. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>Using a <em>hash</em> table. For nice explanation of how it all works,
+complete with a pure-Python implementation,
+check out Raymond Hettinger's talk
 <a href="https://www.youtube.com/watch?v=npw4s1QTmPg">Modern Python Dictionaries: A confluence of a dozen great ideas</a>
-talk (<a href="https://gist.github.com/gerrymanoim/3519567d6afae5361032c032e0cc44f2">code</a>). <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-6"><p>Almost; the zero argument form of <a href="https://docs.python.org/3/library/functions.html#super">super()</a> won't work
+(<a href="https://gist.github.com/gerrymanoim/3519567d6afae5361032c032e0cc44f2">code</a>). <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-4"><p>Almost. The zero argument form of <a href="https://docs.python.org/3/library/functions.html#super">super()</a> won't work
 for methods defined outside of a class definition,
-but we're not using it here. <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
+but we're not using it here. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
