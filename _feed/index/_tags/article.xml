@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #article</title>
-  <updated>2022-01-23T19:11:00+00:00</updated>
+  <updated>2022-01-24T08:20:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
@@ -12,7 +12,7 @@
   <entry xml:base="https://death.andgravity.com/any-yaml">
     <id>https://death.andgravity.com/any-yaml</id>
     <title>Dealing with YAML with arbitrary tags in Python</title>
-    <updated>2022-01-23T19:11:00+00:00</updated>
+    <updated>2022-01-24T08:20:00+00:00</updated>
     <content type="html">&lt;p&gt;... in which we use &lt;a href="https://github.com/yaml/pyyaml"&gt;PyYAML&lt;/a&gt; to &lt;em&gt;safely&lt;/em&gt; read and write YAML with &lt;em&gt;any&lt;/em&gt; tags,
 in a way that's as straightforward as interacting with built-in types.&lt;/p&gt;
 &lt;p&gt;If you're in a hurry,
@@ -42,6 +42,7 @@ you can find the code &lt;a href="#conclusion"&gt;at the end&lt;/a&gt;.&lt;/p&gt
 &lt;/li&gt;
 &lt;li&gt;&lt;a href="#conclusion"&gt;Conclusion&lt;/a&gt;&lt;/li&gt;
 &lt;li&gt;&lt;a href="#bonus-hashable-wrapper"&gt;Bonus: hashable wrapper&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#bonus-broken-yaml"&gt;Bonus: broken YAML&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 &lt;/section&gt;
 &lt;/details&gt;
@@ -148,7 +149,7 @@ two: !mysequence [1, 2]
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;... the spec didn't say the representation has to be concise. ¯\_(ツ)_/¯&lt;/p&gt;
 &lt;p&gt;Here's how YAML processing works, to give you an idea what we're looking at:&lt;/p&gt;
-&lt;figure class="figure"&gt;
+&lt;figure class="figure" id="yaml-processing-overview-diagram"&gt;
 &lt;figcaption class="figure-caption text-center text-small"&gt;
 &lt;p&gt;&lt;a href="https://yaml.org/spec/1.2.2/#31-processes"&gt;YAML Processing Overview&lt;/a&gt;&lt;/p&gt;
 &lt;/figcaption&gt;
@@ -490,7 +491,7 @@ wanting to make a mapping gets to use it
 Don't be fooled by the assignment,
 it's a method like any other.&lt;sup class="footnote-ref" id="fnref-4"&gt;&lt;a href="#fn-4"&gt;4&lt;/a&gt;&lt;/sup&gt;
 But we're changing the class from outside anyway,
-let's stay consistent.&lt;/p&gt;
+it's best to stay consistent.&lt;/p&gt;
 &lt;p&gt;Note that overriding &lt;code&gt;construct_mapping()&lt;/code&gt; is not enough:
 we have to register the constructor explictly,
 otherwise SafeDumper's &lt;code&gt;construct_mapping()&lt;/code&gt; will be used
@@ -611,33 +612,49 @@ if you already have the object used as key:&lt;/p&gt;
 &lt;p&gt;(You can find the code for the example above &lt;a href="/_file/any-yaml/hashable_wrapper.py"&gt;here&lt;/a&gt;.)&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ul&gt;
-&lt;!--
-
-# bonus: others things not so easy to do
-
-
-```pycon
-&gt;&gt;&gt; yaml.compose("!x!aaa x")
-Traceback (most recent call last):
-  ...
-ParserError: while parsing a node
-found undefined tag handle '!x!'
-  in "&lt;unicode string&gt;", line 1, column 1:
-    !x!aaa x
-    ^
-```
-
-```pycon
-&gt;&gt;&gt; yaml.compose("key: *alias")
-Traceback (most recent call last):
-  ...
-ComposerError: found undefined alias 'alias'
-  in "&lt;unicode string&gt;", line 1, column 6:
-    key: *alias
-         ^
-```
-
---&gt;
+&lt;h2 id="bonus-broken-yaml"&gt;Bonus: broken YAML&lt;span class="headerlink"&gt; &lt;a href="#bonus-broken-yaml" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;We can venture even farther, into arguably broken YAML.
+Let's look at some examples.&lt;/p&gt;
+&lt;p&gt;First, there are undefined &lt;a href="https://yaml.org/spec/1.2.2/#6822-tag-prefixes"&gt;tag prefixes&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;!m!xyz x&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+  &lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="gr"&gt;yaml.parser.ParserError&lt;/span&gt;: &lt;span class="n"&gt;while parsing a node&lt;/span&gt;
+&lt;span class="go"&gt;found undefined tag handle &amp;#39;!m!&amp;#39;&lt;/span&gt;
+&lt;span class="go"&gt;  in &amp;quot;&amp;lt;unicode string&amp;gt;&amp;quot;, line 1, column 1:&lt;/span&gt;
+&lt;span class="go"&gt;    !m!xyz x&lt;/span&gt;
+&lt;span class="go"&gt;    ^&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;A valid version:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="se"&gt;\&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;%TAG !m! !my-&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;---&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;!m!xyz x&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;Tagged(&amp;#39;!my-xyz&amp;#39;, &amp;#39;x&amp;#39;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Second, there are undefined &lt;a href="https://yaml.org/spec/1.2.2/#71-alias-nodes"&gt;aliases&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;two: *anchor&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+  &lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="gr"&gt;yaml.composer.ComposerError&lt;/span&gt;: &lt;span class="n"&gt;found undefined alias &amp;#39;anchor&amp;#39;&lt;/span&gt;
+&lt;span class="go"&gt;  in &amp;quot;&amp;lt;unicode string&amp;gt;&amp;quot;, line 1, column 6:&lt;/span&gt;
+&lt;span class="go"&gt;    two: *anchor&lt;/span&gt;
+&lt;span class="go"&gt;         ^&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;A valid version:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="se"&gt;\&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;one: &amp;amp;anchor [1]&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;two: *anchor&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;{&amp;#39;one&amp;#39;: [1], &amp;#39;two&amp;#39;: [1]}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;It's likely possible to handle these in a way similar to how we handled undefined tags,
+but we'd have to go deeper –
+the exceptions hint to which
+&lt;a href="#yaml-processing-overview-diagram"&gt;processing step&lt;/a&gt;
+to look at.&lt;/p&gt;
+&lt;p&gt;Since I haven't actually encountered them in real life, we'll &amp;quot;save them for later&amp;quot; :)&lt;/p&gt;
 &lt;section class="footnotes"&gt;
 &lt;ol&gt;
 &lt;li id="fn-1"&gt;&lt;p&gt;Of which YAML is actually a superset. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;

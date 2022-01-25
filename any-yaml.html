@@ -69,11 +69,11 @@ window.addEventListener('resize', set_vh);
 <h1 class="heading-noindex">Dealing with YAML with arbitrary tags in Python</h1>
 
 <p class="text-gray"><small>
-<span>2022-01-23</span>
+<span class="tooltip" data-tooltip="updated on 2022-01-24">2022-01-23</span>
 
 
 
-∙ nine minute read
+∙ 10 minute read
 
 
 </small></p>
@@ -118,6 +118,7 @@ you can find the code <a href="#conclusion">at the end</a>.</p>
 </li>
 <li><a href="#conclusion">Conclusion</a></li>
 <li><a href="#bonus-hashable-wrapper">Bonus: hashable wrapper</a></li>
+<li><a href="#bonus-broken-yaml">Bonus: broken YAML</a></li>
 </ul>
 </section>
 </details>
@@ -224,7 +225,7 @@ two: !mysequence [1, 2]
 </code></pre></div>
 <p>... the spec didn't say the representation has to be concise. ¯\_(ツ)_/¯</p>
 <p>Here's how YAML processing works, to give you an idea what we're looking at:</p>
-<figure class="figure">
+<figure class="figure" id="yaml-processing-overview-diagram">
 <figcaption class="figure-caption text-center text-small">
 <p><a href="https://yaml.org/spec/1.2.2/#31-processes">YAML Processing Overview</a></p>
 </figcaption>
@@ -566,7 +567,7 @@ wanting to make a mapping gets to use it
 Don't be fooled by the assignment,
 it's a method like any other.<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup>
 But we're changing the class from outside anyway,
-let's stay consistent.</p>
+it's best to stay consistent.</p>
 <p>Note that overriding <code>construct_mapping()</code> is not enough:
 we have to register the constructor explictly,
 otherwise SafeDumper's <code>construct_mapping()</code> will be used
@@ -687,33 +688,49 @@ if you already have the object used as key:</p>
 <p>(You can find the code for the example above <a href="/_file/any-yaml/hashable_wrapper.py">here</a>.)</p>
 </li>
 </ul>
-<!--
-
-# bonus: others things not so easy to do
-
-
-```pycon
->>> yaml.compose("!x!aaa x")
-Traceback (most recent call last):
-  ...
-ParserError: while parsing a node
-found undefined tag handle '!x!'
-  in "<unicode string>", line 1, column 1:
-    !x!aaa x
-    ^
-```
-
-```pycon
->>> yaml.compose("key: *alias")
-Traceback (most recent call last):
-  ...
-ComposerError: found undefined alias 'alias'
-  in "<unicode string>", line 1, column 6:
-    key: *alias
-         ^
-```
-
--->
+<h2 id="bonus-broken-yaml">Bonus: broken YAML<span class="headerlink"> <a href="#bonus-broken-yaml" title="permalink">#</a></span></h2>
+<p>We can venture even farther, into arguably broken YAML.
+Let's look at some examples.</p>
+<p>First, there are undefined <a href="https://yaml.org/spec/1.2.2/#6822-tag-prefixes">tag prefixes</a>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!m!xyz x&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">yaml.parser.ParserError</span>: <span class="n">while parsing a node</span>
+<span class="go">found undefined tag handle &#39;!m!&#39;</span>
+<span class="go">  in &quot;&lt;unicode string&gt;&quot;, line 1, column 1:</span>
+<span class="go">    !m!xyz x</span>
+<span class="go">    ^</span>
+</code></pre></div>
+<p>A valid version:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
+<span class="gp">... </span><span class="s2">%TAG !m! !my-</span>
+<span class="gp">... </span><span class="s2">---</span>
+<span class="gp">... </span><span class="s2">!m!xyz x</span>
+<span class="gp">... </span><span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="go">Tagged(&#39;!my-xyz&#39;, &#39;x&#39;)</span>
+</code></pre></div>
+<p>Second, there are undefined <a href="https://yaml.org/spec/1.2.2/#71-alias-nodes">aliases</a>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;two: *anchor&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">yaml.composer.ComposerError</span>: <span class="n">found undefined alias &#39;anchor&#39;</span>
+<span class="go">  in &quot;&lt;unicode string&gt;&quot;, line 1, column 6:</span>
+<span class="go">    two: *anchor</span>
+<span class="go">         ^</span>
+</code></pre></div>
+<p>A valid version:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
+<span class="gp">... </span><span class="s2">one: &amp;anchor [1]</span>
+<span class="gp">... </span><span class="s2">two: *anchor</span>
+<span class="gp">... </span><span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="go">{&#39;one&#39;: [1], &#39;two&#39;: [1]}</span>
+</code></pre></div>
+<p>It's likely possible to handle these in a way similar to how we handled undefined tags,
+but we'd have to go deeper –
+the exceptions hint to which
+<a href="#yaml-processing-overview-diagram">processing step</a>
+to look at.</p>
+<p>Since I haven't actually encountered them in real life, we'll &quot;save them for later&quot; :)</p>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>Of which YAML is actually a superset. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
