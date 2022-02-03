@@ -1,0 +1,177 @@
+
+
+
+
+
+
+
+<!doctype html>
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+
+
+
+
+
+
+<title>yaml: could not determine a constructor for the tag - death and gravity</title>
+
+
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1 class="heading-noindex">yaml: could not determine a constructor for the tag</h1>
+
+<p class="text-gray"><small>
+<span>2022-02-02</span>
+
+
+
+∙ two minute read
+
+
+</small></p>
+
+
+
+
+
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<p>So you're trying to read some YAML using <a href="https://github.com/yaml/pyyaml">PyYAML</a>,
+and get an exception like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="s2">&quot;!!python/tuple [0,0]&quot;</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">yaml.constructor.ConstructorError</span>: <span class="n">could not determine a constructor for the tag &#39;tag:yaml.org,2002:python/tuple&#39;</span>
+<span class="go">  in &quot;&lt;unicode string&gt;&quot;, line 1, column 1:</span>
+<span class="go">    !!python/tuple [0,0]</span>
+<span class="go">    ^</span>
+</code></pre></div>
+<p>... or like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="s2">&quot;!GetAZs us-east-1&quot;</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">yaml.constructor.ConstructorError</span>: <span class="n">could not determine a constructor for the tag &#39;!GetAZs&#39;</span>
+<span class="go">  in &quot;&lt;unicode string&gt;&quot;, line 1, column 1:</span>
+<span class="go">    !GetAZs us-east-1</span>
+<span class="go">    ^</span>
+</code></pre></div>
+<h2 id="what-does-it-mean">What does it mean?<span class="headerlink"> <a href="#what-does-it-mean" title="permalink">#</a></span></h2>
+<p>(some of these belong to &quot;why does this happen&quot;)</p>
+<ul>
+<li>YAML can represent user-defined and native data structures</li>
+<li>you get this by marking nodes (scalars, sequences, mappings) with a tag</li>
+<li>example: built-in seq, seq with explicit tag, seq with fully-qualified tag</li>
+<li>there are language-specific tags for native data structures (like the python ones)</li>
+<li>there can be application-specific tags</li>
+<li>quote: yaml spec</li>
+</ul>
+<h2 id="why-does-this-happen">Why does this happen?<span class="headerlink"> <a href="#why-does-this-happen" title="permalink">#</a></span></h2>
+<ul>
+<li><p>the tuple case uses language-specific tags</p>
+<ul>
+<li>and we're using safe_load, which only loads basic tags</li>
+</ul>
+</li>
+<li><p>the !GetAZs case uses application specific tags (specific to AWS Cloud Formation)</p>
+<ul>
+<li>even if we didn't use safe_load, yaml doesn't know anything about this tag</li>
+<li>in general, these are meant to be loaded with custom specific loaders</li>
+</ul>
+</li>
+</ul>
+<h2 id="what-now">What now?<span class="headerlink"> <a href="#what-now" title="permalink">#</a></span></h2>
+<ul>
+<li><p>for the tuple case</p>
+<ul>
+<li>we can use full_load; can safely load native python types, &quot;Python-specific tags&quot; in https://pyyaml.org/wiki/PyYAMLDocumentation#yaml-tags-and-python-types</li>
+<li>you could use unsafe_load (or load, in pre-6.0); however, unsafe for untrusted input (warning! example)</li>
+</ul>
+</li>
+<li><p>for the application-specific case, you need to define a custom loader for tag</p>
+<ul>
+<li>example with just wrapping GetAZs</li>
+<li>example with resolving GetAZs</li>
+</ul>
+</li>
+<li><p>but you need to know the tags in advance</p>
+<ul>
+<li>painful to define for all tags</li>
+<li>not always possible</li>
+<li>sometimes, you just want to access the data (without interpreting it in a specific way)</li>
+<li><a href="/any-yaml">any-yaml</a> has your back; good for emitting/writing this kind of YAML too</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+
+
+
+</footer>
+
+
+</div>
