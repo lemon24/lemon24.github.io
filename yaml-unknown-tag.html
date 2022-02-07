@@ -98,45 +98,73 @@ and get an exception like this:</p>
 <span class="go">    ^</span>
 </code></pre></div>
 <h2 id="what-does-it-mean">What does it mean?<span class="headerlink"> <a href="#what-does-it-mean" title="permalink">#</a></span></h2>
-<p>(some of these belong to &quot;why does this happen&quot;)</p>
-<ul>
-<li>YAML can represent user-defined and native data structures</li>
-<li>you get this by marking nodes (scalars, sequences, mappings) with a tag</li>
-<li>example: built-in seq, seq with explicit tag, seq with fully-qualified tag</li>
-<li>there are language-specific tags for native data structures (like the python ones)</li>
-<li>there can be application-specific tags</li>
-<li>quote: yaml spec</li>
-</ul>
+<p>First, a bit of background.</p>
+<p>Aside from the basic types (strings, integers, sequences, and so on), 
+YAML can represent native and user-defined data structures.</p>
+<p>To denote the type of a node (scalar, sequence, mapping),
+you mark it with an explicit <a href="https://yaml.org/spec/1.2.2/#tags">tag</a>.
+Even basic types end up with a tag; these are all equivalent:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="s2">&quot;[implicit]&quot;</span><span class="p">)</span>
+<span class="go">[&#39;implicit&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="s2">&quot;!!seq [global, shorthand]&quot;</span><span class="p">)</span>
+<span class="go">[&#39;global&#39;, &#39;shorthand&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="s2">&quot;!&lt;tag:yaml.org,2002:seq&gt; [global, full]&quot;</span><span class="p">)</span>
+<span class="go">[&#39;global&#39;, &#39;full&#39;]</span>
+</code></pre></div>
+<p>Both errors above mean that the YAML loader encountered a node with an explicit tag,
+but it doesn't know how to construct objects with that tag.</p>
 <h2 id="why-does-this-happen">Why does this happen?<span class="headerlink"> <a href="#why-does-this-happen" title="permalink">#</a></span></h2>
-<ul>
-<li><p>the tuple case uses language-specific tags</p>
-<ul>
-<li>and we're using safe_load, which only loads basic tags</li>
-</ul>
-</li>
-<li><p>the !GetAZs case uses application specific tags (specific to AWS Cloud Formation)</p>
-<ul>
-<li>even if we didn't use safe_load, yaml doesn't know anything about this tag</li>
-<li>in general, these are meant to be loaded with custom specific loaders</li>
-</ul>
-</li>
-</ul>
+<p>The tag in the tuple example is language-specific, 
+and corresponds to a Python native data structure (a tuple).
+However, <code>safe_load()</code> resolves only basic YAML tags,
+which are known to be safe for untrusted input.</p>
+<hr />
+<p>The tag in the !GetAZs example is application-specific 
+(in this case, specific to AWS Cloud Formation).</p>
+<p>Even if we didn't use <code>safe_load()</code>, 
+PyYAML <em>cannot</em> know about this tag without being told explicitly
+(by using a custom, application-specific loader).</p>
+<p>This is by design – from the <a href="https://yaml.org/spec/1.2.2/#332-resolved-tags">spec</a>:</p>
+<blockquote>
+<p>That said, tag resolution is specific to the application. YAML processors should therefore provide <strong>a mechanism allowing the application to override and expand</strong> these default tag resolution rules.</p>
+</blockquote>
+<!-- TODO: links -->
+<!-- TODO: subscribe box before what now -->
 <h2 id="what-now">What now?<span class="headerlink"> <a href="#what-now" title="permalink">#</a></span></h2>
+<h3 id="python-specific-tags">Python-specific tags<span class="headerlink"> <a href="#python-specific-tags" title="permalink">#</a></span></h3>
+<p>For Python-specific tags,
+you can use <code>full_load()</code> (starting with PyYAML 6.0),
+which resolves all tags <em>except</em> those known to be unsafe on untrusted input;
+this includes all the  tags listed
+<a href="https://pyyaml.org/wiki/PyYAMLDocumentation#yaml-tags-and-python-types">here</a>.</p>
+<p>You could use <code>unsafe_load()</code>, which resolves all tags, even those known to be unsafe on untrusted input.</p>
+<section class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><code>yaml.unsafe_load()</code> is <strong>unsafe</strong> for <strong>untrusted data</strong>,
+ because it allows <strong>running arbitrary code</strong>.
+ Consider using <code>safe_load()</code> or <code>full_load()</code> instead.</p>
+ <details>
+ <summary>Details.</summary>
+<p>For example, you can do this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">unsafe_load</span><span class="p">(</span><span class="s2">&quot;!!python/object/new:os.system [echo WOOSH. YOU HAVE been compromised]&quot;</span><span class="p">)</span>
+<span class="go">WOOSH. YOU HAVE been compromised</span>
+<span class="go">0</span>
+</code></pre></div>
+<p>There were a bunch of <a href="https://www.cvedetails.com/vulnerability-list/vendor_id-13115/Pyyaml.html">CVEs</a> about it.</p>
+ </details>
+</section>
+<h3 id="application-specific-tags">Application-specific tags<span class="headerlink"> <a href="#application-specific-tags" title="permalink">#</a></span></h3>
 <ul>
-<li><p>for the tuple case</p>
-<ul>
-<li>we can use full_load; can safely load native python types, &quot;Python-specific tags&quot; in https://pyyaml.org/wiki/PyYAMLDocumentation#yaml-tags-and-python-types</li>
-<li>you could use unsafe_load (or load, in pre-6.0); however, unsafe for untrusted input (warning! example)</li>
-</ul>
-</li>
-<li><p>for the application-specific case, you need to define a custom loader for tag</p>
-<ul>
+<li>for the application-specific case, you need to define a custom loader for tag<ul>
 <li>example with just wrapping GetAZs</li>
 <li>example with resolving GetAZs</li>
 </ul>
 </li>
-<li><p>but you need to know the tags in advance</p>
+</ul>
+<h3 id="but-i-don-t-know-the-tags-in-advance">But I don't know the tags in advance<span class="headerlink"> <a href="#but-i-don-t-know-the-tags-in-advance" title="permalink">#</a></span></h3>
+<p>TODO: better title</p>
 <ul>
+<li>but you need to know the tags in advance<ul>
 <li>painful to define for all tags</li>
 <li>not always possible</li>
 <li>sometimes, you just want to access the data (without interpreting it in a specific way)</li>
