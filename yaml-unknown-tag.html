@@ -62,7 +62,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ two minute read
+∙ three minute read
 
 
 </small></p>
@@ -120,7 +120,7 @@ However, <code>safe_load()</code> resolves only basic YAML tags,
 which are known to be safe for untrusted input.</p>
 <hr />
 <p>The tag in the !GetAZs example is application-specific
-(in this case, specific to AWS Cloud Formation).</p>
+(in this case, specific to AWS CloudFormation).</p>
 <p>Even if we didn't use <code>safe_load()</code>,
 PyYAML <em>cannot</em> know about this tag without being told explicitly
 (by using a custom, application-specific loader).</p>
@@ -154,13 +154,45 @@ this includes all the  tags listed
  </details>
 </section>
 <h3 id="application-specific-tags">Application-specific tags<span class="headerlink"> <a href="#application-specific-tags" title="permalink">#</a></span></h3>
-<ul>
-<li>for the application-specific case, you need to define a custom loader for tag<ul>
-<li>example with just wrapping GetAZs</li>
-<li>example with resolving GetAZs</li>
-</ul>
-</li>
-</ul>
+<p>For the application-specific case, you need to define a constructor for each tag:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">GetAZs</span><span class="p">:</span>
+    <span class="n">region</span><span class="p">:</span> <span class="nb">str</span>
+
+<span class="k">class</span> <span class="nc">Loader</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">SafeLoader</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="k">def</span> <span class="nf">construct_GetAZs</span><span class="p">(</span><span class="n">loader</span><span class="p">,</span> <span class="n">node</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">GetAZs</span><span class="p">(</span><span class="n">loader</span><span class="o">.</span><span class="n">construct_scalar</span><span class="p">(</span><span class="n">node</span><span class="p">))</span>
+
+<span class="n">Loader</span><span class="o">.</span><span class="n">add_constructor</span><span class="p">(</span><span class="s1">&#39;!GetAZs&#39;</span><span class="p">,</span> <span class="n">construct_GetAZs</span><span class="p">)</span>
+</code></pre></div>
+<p>Here, we're just wrapping the value in a GetAZs dataclass, to say &quot;hey, this isn't just a simple string&quot;.</p>
+<p>We are subclassing SafeLoader because calling <code>SafeLoader.add_constructor</code> would modify it in-place, for <em>everyone</em>,
+which isn't necessarily great; imagine getting a GetAZs from <code>safe_load()</code>, when you were expecting only built-in types.</p>
+<p>You use the loader by passing it to <code>load()</code>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!GetAZs us-east-1&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="go">GetAZs(region=&#39;us-east-1&#39;)</span>
+</code></pre></div>
+<p>Of course, you don't have to just <em>store</em> the value, you can <em>do something</em> with it (after all, that's what CloudFormation does):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">KNOWN_AZS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;us-east-1&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;us-east-1a&#39;</span><span class="p">,</span> <span class="s1">&#39;us-east-1b&#39;</span><span class="p">,</span> <span class="s1">&#39;us-east-1c&#39;</span><span class="p">,</span> <span class="s1">&#39;us-east-1d&#39;</span><span class="p">,</span> <span class="s1">&#39;us-east-1e&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;eu-west-1&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;eu-west-1a&#39;</span><span class="p">,</span> <span class="s1">&#39;eu-west-1b&#39;</span><span class="p">,</span> <span class="s1">&#39;eu-west-1c&#39;</span><span class="p">],</span>
+<span class="p">}</span>
+
+<span class="k">def</span> <span class="nf">construct_GetAZs</span><span class="p">(</span><span class="n">loader</span><span class="p">,</span> <span class="n">node</span><span class="p">):</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">construct_scalar</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">KNOWN_AZS</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">yaml</span><span class="o">.</span><span class="n">constructor</span><span class="o">.</span><span class="n">ConstructorError</span><span class="p">(</span>
+            <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;GetAZs got unknown region </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">start_mark</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">KNOWN_AZS</span><span class="p">[</span><span class="n">value</span><span class="p">]</span>
+
+<span class="n">Loader</span><span class="o">.</span><span class="n">add_constructor</span><span class="p">(</span><span class="s1">&#39;!GetAZs&#39;</span><span class="p">,</span> <span class="n">construct_GetAZs</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!GetAZs us-east-1&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="go">[&#39;us-east-1a&#39;, &#39;us-east-1b&#39;, &#39;us-east-1c&#39;, &#39;us-east-1d&#39;, &#39;us-east-1e&#39;]</span>
+</code></pre></div>
 <h3 id="but-i-don-t-know-the-tags-in-advance">But I don't know the tags in advance<span class="headerlink"> <a href="#but-i-don-t-know-the-tags-in-advance" title="permalink">#</a></span></h3>
 <p>TODO: better title</p>
 <ul>
