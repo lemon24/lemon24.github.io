@@ -24,6 +24,8 @@
 <title>yaml: could not determine a constructor for the tag - death and gravity</title>
 
 
+<meta name="description" content="In this article, you&#39;ll find out what PyYAML &#34;could not determine a constructor for the tag&#34; ConstructorErrors mean, why do they happen, and what you can do about it." />
+
 
 
 <script>
@@ -62,7 +64,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ three minute read
+∙ four minute read
 
 
 </small></p>
@@ -129,7 +131,7 @@ PyYAML <em>cannot</em> know about this tag without being told explicitly
 <p>That said, tag resolution is specific to the application. YAML processors should therefore provide <strong>a mechanism allowing the application to override and expand</strong> these default tag resolution rules.</p>
 </blockquote>
 <!-- TODO: links -->
-<!-- TODO: subscribe box before what now -->
+
 <h2 id="what-now">What now?<span class="headerlink"> <a href="#what-now" title="permalink">#</a></span></h2>
 <h3 id="python-specific-tags">Python-specific tags<span class="headerlink"> <a href="#python-specific-tags" title="permalink">#</a></span></h3>
 <p>For Python-specific tags,
@@ -194,16 +196,97 @@ which isn't necessarily great; imagine getting a GetAZs from <code>safe_load()</
 <span class="go">[&#39;us-east-1a&#39;, &#39;us-east-1b&#39;, &#39;us-east-1c&#39;, &#39;us-east-1d&#39;, &#39;us-east-1e&#39;]</span>
 </code></pre></div>
 <h3 id="but-i-don-t-know-the-tags-in-advance">But I don't know the tags in advance<span class="headerlink"> <a href="#but-i-don-t-know-the-tags-in-advance" title="permalink">#</a></span></h3>
-<p>TODO: better title</p>
+<p>For the above to work, you need to implement converters for each expected tag.</p>
+<p>But sometimes:</p>
 <ul>
-<li>but you need to know the tags in advance<ul>
-<li>painful to define for all tags</li>
-<li>not always possible</li>
-<li>sometimes, you just want to access the data (without interpreting it in a specific way)</li>
-<li><a href="/any-yaml">any-yaml</a> has your back; good for emitting/writing this kind of YAML too</li>
+<li>you don't know the tags in advance</li>
+<li>there's too many of them</li>
+<li>you just want to access the data, without caring what it means<ul>
+<li>e.g. because you want to just change a little thing and write it back out</li>
 </ul>
 </li>
 </ul>
+<p>For this case, you can make a generic wrapper, and wrap <em>all</em> values with unknown tags.
+I've written <a href="/any-yaml">a whole article</a> about how to do this, complete with code:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!GetAZs us-east-1&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="go">Tagged(&#39;!GetAZs&#39;, &#39;us-east-1&#39;)</span>
+</code></pre></div>
+<p>It works with arbitrarily nested YAML:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">value</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="gp">... </span><span class="s2">Properties:</span>
+<span class="gp">... </span><span class="s2">  ImageId: !FindInMap [RegionMap, !Ref &#39;AWS::Region&#39;, HVM64]</span>
+<span class="gp">... </span><span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">value</span>
+<span class="go">{</span>
+<span class="go">    &#39;Properties&#39;: {</span>
+<span class="go">        &#39;ImageId&#39;: Tagged(</span>
+<span class="go">            &#39;!FindInMap&#39;,</span>
+<span class="go">            [&#39;RegionMap&#39;, Tagged(&#39;!Ref&#39;, &#39;AWS::Region&#39;), &#39;HVM64&#39;]</span>
+<span class="go">        )</span>
+<span class="go">    }</span>
+<span class="go">}</span>
+</code></pre></div>
+<p>... allows you to ignore tags most of the time:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">value</span><span class="p">[</span><span class="s1">&#39;Properties&#39;</span><span class="p">][</span><span class="s1">&#39;ImageId&#39;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;HVMG2&#39;</span>
+</code></pre></div>
+<p>... and allows you to write tagged YAML too:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Dumper</span><span class="o">=</span><span class="n">Dumper</span><span class="p">))</span>
+<span class="go">Properties:</span>
+<span class="go">  ImageId: !FindInMap</span>
+<span class="go">  - RegionMap</span>
+<span class="go">  - !Ref &#39;AWS::Region&#39;</span>
+<span class="go">  - HVMG2</span>
+</code></pre></div>
+<p>That's it for now.</p>
+<p><strong>Learned something new today?</strong> Share this with others, it really helps!</p>
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=yaml-unknown-tag"
+    method="post"
+    id="embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 
 
 
