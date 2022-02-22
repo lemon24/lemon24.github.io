@@ -24,7 +24,7 @@
 <title>yaml: could not determine a constructor for the tag - death and gravity</title>
 
 
-<meta name="description" content="In this article, you&#39;ll find out what PyYAML &#34;could not determine a constructor for the tag&#34; ConstructorErrors mean, why do they happen, and what you can do about it." />
+<meta name="description" content="... in which you&#39;ll find out what &#34;could not determine a constructor for the tag&#34; PyYAML errors mean, why do they happen, and what you can do about it." />
 
 
 
@@ -40,6 +40,15 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
 
 
 
@@ -60,7 +69,7 @@ window.addEventListener('resize', set_vh);
 <h1 class="heading-noindex">yaml: could not determine a constructor for the tag</h1>
 
 <p class="text-gray"><small>
-<span class="tooltip" data-tooltip="published on 2022-02-02">February 2022</span>
+<span class="tooltip" data-tooltip="published on 2022-02-22">February 2022</span>
 
 
 
@@ -101,11 +110,10 @@ and get an exception like this:</p>
 </code></pre></div>
 <h2 id="what-does-it-mean">What does it mean?<span class="headerlink"> <a href="#what-does-it-mean" title="permalink">#</a></span></h2>
 <p>First, a bit of background.</p>
-<p>Aside from the basic types (strings, integers, sequences, and so on),
-YAML can represent native and user-defined data structures.</p>
-<p>To denote the type of a node (scalar, sequence, mapping),
-you mark it with an explicit <a href="https://yaml.org/spec/1.2.2/#tags">tag</a>.
-Even basic types end up with a tag; these are all equivalent:</p>
+<p>On top of basic types (strings, integers, sequences, and so on),
+YAML can represent native and user-defined data structures.
+To denote the type of a node, you mark it with an explicit <a href="https://yaml.org/spec/1.2.2/#tags">tag</a>.
+Even basic types end up with a tag; the following are all equivalent:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="s2">&quot;[implicit]&quot;</span><span class="p">)</span>
 <span class="go">[&#39;implicit&#39;]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="s2">&quot;!!seq [global, shorthand]&quot;</span><span class="p">)</span>
@@ -113,24 +121,133 @@ Even basic types end up with a tag; these are all equivalent:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="s2">&quot;!&lt;tag:yaml.org,2002:seq&gt; [global, full]&quot;</span><span class="p">)</span>
 <span class="go">[&#39;global&#39;, &#39;full&#39;]</span>
 </code></pre></div>
-<p>Both errors above mean that the YAML loader encountered a node with an explicit tag,
-but it doesn't know how to construct objects with that tag.</p>
+<p>The errors above both mean that the loader encountered an explicit tag,
+but doesn't know how to <em>construct</em> objects with that tag.</p>
 <h2 id="why-does-this-happen">Why does this happen?<span class="headerlink"> <a href="#why-does-this-happen" title="permalink">#</a></span></h2>
-<p>The tag in the tuple example is language-specific,
-and corresponds to a Python native data structure (a tuple).
+<p><code>!!python/tuple</code> is a language-specific tag
+corresponding to a Python native data structure (a tuple).
 However, <code>safe_load()</code> resolves only basic YAML tags,
-which are known to be safe for untrusted input.</p>
-<hr />
-<p>The tag in the !GetAZs example is application-specific
-(in this case, specific to AWS CloudFormation).</p>
-<p>Even if we didn't use <code>safe_load()</code>,
-PyYAML <em>cannot</em> know about this tag without being told explicitly
-(by using a custom, application-specific loader).</p>
+known to be safe for untrusted input.</p>
+<p><code>!GetAZs</code> is an application-specific tag
+(in this case, specific to AWS CloudFormation).
+There's no way for PyYAML to know about it without being told explicitly.</p>
 <p>This is by design – from the <a href="https://yaml.org/spec/1.2.2/#332-resolved-tags">spec</a>:</p>
 <blockquote>
-<p>That said, tag resolution is specific to the application. YAML processors should therefore provide <strong>a mechanism allowing the application to override and expand</strong> these default tag resolution rules.</p>
+<p>That said, <strong>tag resolution is specific to the application</strong>. YAML processors should therefore provide a mechanism allowing the application to override and expand these default tag resolution rules.</p>
 </blockquote>
-<!-- TODO: links -->
+<h2 id="what-now">What now?<span class="headerlink"> <a href="#what-now" title="permalink">#</a></span></h2>
+<h3 id="python-specific-tags">Python-specific tags<span class="headerlink"> <a href="#python-specific-tags" title="permalink">#</a></span></h3>
+<p>For Python-specific tags,
+you can use <code>full_load()</code>,
+which resolves all tags <em>except</em> those known to be unsafe;
+this includes all the  tags listed
+<a href="https://pyyaml.org/wiki/PyYAMLDocumentation#yaml-tags-and-python-types">here</a>.</p>
+<p>You could also use <code>unsafe_load()</code>, but most of the time it's not what you want:</p>
+<section class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><code>yaml.unsafe_load()</code> is <strong>unsafe</strong> for <strong>untrusted data</strong>,
+ because it allows <strong>running arbitrary code</strong>.
+ Consider using <code>safe_load()</code> or <code>full_load()</code> instead.</p>
+<p>For example, you can do this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">unsafe_load</span><span class="p">(</span><span class="s2">&quot;!!python/object/new:os.system [echo WOOSH. YOU HAVE been compromised]&quot;</span><span class="p">)</span>
+<span class="go">WOOSH. YOU HAVE been compromised</span>
+<span class="go">0</span>
+</code></pre></div>
+<p>There were a bunch of <a href="https://www.cvedetails.com/vulnerability-list/vendor_id-13115/Pyyaml.html">CVEs</a> about it.</p>
+</section>
+<h3 id="application-specific-tags">Application-specific tags<span class="headerlink"> <a href="#application-specific-tags" title="permalink">#</a></span></h3>
+<p>For application-specific tags,
+you can define a constructor for the tag:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">GetAZs</span><span class="p">:</span>
+    <span class="n">region</span><span class="p">:</span> <span class="nb">str</span>
+
+<span class="k">class</span> <span class="nc">Loader</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">SafeLoader</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="k">def</span> <span class="nf">construct_GetAZs</span><span class="p">(</span><span class="n">loader</span><span class="p">,</span> <span class="n">node</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">GetAZs</span><span class="p">(</span><span class="n">loader</span><span class="o">.</span><span class="n">construct_scalar</span><span class="p">(</span><span class="n">node</span><span class="p">))</span>
+
+<span class="n">Loader</span><span class="o">.</span><span class="n">add_constructor</span><span class="p">(</span><span class="s1">&#39;!GetAZs&#39;</span><span class="p">,</span> <span class="n">construct_GetAZs</span><span class="p">)</span>
+</code></pre></div>
+<p>Here, we're wrapping the value in a dataclass,
+to indicate is isn't just a simple string.</p>
+<section class="admonition note">
+<p class="admonition-title">Note</p>
+<p>We are subclassing SafeLoader because calling <code>add_constructor()</code> on it
+ would modify it in-place, for <em>everyone</em>, which isn't necessarily great;
+ imagine getting a GetAZs from <code>safe_load()</code>,
+ when you were expecting only built-in types.</p>
+</section>
+<p>To use it, pass the loader class to <code>load()</code>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!GetAZs us-east-1&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="go">GetAZs(region=&#39;us-east-1&#39;)</span>
+</code></pre></div>
+<p>Of course, you don't have to store the value,
+you can <em>do something</em> with it
+– after all, that's what CloudFormation does:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">KNOWN_AZS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;us-east-1&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;us-east-1a&#39;</span><span class="p">,</span> <span class="s1">&#39;us-east-1b&#39;</span><span class="p">,</span> <span class="s1">&#39;us-east-1c&#39;</span><span class="p">,</span> <span class="s1">&#39;us-east-1d&#39;</span><span class="p">,</span> <span class="s1">&#39;us-east-1e&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;eu-west-1&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;eu-west-1a&#39;</span><span class="p">,</span> <span class="s1">&#39;eu-west-1b&#39;</span><span class="p">,</span> <span class="s1">&#39;eu-west-1c&#39;</span><span class="p">],</span>
+<span class="p">}</span>
+
+<span class="k">def</span> <span class="nf">construct_GetAZs</span><span class="p">(</span><span class="n">loader</span><span class="p">,</span> <span class="n">node</span><span class="p">):</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">construct_scalar</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">KNOWN_AZS</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">yaml</span><span class="o">.</span><span class="n">constructor</span><span class="o">.</span><span class="n">ConstructorError</span><span class="p">(</span>
+            <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;GetAZs got unknown region </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">start_mark</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">KNOWN_AZS</span><span class="p">[</span><span class="n">value</span><span class="p">]</span>
+
+<span class="n">Loader</span><span class="o">.</span><span class="n">add_constructor</span><span class="p">(</span><span class="s1">&#39;!GetAZs&#39;</span><span class="p">,</span> <span class="n">construct_GetAZs</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!GetAZs us-east-1&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="go">[&#39;us-east-1a&#39;, &#39;us-east-1b&#39;, &#39;us-east-1c&#39;, &#39;us-east-1d&#39;, &#39;us-east-1e&#39;]</span>
+</code></pre></div>
+<h3 id="but-i-don-t-know-the-tags-in-advance">But I don't know the tags in advance<span class="headerlink"> <a href="#but-i-don-t-know-the-tags-in-advance" title="permalink">#</a></span></h3>
+<p>For the above to work, you need to register constructors for each expected tag.</p>
+<p>But sometimes
+you don't know the tags in advance,
+or there's too many of them,
+or you just want to access the data, without caring what it means
+(for example, because you just want to change a little thing and write it back out).</p>
+<p>YAML allows you to register a catch-all constructor for unknown tags
+...but you still need to implement some sort of generic wrapper to go with it.</p>
+<p>Luckily, I've already written <a href="/any-yaml">a whole article</a> on how to do that,
+complete with code:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!GetAZs us-east-1&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="go">Tagged(&#39;!GetAZs&#39;, &#39;us-east-1&#39;)</span>
+</code></pre></div>
+<p>It works with arbitrarily nested YAML:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">value</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="gp">... </span><span class="s2">Properties:</span>
+<span class="gp">... </span><span class="s2">  ImageId: !FindInMap [RegionMap, !Ref &#39;AWS::Region&#39;, HVM64]</span>
+<span class="gp">... </span><span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">value</span>
+<span class="go">{</span>
+<span class="go">    &#39;Properties&#39;: {</span>
+<span class="go">        &#39;ImageId&#39;: Tagged(</span>
+<span class="go">            &#39;!FindInMap&#39;,</span>
+<span class="go">            [&#39;RegionMap&#39;, Tagged(&#39;!Ref&#39;, &#39;AWS::Region&#39;), &#39;HVM64&#39;]</span>
+<span class="go">        )</span>
+<span class="go">    }</span>
+<span class="go">}</span>
+</code></pre></div>
+<p>... allows you to ignore tags most of the time:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">value</span><span class="p">[</span><span class="s1">&#39;Properties&#39;</span><span class="p">][</span><span class="s1">&#39;ImageId&#39;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;HVMG2&#39;</span>
+</code></pre></div>
+<p>... and can output tagged YAML too:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Dumper</span><span class="o">=</span><span class="n">Dumper</span><span class="p">))</span>
+<span class="go">Properties:</span>
+<span class="go">  ImageId: !FindInMap</span>
+<span class="go">  - RegionMap</span>
+<span class="go">  - !Ref &#39;AWS::Region&#39;</span>
+<span class="go">  - HVMG2</span>
+</code></pre></div>
+<p>Check it out: <a href="/any-yaml">Dealing with YAML with arbitrary tags in Python</a>.</p>
+<hr />
+<p>That's it for now.</p>
+<p><strong>Learned something new today?</strong> Share this with others, it really helps!</p>
 <form
     action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=yaml-unknown-tag"
     method="post"
@@ -179,114 +296,6 @@ PyYAML <em>cannot</em> know about this tag without being told explicitly
     </div>
 
 </form>
-<h2 id="what-now">What now?<span class="headerlink"> <a href="#what-now" title="permalink">#</a></span></h2>
-<h3 id="python-specific-tags">Python-specific tags<span class="headerlink"> <a href="#python-specific-tags" title="permalink">#</a></span></h3>
-<p>For Python-specific tags,
-you can use <code>full_load()</code> (starting with PyYAML 6.0),
-which resolves all tags <em>except</em> those known to be unsafe on untrusted input;
-this includes all the  tags listed
-<a href="https://pyyaml.org/wiki/PyYAMLDocumentation#yaml-tags-and-python-types">here</a>.</p>
-<p>You could use <code>unsafe_load()</code>, which resolves all tags, even those known to be unsafe on untrusted input.</p>
-<section class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p><code>yaml.unsafe_load()</code> is <strong>unsafe</strong> for <strong>untrusted data</strong>,
- because it allows <strong>running arbitrary code</strong>.
- Consider using <code>safe_load()</code> or <code>full_load()</code> instead.</p>
- <details>
- <summary>Details.</summary>
-<p>For example, you can do this:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">unsafe_load</span><span class="p">(</span><span class="s2">&quot;!!python/object/new:os.system [echo WOOSH. YOU HAVE been compromised]&quot;</span><span class="p">)</span>
-<span class="go">WOOSH. YOU HAVE been compromised</span>
-<span class="go">0</span>
-</code></pre></div>
-<p>There were a bunch of <a href="https://www.cvedetails.com/vulnerability-list/vendor_id-13115/Pyyaml.html">CVEs</a> about it.</p>
- </details>
-</section>
-<h3 id="application-specific-tags">Application-specific tags<span class="headerlink"> <a href="#application-specific-tags" title="permalink">#</a></span></h3>
-<p>For the application-specific case, you need to define a constructor for each tag:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@dataclass</span>
-<span class="k">class</span> <span class="nc">GetAZs</span><span class="p">:</span>
-    <span class="n">region</span><span class="p">:</span> <span class="nb">str</span>
-
-<span class="k">class</span> <span class="nc">Loader</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">SafeLoader</span><span class="p">):</span>
-    <span class="k">pass</span>
-
-<span class="k">def</span> <span class="nf">construct_GetAZs</span><span class="p">(</span><span class="n">loader</span><span class="p">,</span> <span class="n">node</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">GetAZs</span><span class="p">(</span><span class="n">loader</span><span class="o">.</span><span class="n">construct_scalar</span><span class="p">(</span><span class="n">node</span><span class="p">))</span>
-
-<span class="n">Loader</span><span class="o">.</span><span class="n">add_constructor</span><span class="p">(</span><span class="s1">&#39;!GetAZs&#39;</span><span class="p">,</span> <span class="n">construct_GetAZs</span><span class="p">)</span>
-</code></pre></div>
-<p>Here, we're just wrapping the value in a GetAZs dataclass, to say &quot;hey, this isn't just a simple string&quot;.</p>
-<p>We are subclassing SafeLoader because calling <code>SafeLoader.add_constructor</code> would modify it in-place, for <em>everyone</em>,
-which isn't necessarily great; imagine getting a GetAZs from <code>safe_load()</code>, when you were expecting only built-in types.</p>
-<p>You use the loader by passing it to <code>load()</code>:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!GetAZs us-east-1&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
-<span class="go">GetAZs(region=&#39;us-east-1&#39;)</span>
-</code></pre></div>
-<p>Of course, you don't have to just <em>store</em> the value, you can <em>do something</em> with it (after all, that's what CloudFormation does):</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">KNOWN_AZS</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">&#39;us-east-1&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;us-east-1a&#39;</span><span class="p">,</span> <span class="s1">&#39;us-east-1b&#39;</span><span class="p">,</span> <span class="s1">&#39;us-east-1c&#39;</span><span class="p">,</span> <span class="s1">&#39;us-east-1d&#39;</span><span class="p">,</span> <span class="s1">&#39;us-east-1e&#39;</span><span class="p">],</span>
-    <span class="s1">&#39;eu-west-1&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;eu-west-1a&#39;</span><span class="p">,</span> <span class="s1">&#39;eu-west-1b&#39;</span><span class="p">,</span> <span class="s1">&#39;eu-west-1c&#39;</span><span class="p">],</span>
-<span class="p">}</span>
-
-<span class="k">def</span> <span class="nf">construct_GetAZs</span><span class="p">(</span><span class="n">loader</span><span class="p">,</span> <span class="n">node</span><span class="p">):</span>
-    <span class="n">value</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">construct_scalar</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">KNOWN_AZS</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">yaml</span><span class="o">.</span><span class="n">constructor</span><span class="o">.</span><span class="n">ConstructorError</span><span class="p">(</span>
-            <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;GetAZs got unknown region </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">start_mark</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">KNOWN_AZS</span><span class="p">[</span><span class="n">value</span><span class="p">]</span>
-
-<span class="n">Loader</span><span class="o">.</span><span class="n">add_constructor</span><span class="p">(</span><span class="s1">&#39;!GetAZs&#39;</span><span class="p">,</span> <span class="n">construct_GetAZs</span><span class="p">)</span>
-</code></pre></div>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!GetAZs us-east-1&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
-<span class="go">[&#39;us-east-1a&#39;, &#39;us-east-1b&#39;, &#39;us-east-1c&#39;, &#39;us-east-1d&#39;, &#39;us-east-1e&#39;]</span>
-</code></pre></div>
-<h3 id="but-i-don-t-know-the-tags-in-advance">But I don't know the tags in advance<span class="headerlink"> <a href="#but-i-don-t-know-the-tags-in-advance" title="permalink">#</a></span></h3>
-<p>For the above to work, you need to implement converters for each expected tag.</p>
-<p>But sometimes:</p>
-<ul>
-<li>you don't know the tags in advance</li>
-<li>there's too many of them</li>
-<li>you just want to access the data, without caring what it means<ul>
-<li>e.g. because you want to just change a little thing and write it back out</li>
-</ul>
-</li>
-</ul>
-<p>For this case, you can make a generic wrapper, and wrap <em>all</em> values with unknown tags.
-I've written <a href="/any-yaml">a whole article</a> about how to do this, complete with code:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;!GetAZs us-east-1&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
-<span class="go">Tagged(&#39;!GetAZs&#39;, &#39;us-east-1&#39;)</span>
-</code></pre></div>
-<p>It works with arbitrarily nested YAML:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">value</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
-<span class="gp">... </span><span class="s2">Properties:</span>
-<span class="gp">... </span><span class="s2">  ImageId: !FindInMap [RegionMap, !Ref &#39;AWS::Region&#39;, HVM64]</span>
-<span class="gp">... </span><span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">value</span>
-<span class="go">{</span>
-<span class="go">    &#39;Properties&#39;: {</span>
-<span class="go">        &#39;ImageId&#39;: Tagged(</span>
-<span class="go">            &#39;!FindInMap&#39;,</span>
-<span class="go">            [&#39;RegionMap&#39;, Tagged(&#39;!Ref&#39;, &#39;AWS::Region&#39;), &#39;HVM64&#39;]</span>
-<span class="go">        )</span>
-<span class="go">    }</span>
-<span class="go">}</span>
-</code></pre></div>
-<p>... allows you to ignore tags most of the time:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">value</span><span class="p">[</span><span class="s1">&#39;Properties&#39;</span><span class="p">][</span><span class="s1">&#39;ImageId&#39;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;HVMG2&#39;</span>
-</code></pre></div>
-<p>... and allows you to write tagged YAML too:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Dumper</span><span class="o">=</span><span class="n">Dumper</span><span class="p">))</span>
-<span class="go">Properties:</span>
-<span class="go">  ImageId: !FindInMap</span>
-<span class="go">  - RegionMap</span>
-<span class="go">  - !Ref &#39;AWS::Region&#39;</span>
-<span class="go">  - HVMG2</span>
-</code></pre></div>
-<p>That's it for now.</p>
-<p><strong>Learned something new today?</strong> Share this with others, it really helps!</p>
-
 
 
 
