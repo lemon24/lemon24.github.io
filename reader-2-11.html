@@ -1,0 +1,250 @@
+
+
+
+
+
+
+
+<!doctype html>
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+
+
+
+
+
+
+<title>reader 2.11 released - death and gravity</title>
+
+
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1 class="heading-noindex">reader 2.11 released</h1>
+
+<p class="text-gray"><small>
+<span class="tooltip" data-tooltip="published on 2022-03-18">March 2022</span>
+
+
+
+∙ four minute read
+
+
+</small></p>
+
+
+
+
+
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<p>Hi there!</p>
+<p>I'm happy to announce version 2.11 of <strong><a href="https://github.com/lemon24/reader">reader</a></strong>, a Python feed reader library.</p>
+<h2 id="what-s-new">What's new?<span class="headerlink"> <a href="#what-s-new" title="permalink">#</a></span></h2>
+<p>Here are the most important changes since <a href="/reader-2-5">reader 2.5</a>.</p>
+<h3 id="unified-tag-api-entry-and-global-tags">Unified tag API + entry and global tags<span class="headerlink"> <a href="#unified-tag-api-entry-and-global-tags" title="permalink">#</a></span></h3>
+<p>Tags and metadata are now the same thing, generic <a href="https://reader.readthedocs.io/en/stable/guide.html#resource-tags">resource tags</a>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">reader</span><span class="o">.</span><span class="n">get_tag</span><span class="p">(</span><span class="n">feed</span><span class="p">,</span> <span class="s1">&#39;one&#39;</span><span class="p">,</span> <span class="s1">&#39;default&#39;</span><span class="p">)</span>
+<span class="go">&#39;default&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reader</span><span class="o">.</span><span class="n">set_tag</span><span class="p">(</span><span class="n">feed</span><span class="p">,</span> <span class="s1">&#39;one&#39;</span><span class="p">,</span> <span class="s1">&#39;value&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reader</span><span class="o">.</span><span class="n">get_tag</span><span class="p">(</span><span class="n">feed</span><span class="p">,</span> <span class="s1">&#39;one&#39;</span><span class="p">)</span>
+<span class="go">&#39;value&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reader</span><span class="o">.</span><span class="n">set_tag</span><span class="p">(</span><span class="n">feed</span><span class="p">,</span> <span class="s1">&#39;two&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">dict</span><span class="p">(</span><span class="n">reader</span><span class="o">.</span><span class="n">get_tags</span><span class="p">(</span><span class="n">feed</span><span class="p">))</span>
+<span class="go">{&#39;one&#39;: &#39;value&#39;, &#39;two&#39;: None}</span>
+</code></pre></div>
+<p>This means you can filter by metadata keys, and attach values to tags.</p>
+<p>Even better, tags aren't just for feeds anymore – 
+you can add tags to entries, and to a shared global namespace.</p>
+<p>The old feed-specific tag and metadata methods are still available,
+but are <a href="https://reader.readthedocs.io/en/stable/changelog.html#version-2-8">deprecated</a> and will be removed in version 3.0.</p>
+<h3 id="memory-usage-improvements">Memory usage improvements<span class="headerlink"> <a href="#memory-usage-improvements" title="permalink">#</a></span></h3>
+<p><code>update_feeds()</code> got two improvements that together total a ~22% reduction in the memory usage of <code>reader update --workers 2</code> (maxrss, measured &quot;in the wild&quot;).</p>
+<p>The first one is not in <em>reader</em>, 
+but a change I contributed in <a href="https://feedparser.readthedocs.io/">feedparser</a>:
+instead of reading the whole feed in memory to detect encoding,
+detect encoding using a prefix of the feed, and decode the rest on the fly.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
+<p>This ended up decreasing the <code>update_feeds()</code> max RSS by ~20% (35%, when compared to baseline!).</p>
+<p>Until the change is released upstream, <em>reader</em> will vendor the patched feedparser.</p>
+<p>The second one is <em>parsing</em> feeds serially, 
+using multiple workers only to <em>retrieve</em> feeds.
+Since parsing time is mostly spent in pure Python code,
+there's no speed-up from doing it in parallel –
+but it each thread will take up extra memory.</p>
+<p>This ended up decreasing the <code>update_feeds()</code> memory usage by another ~20%
+(but only when using  more than one worker, and only on Linux;
+the macOS decrease is less notable).</p>
+<h3 id="bug-fixes">Bug fixes<span class="headerlink"> <a href="#bug-fixes" title="permalink">#</a></span></h3>
+<ul>
+<li>Fix issue causing :func:<code>make_reader</code> to fail with message
+<code>database requirement error: required SQLite compile options missing: ['ENABLE_JSON1']</code>
+when using SQLite 3.38 or newer.
+(:issue:<code>273</code>)</li>
+</ul>
+<h3 id="api-niceties">API niceties<span class="headerlink"> <a href="#api-niceties" title="permalink">#</a></span></h3>
+<ul>
+<li><p>Add the <code>missing_ok</code> argument to :meth:<code>~Reader.delete_feed</code>
+and :meth:<code>~Reader.delete_entry</code>.</p>
+</li>
+<li><p>Add the <code>exist_ok</code> argument to :meth:<code>~Reader.add_feed</code>.</p>
+</li>
+<li><p>Allow running arbitrary actions before updating feeds
+via :attr:<code>~Reader.before_feed_update_hooks</code>.</p>
+</li>
+<li><p>Expose :data:<code>reader.plugins.DEFAULT_PLUGINS</code>.</p>
+</li>
+<li><p>Allow :meth:<code>~Reader.update_feeds()</code> and :meth:<code>~Reader.update_feeds_iter()</code>
+to filter feeds by <code>feed</code>, <code>tags</code>, <code>broken</code>, and <code>updates_enabled</code>.
+(:issue:<code>193</code>, :issue:<code>219</code>, :issue:<code>220</code>)</p>
+</li>
+<li><p>Allow :meth:<code>~Reader.get_feeds()</code> and :meth:<code>~Reader.get_feed_counts()</code>
+to filter feeds by <code>new</code>.
+(:issue:<code>217</code>)</p>
+</li>
+</ul>
+<h3 id="various-web-app-stuff">Various web app stuff<span class="headerlink"> <a href="#various-web-app-stuff" title="permalink">#</a></span></h3>
+<ul>
+<li><p>In the web application, show maxrss when debug is enabled. (:issue:<code>269</code>)</p>
+</li>
+<li><p>In the web application, decrease memory usage of the entries page
+when there are a lot of entries
+(e.g. for 2.5k entries, maxrss decreased from 115 MiB to 75 MiB),
+at the expense of making &quot;entries for feed&quot; slightly slower.
+(:issue:<code>269</code>)</p>
+</li>
+<li><p>In the web application, support editing entry and global metadata.
+Fix broken delete metadata button.
+Fix broken error flashing.</p>
+</li>
+<li><p>Add support for CLI plugins.</p>
+</li>
+<li><p>Add the :mod:<code>~reader._plugins.cli_status</code> experimental plugin.</p>
+</li>
+<li><p>In the web application, allow sorting feeds by the number of entries:
+important, unread, per day during the last 1, 3, 12 months.
+(:issue:<code>249</code>, :issue:<code>245</code>).</p>
+</li>
+<li><p>In the web application, show entry read time.</p>
+</li>
+</ul>
+<h2 id="what-is-reader">What is <em>reader</em>?<span class="headerlink"> <a href="#what-is-reader" title="permalink">#</a></span></h2>
+<p><strong>reader</strong> takes care
+of the core functionality required by a feed reader,
+so you can focus on what makes <strong>yours</strong> different.</p>
+<p><img class="img-responsive" src="/_file/reader-2-0/reader.png" alt="reader in action" />
+<em>reader</em> allows you to:</p>
+<ul>
+<li>retrieve, store, and manage <strong>Atom</strong>, <strong>RSS</strong>, and <strong>JSON</strong> feeds</li>
+<li>mark entries as read or important</li>
+<li>add tags and metadata to feeds</li>
+<li>filter feeds and articles</li>
+<li>full-text search articles</li>
+<li>get statistics on feed and user activity</li>
+<li>write plugins to extend its functionality</li>
+</ul>
+<p>...all these with:</p>
+<ul>
+<li>a stable, clearly documented API</li>
+<li>excellent test coverage</li>
+<li>fully typed Python</li>
+</ul>
+<p>To find out more, check out the <a href="https://github.com/lemon24/reader">GitHub repo</a> and the <a href="https://reader.readthedocs.io/en/stable/">docs</a>,
+or give the <a href="https://reader.readthedocs.io/en/stable/tutorial.html">tutorial</a> a try.</p>
+<h2 id="why-use-a-feed-reader-library">Why use a feed reader library?<span class="headerlink"> <a href="#why-use-a-feed-reader-library" title="permalink">#</a></span></h2>
+<p>Have you been unhappy with existing feed readers and wanted to make your own, but:</p>
+<ul>
+<li>never knew where to start?</li>
+<li>it seemed like too much work?</li>
+<li>you don't like writing backend code?</li>
+</ul>
+<p>Are you already working with <a href="https://feedparser.readthedocs.io/">feedparser</a>, but:</p>
+<ul>
+<li>want an easier way to store, filter, sort and search feeds and entries?</li>
+<li>want to get back type-annotated objects instead of dicts?</li>
+<li>want to restrict or deny file-system access?</li>
+<li>want to change the way feeds are retrieved by using <a href="https://requests.readthedocs.io">Requests</a>?</li>
+<li>want to also support <a href="https://jsonfeed.org/">JSON Feed</a>?</li>
+</ul>
+<p>... while still supporting all the feed types feedparser does?</p>
+<p>If you answered yes to any of the above, <em>reader</em> can help.</p>
+<h2 id="why-make-your-own-feed-reader">Why make your own feed reader?<span class="headerlink"> <a href="#why-make-your-own-feed-reader" title="permalink">#</a></span></h2>
+<p>So you can:</p>
+<ul>
+<li>have full control over your data</li>
+<li>control what features it has or doesn't have</li>
+<li>decide how much you pay for it</li>
+<li>make sure it doesn't get closed while you're still using it</li>
+<li>really, it's <a href="https://rachelbythebay.com/w/2011/10/26/fred/">easier than you think</a></li>
+</ul>
+<p>Obviously, this may not be your cup of tea, but if it is, <em>reader</em> can help.</p>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>If you'd like to read more about the whole thing, <a href="/about#contact">drop me a line</a>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
+
+
+
+
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+
+
+
+</footer>
+
+
+</div>
