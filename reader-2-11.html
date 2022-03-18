@@ -38,6 +38,15 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
 
 
 
@@ -62,7 +71,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ four minute read
+∙ three minute read
 
 
 </small></p>
@@ -94,78 +103,40 @@ window.addEventListener('resize', set_vh);
 <span class="go">{&#39;one&#39;: &#39;value&#39;, &#39;two&#39;: None}</span>
 </code></pre></div>
 <p>This means you can filter by metadata keys, and attach values to tags.</p>
-<p>Even better, tags aren't just for feeds anymore – 
+<p>Even better, tags aren't just for feeds anymore –
 you can add tags to entries, and to a shared global namespace.</p>
 <p>The old feed-specific tag and metadata methods are still available,
 but are <a href="https://reader.readthedocs.io/en/stable/changelog.html#version-2-8">deprecated</a> and will be removed in version 3.0.</p>
 <h3 id="memory-usage-improvements">Memory usage improvements<span class="headerlink"> <a href="#memory-usage-improvements" title="permalink">#</a></span></h3>
-<p><code>update_feeds()</code> got two improvements that together total a ~22% reduction in the memory usage of <code>reader update --workers 2</code> (maxrss, measured &quot;in the wild&quot;).</p>
-<p>The first one is not in <em>reader</em>, 
-but a change I contributed in <a href="https://feedparser.readthedocs.io/">feedparser</a>:
+<p><code>reader update --workers 2</code> uses about 22% less memory, owed to two changes.</p>
+<p>The first one is not in <em>reader</em> itself,
+but was contributed to <a href="https://feedparser.readthedocs.io/">feedparser</a>:
 instead of reading the whole feed in memory to detect encoding,
-detect encoding using a prefix of the feed, and decode the rest on the fly.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
-<p>This ended up decreasing the <code>update_feeds()</code> max RSS by ~20% (35%, when compared to baseline!).</p>
-<p>Until the change is released upstream, <em>reader</em> will vendor the patched feedparser.</p>
-<p>The second one is <em>parsing</em> feeds serially, 
-using multiple workers only to <em>retrieve</em> feeds.
+use a prefix of the feed, and decode the rest on the fly.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
+<p>The result is a ~20% decrease in <code>update_feeds()</code> maximum resident set size
+(35%, when compared to baseline!).</p>
+<p><em>reader</em> will vendor the patched feedparser
+until the change is released upstream,
+so you can reap the benefits now.</p>
+<p>The second one is parsing feeds serially,
+using multiple workers only to retrieve them.
 Since parsing time is mostly spent in pure Python code,
 there's no speed-up from doing it in parallel –
-but it each thread will take up extra memory.</p>
-<p>This ended up decreasing the <code>update_feeds()</code> memory usage by another ~20%
-(but only when using  more than one worker, and only on Linux;
-the macOS decrease is less notable).</p>
+but each thread takes up extra memory.</p>
+<p>This decreased <code>update_feeds()</code> memory usage by another ~20%
+when using more than one worker
+(but only on Linux; the macOS decrease is less notable).</p>
 <h3 id="bug-fixes">Bug fixes<span class="headerlink"> <a href="#bug-fixes" title="permalink">#</a></span></h3>
+<p>The way <em>reader</em> checked SQLite has JSON support was somewhat brittle,
+causing it to fail on <a href="https://www.sqlite.org/releaselog/3_38_0.html">SQLite 3.38</a>; <em>reader</em> 2.11 fixes this.</p>
+<h3 id="usability-improvements">Usability improvements<span class="headerlink"> <a href="#usability-improvements" title="permalink">#</a></span></h3>
+<p>Among a number of smaller API improvements, now you can:</p>
 <ul>
-<li>Fix issue causing :func:<code>make_reader</code> to fail with message
-<code>database requirement error: required SQLite compile options missing: ['ENABLE_JSON1']</code>
-when using SQLite 3.38 or newer.
-(:issue:<code>273</code>)</li>
-</ul>
-<h3 id="api-niceties">API niceties<span class="headerlink"> <a href="#api-niceties" title="permalink">#</a></span></h3>
-<ul>
-<li><p>Add the <code>missing_ok</code> argument to :meth:<code>~Reader.delete_feed</code>
-and :meth:<code>~Reader.delete_entry</code>.</p>
-</li>
-<li><p>Add the <code>exist_ok</code> argument to :meth:<code>~Reader.add_feed</code>.</p>
-</li>
-<li><p>Allow running arbitrary actions before updating feeds
-via :attr:<code>~Reader.before_feed_update_hooks</code>.</p>
-</li>
-<li><p>Expose :data:<code>reader.plugins.DEFAULT_PLUGINS</code>.</p>
-</li>
-<li><p>Allow :meth:<code>~Reader.update_feeds()</code> and :meth:<code>~Reader.update_feeds_iter()</code>
-to filter feeds by <code>feed</code>, <code>tags</code>, <code>broken</code>, and <code>updates_enabled</code>.
-(:issue:<code>193</code>, :issue:<code>219</code>, :issue:<code>220</code>)</p>
-</li>
-<li><p>Allow :meth:<code>~Reader.get_feeds()</code> and :meth:<code>~Reader.get_feed_counts()</code>
-to filter feeds by <code>new</code>.
-(:issue:<code>217</code>)</p>
-</li>
-</ul>
-<h3 id="various-web-app-stuff">Various web app stuff<span class="headerlink"> <a href="#various-web-app-stuff" title="permalink">#</a></span></h3>
-<ul>
-<li><p>In the web application, show maxrss when debug is enabled. (:issue:<code>269</code>)</p>
-</li>
-<li><p>In the web application, decrease memory usage of the entries page
-when there are a lot of entries
-(e.g. for 2.5k entries, maxrss decreased from 115 MiB to 75 MiB),
-at the expense of making &quot;entries for feed&quot; slightly slower.
-(:issue:<code>269</code>)</p>
-</li>
-<li><p>In the web application, support editing entry and global metadata.
-Fix broken delete metadata button.
-Fix broken error flashing.</p>
-</li>
-<li><p>Add support for CLI plugins.</p>
-</li>
-<li><p>Add the :mod:<code>~reader._plugins.cli_status</code> experimental plugin.</p>
-</li>
-<li><p>In the web application, allow sorting feeds by the number of entries:
-important, unread, per day during the last 1, 3, 12 months.
-(:issue:<code>249</code>, :issue:<code>245</code>).</p>
-</li>
-<li><p>In the web application, show entry read time.</p>
-</li>
+<li>filter feeds in the same way both when <a href="https://reader.readthedocs.io/en/stable/api.html#reader.Reader.get_feeds">getting</a> and when <a href="https://reader.readthedocs.io/en/stable/api.html#reader.Reader.update_feeds">updating</a> feeds
+– including by tags</li>
+<li>run arbitrary actions <a href="https://reader.readthedocs.io/en/stable/api.html#reader.Reader.before_feed_update_hooks">before updating feeds</a></li>
+<li>add an existing feed without getting an exception</li>
+<li>delete a missing feed or entry without getting an exception</li>
 </ul>
 <h2 id="what-is-reader">What is <em>reader</em>?<span class="headerlink"> <a href="#what-is-reader" title="permalink">#</a></span></h2>
 <p><strong>reader</strong> takes care
@@ -176,7 +147,7 @@ so you can focus on what makes <strong>yours</strong> different.</p>
 <ul>
 <li>retrieve, store, and manage <strong>Atom</strong>, <strong>RSS</strong>, and <strong>JSON</strong> feeds</li>
 <li>mark entries as read or important</li>
-<li>add tags and metadata to feeds</li>
+<li>add arbitrary metadata to feeds and articles</li>
 <li>filter feeds and articles</li>
 <li>full-text search articles</li>
 <li>get statistics on feed and user activity</li>
