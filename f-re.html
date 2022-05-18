@@ -24,6 +24,8 @@
 <title>The unreasonable effectiveness of f‍-‍strings and re.VERBOSE - death and gravity</title>
 
 
+<meta name="description" content="... in which we look at one or two ways to make life easier when working regular expressions in Python." />
+
 
 
 <script>
@@ -38,6 +40,15 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
 
 
 
@@ -58,7 +69,7 @@ window.addEventListener('resize', set_vh);
 <h1 class="heading-noindex">The unreasonable effectiveness of f‍-‍strings and re.VERBOSE</h1>
 
 <p class="text-gray"><small>
-<span class="tooltip" data-tooltip="published on 2021-11-24">November 2021</span>
+<span class="tooltip" data-tooltip="published on 2022-05-18">May 2022</span>
 
 
 
@@ -78,8 +89,8 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>... in which we look at one or two ways of making life way easier
-when working with Python regular expressions.</p>
+<p>... in which we look at one or two ways to make life easier
+when working regular expressions in Python.</p>
 <p>tl;dr: <strong>You can compose verbose regular expressions using f‍-‍strings.</strong></p>
 <p>Here's a real-world example – instead of this:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">1</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;((?:\(\s*)?[A-Z]*H\d+[a-z]*(?:\s*\+\s*[A-Z]*H\d+[a-z]*)*(?:\s*[\):+])?)(.*?)(?=(?:\(\s*)?[A-Z]*H\d+[a-z]*(?:\s*\+\s*[A-Z]*H\d+[a-z]*)*(?:\s*[\):+])?(?![^\w\s])|$)&quot;</span>
@@ -256,12 +267,16 @@ For comparison, the same pattern without f&zwj;-&zwj;strings (click to expand).
 <span class="s2">&quot;&quot;&quot;</span>
 </code></pre></div>
 </td></tr></table>
+<p>It's better than the non-verbose one,
+but even with careful formatting and comments,
+the repetition makes it pretty hard to follow
+– and wait until you have to change something!</p>
 </details>
 <p>Read on for <strong>more details</strong> and some <strong>caveats</strong>.</p>
 <h2 id="prerequisites">Prerequisites<span class="headerlink"> <a href="#prerequisites" title="permalink">#</a></span></h2>
-<p><a href="https://docs.python.org/3/glossary.html#term-f%E2%80%8D-%E2%80%8Dstring">f‍-‍strings</a> (formatted string literals) were added in Python 3.6,
+<p>Formatted string literals (<a href="https://docs.python.org/3/glossary.html#term-f-string">f‍-‍strings</a>) were added in Python 3.6<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
 and provide a way to embed expressions inside string literals,
-using a syntax similar to that of <a href="https://docs.python.org/3/library/stdtypes.html#str.format">str.format</a>:</p>
+using a syntax similar to that of <a href="https://docs.python.org/3/library/stdtypes.html#str.format">str.format()</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;world&quot;</span>
 <span class="go">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="s2">&quot;Hello, </span><span class="si">{name}</span><span class="s2">!&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
@@ -270,9 +285,9 @@ using a syntax similar to that of <a href="https://docs.python.org/3/library/std
 <span class="gp">&gt;&gt;&gt; </span><span class="sa">f</span><span class="s2">&quot;Hello, </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">!&quot;</span>
 <span class="go">&#39;Hello, world!&#39;</span>
 </code></pre></div>
-<p><a href="https://docs.python.org/3/library/re.html#re.VERBOSE">re.VERBOSE</a> (verbose regular expressions) have been in Python since forever<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
-and allow writing nice, readable regular expressions
-by allowing you to ignore whitespace and add comments:</p>
+<p>Verbose regular expressions (<a href="https://docs.python.org/3/library/re.html#re.VERBOSE">re.VERBOSE</a>) have been around since forever<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>,
+and allow writing regular expressions
+with non-significant whitespace and comments:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">text</span> <span class="o">=</span> <span class="s2">&quot;H1 code (AH2b+EUH3) fancy code&quot;</span>
 <span class="go">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">code</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;[A-Z]*H\d+[a-z]*&quot;</span>
@@ -299,64 +314,18 @@ by allowing you to ignore whitespace and add comments:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">multicode</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">VERBOSE</span><span class="p">)</span>
 <span class="go">[&#39;H1&#39;, &#39;(AH2b+EUH3)&#39;]</span>
 </code></pre></div>
-<p>It's so obvious,
-I only started doing it  after I started using Python 3.6 :)</p>
+<p>It's so obvious, I only took me three years to do it,
+despite using both features in that time.</p>
 <p>Of course, there's any number of libraries
-for building composable regular expressions;
+for building regular expressions;
 the benefit of this is that it has zero dependencies,
 and zero extra things you need to learn.</p>
-<form
-    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=f-re"
-    method="post"
-    id="embedded-subscribe-form"
-    name="mc-embedded-subscribe-form"
-    target="_blank"
-    novalidate
-    class="panel subscribe-form"
->
-    <div class="panel-header text-large">
 
-        Want to know when new articles come out?
-
-    </div>
-    <div class="panel-body">
-
-        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
-
-        <div class="form-group col-6 col-xs-12 col-md-9">
-        <input type="text" name="FNAME" id="mce-FNAME"
-            class="form-input input-lg"
-            placeholder="Your first name"
-        >
-        </div>
-
-        <div class="form-group col-6 col-xs-12 col-md-9">
-        <input type="email" name="EMAIL" id="mce-EMAIL"
-            class="form-input input-lg"
-            placeholder="Your email address"
-        >
-        </div>
-
-        <!-- bot prevention-->
-        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
-
-    </div>
-    <div class="panel-footer">
-
-        <div class="form-group">
-        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
-            class="btn btn-primary btn-lg"
-            value="Subscribe"
-        >
-        </div>
-
-    </div>
-
-</form>
 <h2 id="caveats">Caveats<span class="headerlink"> <a href="#caveats" title="permalink">#</a></span></h2>
-<h3 id="hashes-need-extra-care">Hashes need extra care<span class="headerlink"> <a href="#hashes-need-extra-care" title="permalink">#</a></span></h3>
-<p>Because <code>#</code> is already used to mark the start of a comment,
-you have to denote hash characters in some other way.</p>
+<h3 id="hashes-and-spaces-need-to-be-escaped">Hashes and spaces need to be escaped<span class="headerlink"> <a href="#hashes-and-spaces-need-to-be-escaped" title="permalink">#</a></span></h3>
+<p>Because a hash is used to mark the start of a comment,
+and spaces are mostly ignored,
+you have to represent them in some other way.</p>
 <p>The documentation of <a href="https://docs.python.org/3/library/re.html#re.VERBOSE">re.VERBOSE</a> is quite helpful:</p>
 <blockquote>
 <p>When a line contains a <code>#</code> that is not in a character class and is not preceded by an unescaped backslash, all characters from the leftmost such <code>#</code> through the end of the line are ignored.</p>
@@ -373,7 +342,16 @@ you have to denote hash characters in some other way.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s2">&quot;\d+ \# \d+&quot;</span><span class="p">,</span> <span class="s2">&quot;1#23a&quot;</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">VERBOSE</span><span class="p">)</span>
 <span class="go">[&#39;1#23&#39;]</span>
 </code></pre></div>
-<p>Also, ending a pattern after a comment might accidentally comment the line after it in the bigger pattern:</p>
+<p>The same is true for spaces:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s2">&quot;\d+ [ ] \d+&quot;</span><span class="p">,</span> <span class="s2">&quot;1 23a&quot;</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">VERBOSE</span><span class="p">)</span>
+<span class="go">[&#39;1 23&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s2">&quot;\d+ \  \d+&quot;</span><span class="p">,</span> <span class="s2">&quot;1 23a&quot;</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">VERBOSE</span><span class="p">)</span>
+<span class="go">[&#39;1 23&#39;]</span>
+</code></pre></div>
+<h3 id="hashes-need-extra-care">Hashes need extra care<span class="headerlink"> <a href="#hashes-need-extra-care" title="permalink">#</a></span></h3>
+<p>When composing regexes,
+ending a pattern on the same line as a comment
+might accidentally comment the following line in the enclosing pattern:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">one</span> <span class="o">=</span> <span class="s2">&quot;1 # comment&quot;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">onetwo</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">one</span><span class="si">}</span><span class="s2"> 2&quot;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">onetwo</span><span class="p">,</span> <span class="s1">&#39;0123&#39;</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">VERBOSE</span><span class="p">)</span>
@@ -391,13 +369,13 @@ you have to denote hash characters in some other way.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">onetwo</span><span class="p">,</span> <span class="s1">&#39;0123&#39;</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">VERBOSE</span><span class="p">)</span>
 <span class="go">[&#39;12&#39;]</span>
 </code></pre></div>
-<p>(Note that this is only needed if you use comments.)</p>
-<p>While a bit cumbersome here,
+<p>While a bit cumbersome,
 in real life most patterns would span multiple lines anyway,
-so that's not really an issue.</p>
-<h3 id="brace-repetitions-need-to-be-escaped">Brace repetitions need to be escaped<span class="headerlink"> <a href="#brace-repetitions-need-to-be-escaped" title="permalink">#</a></span></h3>
+so it's not really an issue.</p>
+<p>(Note that this is only needed if you use comments.)</p>
+<h3 id="brace-quantifiers-need-to-be-escaped">Brace quantifiers need to be escaped<span class="headerlink"> <a href="#brace-quantifiers-need-to-be-escaped" title="permalink">#</a></span></h3>
 <p>Because f‍-‍strings already use braces for replacements,
-to denote brace repetitions you must double the braces:</p>
+to represent brace quantifiers you must double the braces:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s2">&quot;m</span><span class="si">{2}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;entire mm but only two of mmm&quot;</span><span class="p">)</span>
 <span class="go">[&#39;mm&#39;, &#39;mm&#39;]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">letter</span> <span class="o">=</span> <span class="s2">&quot;m&quot;</span>
@@ -406,7 +384,9 @@ to denote brace repetitions you must double the braces:</p>
 <span class="go">[&#39;mm&#39;, &#39;mm&#39;]</span>
 </code></pre></div>
 <h3 id="i-don-t-control-the-flags">I don't control the flags<span class="headerlink"> <a href="#i-don-t-control-the-flags" title="permalink">#</a></span></h3>
-<p>Maybe you'd like to use verbose regexes, but don't control the flags passed to <a href="https://docs.python.org/3/library/re.html">re</a>.</p>
+<p>Maybe you'd like to use verbose regexes,
+but don't control the flags passed to the <a href="https://docs.python.org/3/library/re.html">re</a> functions
+(for example, because you're passing the regex to an API).</p>
 <p>Worry not! The regular expression <a href="https://docs.python.org/3/library/re.html#regular-expression-syntax">syntax</a> supports inline flags:</p>
 <blockquote>
 <dl>
@@ -433,118 +413,6 @@ to denote brace repetitions you must double the braces:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">onetwo</span><span class="p">,</span> <span class="s1">&#39;0123&#39;</span><span class="p">)</span>
 <span class="go">[&#39;12&#39;]</span>
 </code></pre></div>
-<h3 id="i-don-t-use-python">I don't use Python<span class="headerlink"> <a href="#i-don-t-use-python" title="permalink">#</a></span></h3>
-<p>Lots of other languages support inline flags!</p>
-<p>You can build/test your pattern in whichever language is more convenient,
-and use it in any other one.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
-<p>Languages like Rust:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Rust"><span></span><code><span class="kd">let</span><span class="w"> </span><span class="n">re</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Regex</span>::<span class="n">new</span><span class="p">(</span><span class="w"></span>
-<span class="w">    </span><span class="s">r&quot;(?x)</span>
-<span class="s">    1 2  # such inline</span>
-<span class="s">    &quot;</span><span class="w"></span>
-<span class="p">).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
-<span class="fm">println!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">re</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="s">&quot;0123&quot;</span><span class="p">).</span><span class="n">unwrap</span><span class="p">().</span><span class="n">as_str</span><span class="p">());</span><span class="w"></span>
-</code></pre></div>
-
-<p>Ruby:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Ruby"><span></span><code><span class="nb">puts</span> <span class="sr">/(?x)</span>
-<span class="sr">1 2  # omg hi</span>
-<span class="sr">/</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="s1">&#39;0123&#39;</span><span class="p">)</span>
-</code></pre></div>
-
-<p>Java:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Java"><span></span><code><span class="kd">var</span> <span class="n">p</span> <span class="o">=</span> <span class="n">Pattern</span><span class="p">.</span><span class="na">compile</span><span class="p">(</span>
-    <span class="s">&quot;(?x)\n&quot;</span> <span class="o">+</span>
-    <span class="s">&quot;1 2  # such class\n&quot;</span>
-<span class="p">);</span>
-<span class="kd">var</span> <span class="n">m</span> <span class="o">=</span> <span class="n">p</span><span class="p">.</span><span class="na">matcher</span><span class="p">(</span><span class="s">&quot;0123&quot;</span><span class="p">);</span>
-<span class="n">m</span><span class="p">.</span><span class="na">find</span><span class="p">();</span>
-<span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">m</span><span class="p">.</span><span class="na">group</span><span class="p">(</span><span class="mi">0</span><span class="p">));</span>
-</code></pre></div>
-
-<p>PostgreSQL:</p>
-<div class="highlight code-container"><pre class="code" data-lang="PostgreSQL SQL dialect"><span></span><code><span class="k">select</span><span class="w"> </span><span class="k">substring</span><span class="p">(</span><span class="w"></span>
-<span class="w">  </span><span class="s1">&#39;0123&#39;</span><span class="w"> </span><span class="k">from</span><span class="w"></span>
-<span class="w">    </span><span class="s">$$(?x)</span>
-<span class="s">    1 2  # much verbose</span>
-<span class="s">    $$</span><span class="w"></span>
-<span class="p">);</span><span class="w"></span>
-</code></pre></div>
-
-<p>Perl:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Perl"><span></span><code><span class="s">&quot;0123&quot;</span> <span class="o">=~</span><span class="sr"> /(?x)(</span>
-<span class="sr">1 2  # no scare</span>
-<span class="sr">)/</span><span class="p">;</span>
-<span class="k">print</span> <span class="nv">$1</span> <span class="o">.</span> <span class="s">&quot;\n&quot;</span><span class="p">;</span>
-</code></pre></div>
-
-<p>C#:</p>
-<div class="highlight code-container"><pre class="code" data-lang="C#"><span></span><code><span class="n">Console</span><span class="p">.</span><span class="n">WriteLine</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">Regex</span><span class="p">(</span><span class="s">@&quot;(?x)</span>
-<span class="s">1 2  # nice</span>
-<span class="s">&quot;</span><span class="p">).</span><span class="n">Match</span><span class="p">(</span><span class="s">&quot;0123&quot;</span><span class="p">));</span><span class="w"></span>
-</code></pre></div>
-
-<p>Swift:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Swift"><span></span><code><span class="kd">let</span> <span class="nv">string</span> <span class="p">=</span> <span class="s">&quot;0123&quot;</span>
-<span class="kd">let</span> <span class="nv">range</span> <span class="p">=</span> <span class="n">string</span><span class="p">.</span><span class="n">range</span><span class="p">(</span>
-    <span class="n">of</span> <span class="p">:</span> <span class="s">&quot;&quot;&quot;</span>
-<span class="s">    (?x)</span>
-<span class="s">    1 2  # why this happened</span>
-<span class="s">    &quot;&quot;&quot;</span><span class="p">,</span>
-    <span class="n">options</span> <span class="p">:</span> <span class="p">.</span><span class="n">regularExpression</span>
-<span class="p">)</span>
-<span class="bp">print</span><span class="p">(</span><span class="n">string</span><span class="p">[</span><span class="n">range</span><span class="p">!])</span>
-</code></pre></div>
-
-<p>And even C (with <a href="https://en.wikipedia.org/wiki/Perl_Compatible_Regular_Expressions">PCRE</a> – and by extension, PHP and recent MariaDB):</p>
-<details>
-<summary>
-... yeah, I'm not showing 30+ lines here, click to expand.
-</summary>
-<div class="highlight code-container"><pre class="code" data-lang="C"><span></span><code><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="n">pattern</span><span class="w"> </span><span class="o">=</span><span class="w"></span>
-<span class="w">    </span><span class="s">&quot;(?x)</span><span class="se">\n</span><span class="s">&quot;</span><span class="w"></span>
-<span class="w">    </span><span class="s">&quot;1 2  # so vintige</span><span class="se">\n</span><span class="s">&quot;</span><span class="w"></span>
-<span class="p">;</span><span class="w"></span>
-<span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="n">subject</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;0123&quot;</span><span class="p">;</span><span class="w"></span>
-<span class="kt">int</span><span class="w"> </span><span class="n">subject_length</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">strlen</span><span class="p">(</span><span class="n">subject</span><span class="p">);</span><span class="w"></span>
-
-<span class="kt">int</span><span class="w"> </span><span class="n">errornumber</span><span class="p">;</span><span class="w"></span>
-<span class="n">PCRE2_SIZE</span><span class="w"> </span><span class="n">erroroffset</span><span class="p">;</span><span class="w"></span>
-
-<span class="n">pcre2_code</span><span class="w"> </span><span class="o">*</span><span class="n">re</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pcre2_compile</span><span class="p">(</span><span class="w"></span>
-<span class="w">    </span><span class="p">(</span><span class="n">PCRE2_SPTR</span><span class="p">)</span><span class="n">pattern</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="n">PCRE2_ZERO_TERMINATED</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="mi">0</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="o">&amp;</span><span class="n">errornumber</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="o">&amp;</span><span class="n">erroroffset</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="nb">NULL</span><span class="w"></span>
-<span class="p">);</span><span class="w"></span>
-
-<span class="n">pcre2_match_data</span><span class="w"> </span><span class="o">*</span><span class="n">match_data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pcre2_match_data_create_from_pattern</span><span class="p">(</span><span class="n">re</span><span class="p">,</span><span class="w"> </span><span class="nb">NULL</span><span class="p">);</span><span class="w"></span>
-
-<span class="n">pcre2_match</span><span class="p">(</span><span class="w"></span>
-<span class="w">    </span><span class="n">re</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="p">(</span><span class="n">PCRE2_SPTR</span><span class="p">)</span><span class="n">subject</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="n">subject_length</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="mi">0</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="mi">0</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="n">match_data</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="nb">NULL</span><span class="w"></span>
-<span class="p">);</span><span class="w"></span>
-
-<span class="n">PCRE2_SIZE</span><span class="w"> </span><span class="o">*</span><span class="n">ovector</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pcre2_get_ovector_pointer</span><span class="p">(</span><span class="n">match_data</span><span class="p">);</span><span class="w"></span>
-<span class="n">PCRE2_SPTR</span><span class="w"> </span><span class="n">substring_start</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">PCRE2_SPTR</span><span class="p">)</span><span class="n">subject</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">ovector</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span><span class="w"></span>
-<span class="kt">size_t</span><span class="w"> </span><span class="n">substring_length</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ovector</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">ovector</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span><span class="w"></span>
-<span class="n">printf</span><span class="p">(</span><span class="s">&quot;%.*s</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="n">substring_length</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="n">substring_start</span><span class="p">);</span><span class="w"></span>
-</code></pre></div>
-
-</details>
-<p>Notable languages that don't support inline verbose flags:</p>
-<ul>
-<li>Javascript (at least in Firefox)</li>
-<li>Go (regexp)</li>
-<li>C++ (regex, but presumably you can use PCRE there too)</li>
-</ul>
 <hr />
 <p>That's it for now.</p>
 <p><strong>Learned something new today?</strong> Share this with others, it really helps!</p>
@@ -596,11 +464,136 @@ and use it in any other one.<sup class="footnote-ref" id="fnref-2"><a href="#fn-
     </div>
 
 </form>
+<h3 id="bonus-i-don-t-use-python">Bonus: I don't use Python<span class="headerlink"> <a href="#bonus-i-don-t-use-python" title="permalink">#</a></span></h3>
+<p>Lots of other languages support the inline verbose flag, too!
+You can build a pattern in whichever language is more convenient,
+and use it in any other one.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup> Languges like...</p>
+<p>C (with <a href="https://en.wikipedia.org/wiki/Perl_Compatible_Regular_Expressions">PCRE</a> – and by extension, C++, PHP, and many others):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="nb">echo</span> <span class="s1">&#39;0123&#39;</span> <span class="p">|</span> pcregrep -o <span class="s1">&#39;(?x)</span>
+<span class="s1">1 2  # such inline</span>
+<span class="s1">&#39;</span>
+</code></pre></div>
+
+<details>
+<summary>
+... yeah, the C version is actually really long, click to expand.
+</summary>
+<div class="highlight code-container"><pre class="code" data-lang="C"><span></span><code><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="n">pattern</span><span class="w"> </span><span class="o">=</span><span class="w"></span>
+<span class="w">    </span><span class="s">&quot;(?x)</span><span class="se">\n</span><span class="s">&quot;</span><span class="w"></span>
+<span class="w">    </span><span class="s">&quot;1 2  # much verbose</span><span class="se">\n</span><span class="s">&quot;</span><span class="w"></span>
+<span class="p">;</span><span class="w"></span>
+<span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="n">subject</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;0123&quot;</span><span class="p">;</span><span class="w"></span>
+<span class="kt">int</span><span class="w"> </span><span class="n">subject_length</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">strlen</span><span class="p">(</span><span class="n">subject</span><span class="p">);</span><span class="w"></span>
+
+<span class="kt">int</span><span class="w"> </span><span class="n">errornumber</span><span class="p">;</span><span class="w"></span>
+<span class="n">PCRE2_SIZE</span><span class="w"> </span><span class="n">erroroffset</span><span class="p">;</span><span class="w"></span>
+
+<span class="n">pcre2_code</span><span class="w"> </span><span class="o">*</span><span class="n">re</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pcre2_compile</span><span class="p">(</span><span class="w"></span>
+<span class="w">    </span><span class="p">(</span><span class="n">PCRE2_SPTR</span><span class="p">)</span><span class="n">pattern</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">PCRE2_ZERO_TERMINATED</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="mi">0</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="o">&amp;</span><span class="n">errornumber</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="o">&amp;</span><span class="n">erroroffset</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="nb">NULL</span><span class="w"></span>
+<span class="p">);</span><span class="w"></span>
+
+<span class="n">pcre2_match_data</span><span class="w"> </span><span class="o">*</span><span class="n">match_data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pcre2_match_data_create_from_pattern</span><span class="p">(</span><span class="n">re</span><span class="p">,</span><span class="w"> </span><span class="nb">NULL</span><span class="p">);</span><span class="w"></span>
+
+<span class="n">pcre2_match</span><span class="p">(</span><span class="w"></span>
+<span class="w">    </span><span class="n">re</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="p">(</span><span class="n">PCRE2_SPTR</span><span class="p">)</span><span class="n">subject</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">subject_length</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="mi">0</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="mi">0</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">match_data</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="nb">NULL</span><span class="w"></span>
+<span class="p">);</span><span class="w"></span>
+
+<span class="n">PCRE2_SIZE</span><span class="w"> </span><span class="o">*</span><span class="n">ovector</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pcre2_get_ovector_pointer</span><span class="p">(</span><span class="n">match_data</span><span class="p">);</span><span class="w"></span>
+<span class="n">PCRE2_SPTR</span><span class="w"> </span><span class="n">substring_start</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">PCRE2_SPTR</span><span class="p">)</span><span class="n">subject</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">ovector</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span><span class="w"></span>
+<span class="kt">size_t</span><span class="w"> </span><span class="n">substring_length</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ovector</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">ovector</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span><span class="w"></span>
+<span class="n">printf</span><span class="p">(</span><span class="s">&quot;%.*s</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="n">substring_length</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="n">substring_start</span><span class="p">);</span><span class="w"></span>
+</code></pre></div>
+
+</details>
+<p>C#:</p>
+<div class="highlight code-container"><pre class="code" data-lang="C#"><span></span><code><span class="n">Console</span><span class="p">.</span><span class="n">WriteLine</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">Regex</span><span class="p">(</span><span class="s">@&quot;(?x)</span>
+<span class="s">1 2  # wow</span>
+<span class="s">&quot;</span><span class="p">).</span><span class="n">Match</span><span class="p">(</span><span class="s">&quot;0123&quot;</span><span class="p">));</span><span class="w"></span>
+</code></pre></div>
+
+<p>grep (only the GNU one):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="nb">echo</span> <span class="s1">&#39;0123&#39;</span> <span class="p">|</span> grep -Po <span class="s1">&#39;(?x) 1 2  # no line&#39;</span>
+</code></pre></div>
+
+<p>Java (and by extension, lots of JVM languages, like Scala):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Java"><span></span><code><span class="kd">var</span> <span class="n">p</span> <span class="o">=</span> <span class="n">Pattern</span><span class="p">.</span><span class="na">compile</span><span class="p">(</span>
+    <span class="s">&quot;(?x)\n&quot;</span> <span class="o">+</span>
+    <span class="s">&quot;1 2  # much class\n&quot;</span>
+<span class="p">);</span>
+<span class="kd">var</span> <span class="n">m</span> <span class="o">=</span> <span class="n">p</span><span class="p">.</span><span class="na">matcher</span><span class="p">(</span><span class="s">&quot;0123&quot;</span><span class="p">);</span>
+<span class="n">m</span><span class="p">.</span><span class="na">find</span><span class="p">();</span>
+<span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">m</span><span class="p">.</span><span class="na">group</span><span class="p">(</span><span class="mi">0</span><span class="p">));</span>
+</code></pre></div>
+
+<p>Perl:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Perl"><span></span><code><span class="s">&quot;0123&quot;</span> <span class="o">=~</span><span class="sr"> /(?x)(</span>
+<span class="sr">1 2  # no scare</span>
+<span class="sr">)/</span><span class="p">;</span>
+<span class="k">print</span> <span class="nv">$1</span> <span class="o">.</span> <span class="s">&quot;\n&quot;</span><span class="p">;</span>
+</code></pre></div>
+
+<p>PostgreSQL:</p>
+<div class="highlight code-container"><pre class="code" data-lang="PostgreSQL SQL dialect"><span></span><code><span class="k">select</span><span class="w"> </span><span class="k">substring</span><span class="p">(</span><span class="w"></span>
+<span class="w">  </span><span class="s1">&#39;0123&#39;</span><span class="w"> </span><span class="k">from</span><span class="w"></span>
+<span class="w">    </span><span class="s">$$(?x)</span>
+<span class="s">    1 2  # such declarative</span>
+<span class="s">    $$</span><span class="w"></span>
+<span class="p">);</span><span class="w"></span>
+</code></pre></div>
+
+<p>Ruby:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Ruby"><span></span><code><span class="nb">puts</span> <span class="sr">/(?x)</span>
+<span class="sr">1 2  # nice</span>
+<span class="sr">/</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="s1">&#39;0123&#39;</span><span class="p">)</span>
+</code></pre></div>
+
+<p>Rust:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Rust"><span></span><code><span class="kd">let</span><span class="w"> </span><span class="n">re</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Regex</span>::<span class="n">new</span><span class="p">(</span><span class="w"></span>
+<span class="w">    </span><span class="s">r&quot;(?x)</span>
+<span class="s">    1 2  # much safe</span>
+<span class="s">    &quot;</span><span class="w"></span>
+<span class="p">).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+<span class="fm">println!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">re</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="s">&quot;0123&quot;</span><span class="p">).</span><span class="n">unwrap</span><span class="p">().</span><span class="n">as_str</span><span class="p">());</span><span class="w"></span>
+</code></pre></div>
+
+<p>Swift:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Swift"><span></span><code><span class="kd">let</span> <span class="nv">string</span> <span class="p">=</span> <span class="s">&quot;0123&quot;</span>
+<span class="kd">let</span> <span class="nv">range</span> <span class="p">=</span> <span class="n">string</span><span class="p">.</span><span class="n">range</span><span class="p">(</span>
+    <span class="n">of</span> <span class="p">:</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">    (?x)</span>
+<span class="s">    1 2  # omg hi</span>
+<span class="s">    &quot;&quot;&quot;</span><span class="p">,</span>
+    <span class="n">options</span> <span class="p">:</span> <span class="p">.</span><span class="n">regularExpression</span>
+<span class="p">)</span>
+<span class="bp">print</span><span class="p">(</span><span class="n">string</span><span class="p">[</span><span class="n">range</span><span class="p">!])</span>
+</code></pre></div>
+
+<p>Notable languages that don't support inline verbose flags out of the box:</p>
+<ul>
+<li>C (regex.h – POSIX regular expressions)</li>
+<li>C++ (regex)</li>
+<li>Go (regexp)</li>
+<li>Javascript</li>
+<li>Lua</li>
+</ul>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>... that is, since at least <a href="https://docs.python.org/release/1.5.2p2/lib/Contents_of_Module_re.html#l2h-573">Python 1.5.2</a>, released in 1998 –
-for all except a tiny minority of Python users, that's <em>before</em> forever. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>TODO: almost <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-1"><p>In <a href="https://peps.python.org/pep-0498/">PEP 498 – Literal String Interpolation</a>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>That is, since at least <a href="https://docs.python.org/release/1.5.2p2/lib/Contents_of_Module_re.html#l2h-573">Python 1.5.2</a>, released in 1998 –
+for all except a tiny minority of Python users, that's <em>before</em> forever. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>If they both support inline flags,
+they likely share most other features. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
