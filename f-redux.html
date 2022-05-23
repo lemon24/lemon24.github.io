@@ -21,7 +21,7 @@
 
 
 
-<title>f-redux - death and gravity</title>
+<title>Python regular expressions: a worked example - death and gravity</title>
 
 
 
@@ -55,14 +55,14 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">f-redux</h1>
+<h1 class="heading-noindex">Python regular expressions: a worked example</h1>
 
 <p class="text-gray text-nowrap"><small>
-<span class="tooltip" data-tooltip="published on 2021-11-24">November 2021</span>
+<span class="tooltip" data-tooltip="published on 2022-06-01">June 2022</span>
 
 
 
-∙ three minute read
+∙ four minute read
 
 
 </small></p>
@@ -78,28 +78,58 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<h2 id="worked-example">worked example<span class="headerlink"> <a href="#worked-example" title="permalink">#</a></span></h2>
+<p>... in which we look at how to effectively 
+solve a real-world problem
+with regular expressions in Python.</p>
+<!-- TODO: intro
+
+https://blog.codinghorror.com/regular-expressions-now-you-have-two-problems/
+https://xkcd.com/1313/
+https://stackoverflow.com/a/1732454
+
+-->
+<h2 id="what-problem-are-we-trying-to-solve">What problem are we trying to solve?<span class="headerlink"> <a href="#what-problem-are-we-trying-to-solve" title="permalink">#</a></span></h2>
+<p>You work for a chemical distributor,
+and you're trying to classify your inventory by how dangerous a product is.</p>
+<p>All products have a PDF <a href="https://en.wikipedia.org/wiki/Safety_data_sheet">safety data sheet</a> which lists <a href="https://en.wikipedia.org/wiki/GHS_hazard_statements">hazard statements</a> – 
+standardized phrases about the hazards of chemical substances and mixtures.</p>
+<p>So, you feed the PDFs through an <a href="https://en.wikipedia.org/wiki/Optical_character_recognition">OCR</a> service,
+and get back plain text,
+from which you need to extract the hazard codes.</p>
+<p>Each hazard statement consists of a three-digit <em>Hxxx</em> code,
+followed by a phrase:</p>
+<blockquote>
+<p>H200: Unstable explosive</p>
+</blockquote>
+<p>They can be merged:</p>
+<blockquote>
+<p>H313+H333: May be harmful in contact with skin or if inhaled</p>
+</blockquote>
+<p>... can have sub-categories:</p>
+<blockquote>
+<p>H361f: Suspected of damaging fertility</p>
+</blockquote>
+<p>... and can be country-specific:</p>
+<blockquote>
+<p>EUH014: Reacts violently with water</p>
+</blockquote>
+<blockquote>
+<p>AUH014: Reacts violently with water</p>
+</blockquote>
+<p>Even though the phrases are standardized,
+they may be in languages other than English, 
+or there may be typos.
+Furthermore, OCR isn't perfect.</p>
+<p>Looking at some of the text, you notice the following variations:</p>
 <ul>
-<li>https://en.wikipedia.org/wiki/GHS_hazard_statements</li>
-<li>get them from some kind of OCR thing (textract, or smth else)</li>
-<li>format, from the wiki page<ul>
-<li>H200: Unstable explosive</li>
-<li>H313+H333: May be harmful in contact with skin or if inhaled</li>
-<li>H361f: Suspected of damaging fertility</li>
-<li>EUH014: Reacts violently with water</li>
-<li>AUH014: Reacts violently with water</li>
+<li>statements split across multiple lines</li>
+<li>missing separator between the code and the phrase <code>H123 message</code></li>
+<li>parens <code>(H123) message</code>, sometimes mismatched <code>(H123 message</code></li>
+<li>weird spacing <code>H1+ H2 +H4 message</code></li>
+<li>codes as part of the phrase <code>H6 message; see also H2</code></li>
 </ul>
-</li>
-<li>variations (text doesnt follow the format 100%, ocr isn't perfect)<ul>
-<li>not on a single line</li>
-<li>no colon &quot;H123 message&quot;</li>
-<li>parens &quot;(H123) message&quot;, sometimes mismatched &quot;(H123 message&quot;</li>
-<li>weird spacing &quot;  H1+ H2    +H4 whatever&quot;</li>
-<li>&quot;H6 word; see also H2; H7 another&quot;</li>
-</ul>
-</li>
-</ul>
-<h3 id="code">code<span class="headerlink"> <a href="#code" title="permalink">#</a></span></h3>
+<h2 id="code">code<span class="headerlink"> <a href="#code" title="permalink">#</a></span></h2>
+<p>fast feedback</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 3</span>
 <span class="normal"> 4</span>
 <span class="normal"> 5</span>
@@ -161,7 +191,7 @@ window.addEventListener('resize', set_vh);
 &#39;EUH8c&#39;
 ...
 </code></pre></div>
-<h3 id="multi-code">multi-code<span class="headerlink"> <a href="#multi-code" title="permalink">#</a></span></h3>
+<h2 id="multi-code">multi-code<span class="headerlink"> <a href="#multi-code" title="permalink">#</a></span></h2>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">25</span>
 <span class="normal">26</span>
 <span class="normal">27</span>
@@ -191,7 +221,7 @@ window.addEventListener('resize', set_vh);
 &#39;H12+&#39;
 &#39;H13&#39;
 </code></pre></div>
-<h3 id="pattern">pattern<span class="headerlink"> <a href="#pattern" title="permalink">#</a></span></h3>
+<h2 id="pattern">pattern<span class="headerlink"> <a href="#pattern" title="permalink">#</a></span></h2>
 <p>https://docs.python.org/3/library/re.html#regular-expression-syntax</p>
 <blockquote>
 <p>(?=...) Matches if ... matches next, but doesn’t consume any of the string. This is called a <em>lookahead assertion</em>.</p>
@@ -250,7 +280,7 @@ window.addEventListener('resize', set_vh);
 <div class="highlight code-container"><pre class="code" data-lang="Text only"><span></span><code>...
 &#39;H13 until the end&#39;
 </code></pre></div>
-<h3 id="mid-sentence-codes">mid-sentence codes<span class="headerlink"> <a href="#mid-sentence-codes" title="permalink">#</a></span></h3>
+<h2 id="mid-sentence-codes">mid-sentence codes<span class="headerlink"> <a href="#mid-sentence-codes" title="permalink">#</a></span></h2>
 <div class="highlight code-container"><pre class="code" data-lang="Text only"><span></span><code>...
 &#39;H6 word; see also &#39;
 &#39;H2;\n&#39;
@@ -288,7 +318,7 @@ this seems like a decent tradeoff</p>
 &#39;H6 word; see also H2;\n&#39;
 ...
 </code></pre></div>
-<h3 id="groups">groups<span class="headerlink"> <a href="#groups" title="permalink">#</a></span></h3>
+<h2 id="groups">groups<span class="headerlink"> <a href="#groups" title="permalink">#</a></span></h2>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">32</span>
 <span class="normal">33</span>
 <span class="normal">34</span>
@@ -321,7 +351,7 @@ this seems like a decent tradeoff</p>
 &#39;( H7 + EUH8c )&#39;, &#39; multiple codes in parens\n&#39;)
 ...
 </code></pre></div>
-<h3 id="splitting-codes">splitting codes<span class="headerlink"> <a href="#splitting-codes" title="permalink">#</a></span></h3>
+<h2 id="splitting-codes">splitting codes<span class="headerlink"> <a href="#splitting-codes" title="permalink">#</a></span></h2>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">42</span>
 <span class="normal">43</span>
 <span class="normal">44</span>
