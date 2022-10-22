@@ -1,0 +1,305 @@
+
+
+
+
+
+
+
+<!doctype html>
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+
+
+
+
+
+
+<title>pwned - death and gravity</title>
+
+
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1 class="heading-noindex">pwned</h1>
+
+<p class="text-gray text-nowrap"><small>
+<span class="tooltip" data-tooltip="published on 2022-06-01">June 2022</span>
+
+
+
+∙ two minute read
+
+
+</small></p>
+
+
+
+
+
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<section class="toc">
+<ul>
+<li><a href="#intro">intro</a></li>
+<li><a href="#getting-started">getting started</a>
+<ul>
+<li><a href="#imports">imports</a></li>
+<li><a href="#file">file</a></li>
+<li><a href="#password">password</a></li>
+<li><a href="#finding-the-hash">finding the hash</a></li>
+<li><a href="#timing-things">timing things</a></li>
+</ul>
+</li>
+<li><a href="#better-way">better way</a>
+<ul>
+<li><a href="#seeking">seeking</a></li>
+</ul>
+</li>
+<li><a href="#even-better">even better</a></li>
+</ul>
+</section>
+<h2 id="intro">intro<span class="headerlink"> <a href="#intro" title="permalink">#</a></span></h2>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>head -n5 pwned-passwords-sha1-ordered-by-hash-v8.txt
+<span class="go">000000005AD76BD555C1D6D771DE417A4B87E4B4:10</span>
+<span class="go">00000000A8DAE4228F821FB418F59826079BF368:4</span>
+<span class="go">00000000DD7F2A1C68A35673713783CA390C9E93:873</span>
+<span class="go">00000001E225B908BAC31C56DB04D892E47536E0:6</span>
+<span class="go">00000006BAB7FC3113AA73DE3589630FC08218E7:3</span>
+</code></pre></div>
+<h2 id="getting-started">getting started<span class="headerlink"> <a href="#getting-started" title="permalink">#</a></span></h2>
+<h3 id="imports">imports<span class="headerlink"> <a href="#imports" title="permalink">#</a></span></h3>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">getpass</span>
+<span class="kn">import</span> <span class="nn">hashlib</span>
+</code></pre></div>
+</td></tr></table>
+<h3 id="file">file<span class="headerlink"> <a href="#file" title="permalink">#</a></span></h3>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">7</span>
+<span class="normal">8</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">path</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="n">file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table>
+<h3 id="password">password<span class="headerlink"> <a href="#password" title="permalink">#</a></span></h3>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">try</span><span class="p">:</span>
+    <span class="n">password</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+<span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
+    <span class="n">password</span> <span class="o">=</span> <span class="n">getpass</span><span class="o">.</span><span class="n">getpass</span><span class="p">()</span>
+<span class="n">hexdigest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha1</span><span class="p">(</span><span class="n">password</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+<span class="k">del</span> <span class="n">password</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;looking for&quot;</span><span class="p">,</span> <span class="n">hexdigest</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt password
+<span class="go">looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8</span>
+<span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt
+<span class="go">Password:</span>
+<span class="go">looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8</span>
+</code></pre></div>
+<h3 id="finding-the-hash">finding the hash<span class="headerlink"> <a href="#finding-the-hash" title="permalink">#</a></span></h3>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">find_line</span><span class="p">(</span><span class="n">lines</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">prefix</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">line</span>
+        <span class="k">if</span> <span class="n">line</span> <span class="o">&gt;</span> <span class="n">prefix</span><span class="p">:</span>
+            <span class="k">break</span>
+    <span class="k">return</span> <span class="kc">None</span>
+</code></pre></div>
+</td></tr></table>
+<hr />
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">line</span> <span class="o">=</span> <span class="n">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">hexdigest</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+
+<span class="k">if</span> <span class="n">line</span><span class="p">:</span>
+    <span class="n">times</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span><span class="o">.</span><span class="n">rstrip</span><span class="p">()</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">)[</span><span class="mi">2</span><span class="p">])</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;found: seen </span><span class="si">{</span><span class="n">times</span><span class="si">}</span><span class="s2"> times&quot;</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;not found&quot;</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table>
+<h3 id="timing-things">timing things<span class="headerlink"> <a href="#timing-things" title="permalink">#</a></span></h3>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="hll"><span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+</span><span class="n">line</span> <span class="o">=</span> <span class="n">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">hexdigest</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+<span class="hll"><span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+</span></code></pre></div>
+</td></tr></table>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">39</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;in </span><span class="si">{</span><span class="n">end</span><span class="o">-</span><span class="n">start</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> seconds&quot;</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt <span class="m">127</span>
+<span class="go">looking for 008451a05e1e7aa32c75119df950d405265e0904</span>
+<span class="go">found: seen 2352 times</span>
+<span class="go">in 0.452512 seconds</span>
+</code></pre></div>
+<h2 id="better-way">better way<span class="headerlink"> <a href="#better-way" title="permalink">#</a></span></h2>
+<p><code>password</code> takes 86 seconds.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">time</span> wc -l pwned-passwords-sha1-ordered-by-hash-v8.txt
+<span class="go"> 847223402 pwned-passwords-sha1-ordered-by-hash-v8.txt</span>
+
+<span class="go">real	1m7.234s</span>
+<span class="go">user	0m31.133s</span>
+<span class="go">sys	0m16.379s</span>
+</code></pre></div>
+<p>TODO: Link to &quot;there must be a better way&quot; timestamp in https://www.youtube.com/watch?v=UANN2Eu6ZnM.</p>
+<h3 id="seeking">seeking<span class="headerlink"> <a href="#seeking" title="permalink">#</a></span></h3>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">skip_to_before_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">offset</span><span class="p">):</span>
+    <span class="n">old_position</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">tell</span><span class="p">()</span>
+
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="n">file</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">SEEK_CUR</span><span class="p">)</span>
+
+        <span class="nb">next</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">line</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="c1"># print(&quot;jumped to&quot;, (line or b&#39;&lt;eof&gt;&#39;).decode().rstrip())</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">line</span> <span class="ow">or</span> <span class="n">line</span> <span class="o">&gt;</span> <span class="n">prefix</span><span class="p">:</span>
+            <span class="n">file</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">old_position</span><span class="p">)</span>
+            <span class="k">break</span>
+
+        <span class="n">old_position</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">tell</span><span class="p">()</span>
+</code></pre></div>
+</td></tr></table>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="hll"><span class="k">def</span> <span class="nf">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
+</span><span class="hll">    <span class="n">skip_to_before_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="mi">16</span> <span class="o">*</span> <span class="mi">2</span><span class="o">**</span><span class="mi">20</span><span class="p">)</span>
+</span><span class="hll">    <span class="k">return</span> <span class="n">find_line_linear</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">)</span>
+</span><span class="hll">
+</span><span class="hll">
+</span><span class="hll"><span class="k">def</span> <span class="nf">find_line_linear</span><span class="p">(</span><span class="n">lines</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
+</span>    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">:</span>
+</code></pre></div>
+</td></tr></table>
+<p>If we replace the old function, we don't need change the code that calls it.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt password
+<span class="go">looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8</span>
+<span class="go">found: seen 9545824 times</span>
+<span class="go">in 0.027203 seconds</span>
+</code></pre></div>
+<pre class="code code-container"><code>offset (MiB)   time (s)
+           1      0.05
+           4      0.035
+           8      0.030
+          16      0.027
+          64      0.13
+</code></pre>
+<p>note: 1 MiB sometimes goes over 2 seconds, likely depending on the OS caches;
+ran repeatedly, and used the lowest it settled at</p>
+<h2 id="even-better">even better<span class="headerlink"> <a href="#even-better" title="permalink">#</a></span></h2>
+<p>bad</p>
+<ul>
+<li>ideal chunk size depends on computer</li>
+<li>time still increases linearly with file size</li>
+</ul>
+<p>TODO: another &quot;there must be a better way&quot; timestamp</p>
+<p>...</p>
+
+
+
+
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+
+
+
+</footer>
+
+
+</div>
