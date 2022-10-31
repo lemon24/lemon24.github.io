@@ -65,7 +65,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ four minute read
+∙ five minute read
 
 
 </small></p>
@@ -89,11 +89,11 @@ window.addEventListener('resize', set_vh);
 <li><a href="#imports">Imports</a></li>
 <li><a href="#file">File</a></li>
 <li><a href="#password">Password</a></li>
-<li><a href="#finding-the-hash">finding the hash</a></li>
-<li><a href="#timing-things">timing things</a></li>
+<li><a href="#finding-the-hash">Finding the hash</a></li>
+<li><a href="#timing-stuff">Timing stuff</a></li>
 </ul>
 </li>
-<li><a href="#problem-it-s-slow">Problem: it's slow</a>
+<li><a href="#problem-it-s-so-so-slow">Problem: it's so, so slow</a>
 <ul>
 <li><a href="#seeking">seeking</a></li>
 </ul>
@@ -185,7 +185,10 @@ but it prevents us from accidentally printing it (e.g. in a traceback).</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">echo</span> -n password <span class="p">|</span> sha1sum
 <span class="go">5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8  -</span>
 </code></pre></div>
-<h3 id="finding-the-hash">finding the hash<span class="headerlink"> <a href="#finding-the-hash" title="permalink">#</a></span></h3>
+<h3 id="finding-the-hash">Finding the hash<span class="headerlink"> <a href="#finding-the-hash" title="permalink">#</a></span></h3>
+<p>To find the hash, we'll do the simplest thing that could possibly work
+– just go through the lines in the file, one by one.
+We'll put the logic in a function, since it'll be useful later on.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
 <span class="normal"> 9</span>
 <span class="normal">10</span>
@@ -201,7 +204,7 @@ but it prevents us from accidentally printing it (e.g. in a traceback).</p>
     <span class="k">return</span> <span class="kc">None</span>
 </code></pre></div>
 </td></tr></table>
-<hr />
+<p>Then, we just call it to get the line of interest:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">29</span>
 <span class="normal">30</span>
 <span class="normal">31</span>
@@ -217,7 +220,8 @@ but it prevents us from accidentally printing it (e.g. in a traceback).</p>
     <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;not found&quot;</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="timing-things">timing things<span class="headerlink"> <a href="#timing-things" title="permalink">#</a></span></h3>
+<h3 id="timing-stuff">Timing stuff<span class="headerlink"> <a href="#timing-stuff" title="permalink">#</a></span></h3>
+<p>Before trying it, let's add a bit of code to measure how long it takes to find the hash:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">29</span>
 <span class="normal">30</span>
 <span class="normal">31</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="hll"><span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
@@ -228,19 +232,34 @@ but it prevents us from accidentally printing it (e.g. in a traceback).</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">39</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;in </span><span class="si">{</span><span class="n">end</span><span class="o">-</span><span class="n">start</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> seconds&quot;</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+<p>And here it is:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt <span class="m">127</span>
 <span class="go">looking for 008451a05e1e7aa32c75119df950d405265e0904</span>
 <span class="go">pwned! seen 2,352 times before</span>
 <span class="go">in 0.452512 seconds</span>
 </code></pre></div>
-<h2 id="problem-it-s-slow">Problem: it's slow<span class="headerlink"> <a href="#problem-it-s-slow" title="permalink">#</a></span></h2>
-<p><code>password</code> takes 86 seconds.</p>
+<h2 id="problem-it-s-so-so-slow">Problem: it's so, so slow<span class="headerlink"> <a href="#problem-it-s-so-so-slow" title="permalink">#</a></span></h2>
+<p>You may have noticed the password I used above was <code>127</code>;
+that's because I was cheating, and I chose a password that starts with <code>00</code>,
+quite close to the beginning of the file.</p>
+<p>Searching for <code>password</code> takes 86 seconds on my 2013 laptop!</p>
+<p>To put a lower bound on the time it takes to go line by line through this file,
+let's do so with something written in C:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">time</span> wc -l pwned-passwords-sha1-ordered-by-hash-v8.txt
 <span class="go"> 847223402 pwned-passwords-sha1-ordered-by-hash-v8.txt</span>
 
 <span class="go">real	1m7.234s</span>
 <span class="go">user	0m31.133s</span>
 <span class="go">sys	0m16.379s</span>
+</code></pre></div>
+<p>On a 2021 laptop, this takes 17 seconds; faster, but still slow.</p>
+<p>There are probably faster implementations of <code>wc -l</code> out there,
+but it's unlikely Python can even beat this one; indeed:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">time</span> python3 -c <span class="s1">&#39;for line in open(&quot;pwned-passwords-sha1-ordered-by-hash-v8.txt&quot;, &quot;rb&quot;): pass&#39;</span>
+
+<span class="go">real	1m28.325s</span>
+<span class="go">user	1m10.049s</span>
+<span class="go">sys	0m15.577s</span>
 </code></pre></div>
 <p><a href="https://www.youtube.com/watch?v=UANN2Eu6ZnM&amp;t=438s">There must be a better way.</a></p>
 <h3 id="seeking">seeking<span class="headerlink"> <a href="#seeking" title="permalink">#</a></span></h3>
