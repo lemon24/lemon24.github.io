@@ -65,7 +65,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ three minute read
+∙ four minute read
 
 
 </small></p>
@@ -84,21 +84,21 @@ window.addEventListener('resize', set_vh);
 <section class="toc">
 <ul>
 <li><a href="#intro">intro</a></li>
-<li><a href="#getting-started">getting started</a>
+<li><a href="#problem-no-minimal-plausible-solution">Problem: no minimal plausible solution</a>
 <ul>
-<li><a href="#imports">imports</a></li>
-<li><a href="#file">file</a></li>
-<li><a href="#password">password</a></li>
+<li><a href="#imports">Imports</a></li>
+<li><a href="#file">File</a></li>
+<li><a href="#password">Password</a></li>
 <li><a href="#finding-the-hash">finding the hash</a></li>
 <li><a href="#timing-things">timing things</a></li>
 </ul>
 </li>
-<li><a href="#better-way">better way</a>
+<li><a href="#problem-it-s-slow">Problem: it's slow</a>
 <ul>
 <li><a href="#seeking">seeking</a></li>
 </ul>
 </li>
-<li><a href="#even-better">even better</a>
+<li><a href="#problem-it-needs-tuning">Problem: it needs tuning</a>
 <ul>
 <li><a href="#better-seeking">better seeking</a></li>
 </ul>
@@ -106,6 +106,11 @@ window.addEventListener('resize', set_vh);
 </ul>
 </section>
 <h2 id="intro">intro<span class="headerlink"> <a href="#intro" title="permalink">#</a></span></h2>
+<p>https://haveibeenpwned.com/Passwords</p>
+<p>https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/</p>
+<p>https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#cloudflareprivacyandkanonymity</p>
+<p>https://api.pwnedpasswords.com/range/5baa6</p>
+<p>https://haveibeenpwned.com/API/v3#PwnedPasswords</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>head -n5 pwned-passwords-sha1-ordered-by-hash-v8.txt
 <span class="go">000000005AD76BD555C1D6D771DE417A4B87E4B4:10</span>
 <span class="go">00000000A8DAE4228F821FB418F59826079BF368:4</span>
@@ -113,8 +118,11 @@ window.addEventListener('resize', set_vh);
 <span class="go">00000001E225B908BAC31C56DB04D892E47536E0:6</span>
 <span class="go">00000006BAB7FC3113AA73DE3589630FC08218E7:3</span>
 </code></pre></div>
-<h2 id="getting-started">getting started<span class="headerlink"> <a href="#getting-started" title="permalink">#</a></span></h2>
-<h3 id="imports">imports<span class="headerlink"> <a href="#imports" title="permalink">#</a></span></h3>
+<h2 id="problem-no-minimal-plausible-solution">Problem: no minimal plausible solution<span class="headerlink"> <a href="#problem-no-minimal-plausible-solution" title="permalink">#</a></span></h2>
+<p>We'll take an iterative, <a href="https://hintjens.gitbooks.io/scalable-c/content/chapter1.html#problem-what-do-we-do-next">problem-solution</a> approach to this.</p>
+<p>At the moment, we don't have <em>any</em> solution, so we'll treat <em>that</em> as our problem.</p>
+<h3 id="imports">Imports<span class="headerlink"> <a href="#imports" title="permalink">#</a></span></h3>
+<p>First, let's get the imports out of the way:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">1</span>
 <span class="normal">2</span>
 <span class="normal">3</span>
@@ -126,13 +134,23 @@ window.addEventListener('resize', set_vh);
 <span class="kn">import</span> <span class="nn">hashlib</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="file">file<span class="headerlink"> <a href="#file" title="permalink">#</a></span></h3>
+<section class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Sorting imports by length looks <em>neat</em>,
+ but it can make things hard to find when there's a lot of them;
+ maybe sort alphabetically when working with other people.</p>
+</section>
+<h3 id="file">File<span class="headerlink"> <a href="#file" title="permalink">#</a></span></h3>
+<p>Then, we open the file:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">7</span>
 <span class="normal">8</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">path</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
 <span class="n">file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<h3 id="password">password<span class="headerlink"> <a href="#password" title="permalink">#</a></span></h3>
+<p>We do it from the beginning, since we want the exception to happen before reading the password – no point in reading it if the file isn't there.</p>
+<p>Also, we open the file as binary, since we know it's ASCII, and will likely make searching it faster (no needless decoding); it's &quot;minimal <em>plausible</em> solution&quot;, it doesn't mean we can't do some obvious things.</p>
+<h3 id="password">Password<span class="headerlink"> <a href="#password" title="permalink">#</a></span></h3>
+<p>Then, get the password:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">10</span>
 <span class="normal">11</span>
 <span class="normal">12</span>
@@ -150,11 +168,22 @@ window.addEventListener('resize', set_vh);
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;looking for&quot;</span><span class="p">,</span> <span class="n">hexdigest</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+<p>We read the password as the second argument to the script,
+but if not provided, we prompt for it with <a href="https://docs.python.org/3/library/getpass.html#getpass.getpass">getpass()</a>
+– you don't want your <em>actual</em> password in your shell history, right?</p>
+<p>After we compute the SHA1 hash of the password, we delete it;
+we're not going as far as to <a href="https://en.wikipedia.org/wiki/Zeroisation#Software">zero</a> it<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
+but it prevents us from accidentally printing it (e.g. in a traceback).</p>
+<p>Let's see if it works, by using <code>password</code> as our test password:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt password
 <span class="go">looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8</span>
 <span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt
 <span class="go">Password:</span>
 <span class="go">looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8</span>
+</code></pre></div>
+<p>As a sanity check, the shell agrees:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">echo</span> -n password <span class="p">|</span> sha1sum
+<span class="go">5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8  -</span>
 </code></pre></div>
 <h3 id="finding-the-hash">finding the hash<span class="headerlink"> <a href="#finding-the-hash" title="permalink">#</a></span></h3>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
@@ -183,7 +212,7 @@ window.addEventListener('resize', set_vh);
 
 <span class="k">if</span> <span class="n">line</span><span class="p">:</span>
     <span class="n">times</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span><span class="o">.</span><span class="n">rstrip</span><span class="p">()</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">)[</span><span class="mi">2</span><span class="p">])</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;found: seen </span><span class="si">{</span><span class="n">times</span><span class="si">}</span><span class="s2"> times&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;pwned! seen </span><span class="si">{</span><span class="n">times</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> times before&quot;</span><span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
     <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;not found&quot;</span><span class="p">)</span>
 </code></pre></div>
@@ -201,10 +230,10 @@ window.addEventListener('resize', set_vh);
 </td></tr></table>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt <span class="m">127</span>
 <span class="go">looking for 008451a05e1e7aa32c75119df950d405265e0904</span>
-<span class="go">found: seen 2352 times</span>
+<span class="go">pwned! seen 2,352 times before</span>
 <span class="go">in 0.452512 seconds</span>
 </code></pre></div>
-<h2 id="better-way">better way<span class="headerlink"> <a href="#better-way" title="permalink">#</a></span></h2>
+<h2 id="problem-it-s-slow">Problem: it's slow<span class="headerlink"> <a href="#problem-it-s-slow" title="permalink">#</a></span></h2>
 <p><code>password</code> takes 86 seconds.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">time</span> wc -l pwned-passwords-sha1-ordered-by-hash-v8.txt
 <span class="go"> 847223402 pwned-passwords-sha1-ordered-by-hash-v8.txt</span>
@@ -264,19 +293,19 @@ window.addEventListener('resize', set_vh);
 <p>If we replace the old function, we don't need change the code that calls it.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt password
 <span class="go">looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8</span>
-<span class="go">found: seen 9545824 times</span>
+<span class="go">pwned! seen 9,545,824 times before</span>
 <span class="go">in 0.027203 seconds</span>
 </code></pre></div>
 <pre class="code code-container"><code>offset (MiB)   time (s)
            1      0.05
            4      0.035
            8      0.030
-          16      0.027
+          16      0.027  &lt;-- sweet spot
           64      0.13
 </code></pre>
 <p>note: 1 MiB sometimes goes over 2 seconds, likely depending on the OS caches;
 ran repeatedly, and used the lowest it settled at</p>
-<h2 id="even-better">even better<span class="headerlink"> <a href="#even-better" title="permalink">#</a></span></h2>
+<h2 id="problem-it-needs-tuning">Problem: it needs tuning<span class="headerlink"> <a href="#problem-it-needs-tuning" title="permalink">#</a></span></h2>
 <p>bad</p>
 <ul>
 <li>ideal chunk size depends on computer</li>
@@ -312,13 +341,18 @@ ran repeatedly, and used the lowest it settled at</p>
 </td></tr></table>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt password
 <span class="go">looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8</span>
-<span class="go">found: seen 9545824 times</span>
+<span class="go">pwned! seen 9,545,824 times before</span>
 <span class="go">in 0.009559 seconds</span>
 <span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt password
 <span class="go">looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8</span>
-<span class="go">found: seen 9545824 times</span>
+<span class="go">pwned! seen 9,545,824 times before</span>
 <span class="go">in 0.000268 seconds</span>
 </code></pre></div>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>Which is <a href="https://stackoverflow.com/q/28676177">kinda difficult to do</a> in Python anyway. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
 
 
 
