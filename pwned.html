@@ -65,7 +65,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ five minute read
+∙ seven minute read
 
 
 </small></p>
@@ -84,6 +84,8 @@ window.addEventListener('resize', set_vh);
 <section class="toc">
 <ul>
 <li><a href="#intro">intro</a></li>
+<li><a href="#problem-we-re-paranoid">Problem: we're paranoid</a></li>
+<li><a href="#problem-we-re-really-paranoid">Problem: we're really paranoid</a></li>
 <li><a href="#problem-no-minimal-plausible-solution">Problem: no minimal plausible solution</a>
 <ul>
 <li><a href="#imports">Imports</a></li>
@@ -93,16 +95,17 @@ window.addEventListener('resize', set_vh);
 <li><a href="#timing-stuff">Timing stuff</a></li>
 </ul>
 </li>
-<li><a href="#problem-it-s-so-so-slow">Problem: it's so, so slow</a>
+<li><a href="#problem-it-s-slow">Problem: it's slow</a>
 <ul>
-<li><a href="#seeking">seeking</a></li>
+<li><a href="#skipping">Skipping</a></li>
 </ul>
 </li>
 <li><a href="#problem-it-needs-tuning">Problem: it needs tuning</a>
 <ul>
-<li><a href="#better-seeking">better seeking</a></li>
+<li><a href="#advanced-skipping">Advanced skipping</a></li>
 </ul>
 </li>
+<li><a href="#bonus">bonus</a></li>
 </ul>
 </section>
 <h2 id="intro">intro<span class="headerlink"> <a href="#intro" title="permalink">#</a></span></h2>
@@ -118,6 +121,12 @@ window.addEventListener('resize', set_vh);
 <span class="go">00000001E225B908BAC31C56DB04D892E47536E0:6</span>
 <span class="go">00000006BAB7FC3113AA73DE3589630FC08218E7:3</span>
 </code></pre></div>
+<section class="admonition note">
+<p class="admonition-title">relaxed ursid says</p>
+<p>bonjour</p>
+</section>
+<h2 id="problem-we-re-paranoid">Problem: we're paranoid<span class="headerlink"> <a href="#problem-we-re-paranoid" title="permalink">#</a></span></h2>
+<h2 id="problem-we-re-really-paranoid">Problem: we're really paranoid<span class="headerlink"> <a href="#problem-we-re-really-paranoid" title="permalink">#</a></span></h2>
 <h2 id="problem-no-minimal-plausible-solution">Problem: no minimal plausible solution<span class="headerlink"> <a href="#problem-no-minimal-plausible-solution" title="permalink">#</a></span></h2>
 <p>We'll take an iterative, <a href="https://hintjens.gitbooks.io/scalable-c/content/chapter1.html#problem-what-do-we-do-next">problem-solution</a> approach to this.</p>
 <p>At the moment, we don't have <em>any</em> solution, so we'll treat <em>that</em> as our problem.</p>
@@ -238,11 +247,11 @@ We'll put the logic in a function, since it'll be useful later on.</p>
 <span class="go">pwned! seen 2,352 times before</span>
 <span class="go">in 0.452512 seconds</span>
 </code></pre></div>
-<h2 id="problem-it-s-so-so-slow">Problem: it's so, so slow<span class="headerlink"> <a href="#problem-it-s-so-so-slow" title="permalink">#</a></span></h2>
+<h2 id="problem-it-s-slow">Problem: it's slow<span class="headerlink"> <a href="#problem-it-s-slow" title="permalink">#</a></span></h2>
 <p>You may have noticed the password I used above was <code>127</code>;
 that's because I was cheating, and I chose a password that starts with <code>00</code>,
 quite close to the beginning of the file.</p>
-<p>Searching for <code>password</code> takes 86 seconds on my 2013 laptop!</p>
+<p>Searching for <code>password</code> takes 86 seconds!</p>
 <p>To put a lower bound on the time it takes to go line by line through this file,
 let's do so with something written in C:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">time</span> wc -l pwned-passwords-sha1-ordered-by-hash-v8.txt
@@ -252,7 +261,7 @@ let's do so with something written in C:</p>
 <span class="go">user	0m31.133s</span>
 <span class="go">sys	0m16.379s</span>
 </code></pre></div>
-<p>On a 2021 laptop, this takes 17 seconds; faster, but still slow.</p>
+<!-- old laptop: password: 86s, wc -l: 67s, for line in: 88s -->
 <p>There are probably faster implementations of <code>wc -l</code> out there,
 but it's unlikely Python can even beat this one; indeed:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">time</span> python3 -c <span class="s1">&#39;for line in open(&quot;pwned-passwords-sha1-ordered-by-hash-v8.txt&quot;, &quot;rb&quot;): pass&#39;</span>
@@ -262,7 +271,11 @@ but it's unlikely Python can even beat this one; indeed:</p>
 <span class="go">sys	0m15.577s</span>
 </code></pre></div>
 <p><a href="https://www.youtube.com/watch?v=UANN2Eu6ZnM&amp;t=438s">There must be a better way.</a></p>
-<h3 id="seeking">seeking<span class="headerlink"> <a href="#seeking" title="permalink">#</a></span></h3>
+<h3 id="skipping">Skipping<span class="headerlink"> <a href="#skipping" title="permalink">#</a></span></h3>
+<p>There's a hint about what that is in the file name: the hashes are <em>ordered</em>.</p>
+<p>That means we don't have to check all the lines;
+we can repeatedly skip ahead until we're past the hash we're looking for,
+go back one step, and only check each line from there.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">17</span>
 <span class="normal">18</span>
 <span class="normal">19</span>
@@ -283,8 +296,8 @@ but it's unlikely Python can even beat this one; indeed:</p>
     <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
         <span class="n">file</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">SEEK_CUR</span><span class="p">)</span>
 
-        <span class="nb">next</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="n">line</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">file</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span>
+        <span class="n">line</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span>
         <span class="c1"># print(&quot;jumped to&quot;, (line or b&#39;&lt;eof&gt;&#39;).decode().rstrip())</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">line</span> <span class="ow">or</span> <span class="n">line</span> <span class="o">&gt;</span> <span class="n">prefix</span><span class="p">:</span>
@@ -294,13 +307,38 @@ but it's unlikely Python can even beat this one; indeed:</p>
         <span class="n">old_position</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">tell</span><span class="p">()</span>
 </code></pre></div>
 </td></tr></table>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">17</span>
-<span class="normal">18</span>
-<span class="normal">19</span>
-<span class="normal">20</span>
-<span class="normal">21</span>
-<span class="normal">22</span>
-<span class="normal">23</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
+<p>Since files are byte-oriented, and not line-oriented,
+we can't really skip X lines, but we don't need to;
+we just need to be able to skip to the beginning of a line,
+and back to where we were before.</p>
+<p><a href="https://docs.python.org/3/library/io.html#io.IOBase.seek">seek()</a> changes the position to an <em>offset</em>;
+with <code>SEEK_CUR</code>, that's relative to the current position;
+with no <em>whence</em> (same as <code>SEEK_SET</code>), that's absolute.</p>
+<p>Because seek() might not leave the file at the beginning of a line,
+we read and discard the possibly incomplete line,
+and look at the one after that.</p>
+<section class="admonition note">
+<p class="admonition-title">Note</p>
+<p>File objects are line <a href="https://docs.python.org/3/glossary.html#term-iterator">iterators</a>, so we could've used <a href="https://docs.python.org/3/library/functions.html#next">next()</a> instead:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nb">next</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+<span class="n">line</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+<p>... but <a href="https://docs.python.org/3/library/io.html#io.IOBase.readline">readline()</a> conveys better what we're doing in this case.</p>
+</section>
+<p><a href="https://docs.python.org/3/library/io.html#io.IOBase.tell">tell()</a> returns the current stream position,
+so we know where to jump back;
+we're using it at the beginning too,
+because we don't want to assume we start at position 0 (foreshadowing).</p>
+<p>Now, we just need to call <code>skip_to_before_line()</code> before <code>find_line()</code>.
+If we replace the old <code>find_line()</code> with an enhanced version,
+we don't even need to change the calling code</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
     <span class="n">skip_to_before_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="mi">16</span> <span class="o">*</span> <span class="mi">2</span><span class="o">**</span><span class="mi">20</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">find_line_linear</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">)</span>
 
@@ -309,12 +347,13 @@ but it's unlikely Python can even beat this one; indeed:</p>
 </span>    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">:</span>
 </code></pre></div>
 </td></tr></table>
-<p>If we replace the old function, we don't need change the code that calls it.</p>
+<p>It works:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt password
 <span class="go">looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8</span>
 <span class="go">pwned! seen 9,545,824 times before</span>
 <span class="go">in 0.027203 seconds</span>
 </code></pre></div>
+<p>TODO: Talk about offsets.</p>
 <pre class="code code-container"><code>offset (MiB)   time (s)
            1      0.05
            4      0.035
@@ -325,13 +364,24 @@ but it's unlikely Python can even beat this one; indeed:</p>
 <p>note: 1 MiB sometimes goes over 2 seconds, likely depending on the OS caches;
 ran repeatedly, and used the lowest it settled at</p>
 <h2 id="problem-it-needs-tuning">Problem: it needs tuning<span class="headerlink"> <a href="#problem-it-needs-tuning" title="permalink">#</a></span></h2>
-<p>bad</p>
-<ul>
-<li>ideal chunk size depends on computer</li>
-<li>time still increases linearly with file size</li>
-</ul>
+<p>While much, much faster, our solution still has a bunch of issues.</p>
+<p>First, the ideal chunk size depends on computer you're running this on.</p>
+<p>Second, the run time still increases linearly with file size (that is, it's still linear);
+we haven't really solved the problem, as much as made it smaller by a constant factor.</p>
+<p>Finally, the run time still varies with where the hash is in the file.
+While this doesn't really matter if it's fast enough,
+it's still an unpleasant property.</p>
+<p>TODO: Finally, it's still slow.</p>
 <p><a href="https://www.youtube.com/watch?v=OSGv2VnC0go&amp;t=557s">There must be a better way.</a></p>
-<h3 id="better-seeking">better seeking<span class="headerlink"> <a href="#better-seeking" title="permalink">#</a></span></h3>
+<h3 id="advanced-skipping">Advanced skipping<span class="headerlink"> <a href="#advanced-skipping" title="permalink">#</a></span></h3>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt password <span class="p">|</span> grep -o <span class="s1">&#39;jumped to .&#39;</span> <span class="p">|</span> uniq -c
+<span class="go"> 139 jumped to 0</span>
+<span class="go"> 139 jumped to 1</span>
+<span class="go"> 139 jumped to 2</span>
+<span class="go"> 139 jumped to 3</span>
+<span class="go"> 139 jumped to 4</span>
+<span class="go"> 103 jumped to 5</span>
+</code></pre></div>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">22</span>
 <span class="normal">23</span>
 <span class="normal">24</span>
@@ -351,11 +401,19 @@ ran repeatedly, and used the lowest it settled at</p>
 </td></tr></table>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
 <span class="normal"> 9</span>
-<span class="normal">10</span>
-<span class="normal">11</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
-<span class="hll">    <span class="n">size</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span>
+<span class="normal">10</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="hll"><span class="k">def</span> <span class="nf">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">size</span><span class="p">):</span>
 </span><span class="hll">    <span class="n">skip_to_before_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span>
 </span>    <span class="k">return</span> <span class="n">find_line_linear</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">45</span>
+<span class="normal">46</span>
+<span class="normal">47</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">path</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="n">file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span>
+<span class="hll"><span class="n">size</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span>
+</span></code></pre></div>
+</td></tr></table>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">59</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">line</span> <span class="o">=</span> <span class="n">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">hexdigest</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span> <span class="n">size</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt password
@@ -367,6 +425,69 @@ ran repeatedly, and used the lowest it settled at</p>
 <span class="go">pwned! seen 9,545,824 times before</span>
 <span class="go">in 0.000268 seconds</span>
 </code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt password <span class="p">|</span> grep -o <span class="s1">&#39;jumped to .&#39;</span> <span class="p">|</span> uniq -c
+<span class="go">   1 jumped to 7</span>
+<span class="go">   1 jumped to 3</span>
+<span class="go">   1 jumped to 7</span>
+<span class="go">   1 jumped to 5</span>
+<span class="go">   1 jumped to 4</span>
+<span class="go">  39 jumped to 5</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt password <span class="p">|</span> grep -o <span class="s1">&#39;jumped to ..&#39;</span> <span class="p">|</span> uniq -c
+<span class="go">   1 jumped to 7F</span>
+<span class="go">   1 jumped to 3F</span>
+<span class="go">   1 jumped to 7F</span>
+<span class="go">   1 jumped to 5F</span>
+<span class="go">   1 jumped to 4F</span>
+<span class="go">   1 jumped to 5F</span>
+<span class="go">   1 jumped to 57</span>
+<span class="go">   1 jumped to 5F</span>
+<span class="go">   1 jumped to 5B</span>
+<span class="go">   1 jumped to 59</span>
+<span class="go">   1 jumped to 5B</span>
+<span class="go">   1 jumped to 5A</span>
+<span class="go">  32 jumped to 5B</span>
+</code></pre></div>
+<h2 id="bonus">bonus<span class="headerlink"> <a href="#bonus" title="permalink">#</a></span></h2>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">45</span>
+<span class="normal">46</span>
+<span class="normal">47</span>
+<span class="normal">48</span>
+<span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span>
+<span class="normal">52</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">get_line_from_api</span><span class="p">(</span><span class="n">hexdigest</span><span class="p">):</span>
+    <span class="kn">import</span> <span class="nn">io</span><span class="o">,</span> <span class="nn">requests</span>
+
+    <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;https://api.pwnedpasswords.com/range/&quot;</span> <span class="o">+</span> <span class="n">hexdigest</span><span class="p">[:</span><span class="mi">5</span><span class="p">])</span>
+    <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+    <span class="n">file</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+    <span class="n">size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">hexdigest</span><span class="p">[</span><span class="mi">5</span><span class="p">:]</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span> <span class="n">size</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">55</span>
+<span class="normal">56</span>
+<span class="normal">57</span>
+<span class="normal">58</span>
+<span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">path</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="hll"><span class="k">if</span> <span class="n">path</span> <span class="o">==</span> <span class="s1">&#39;:api:&#39;</span><span class="p">:</span>
+</span><span class="hll">    <span class="n">get_line</span> <span class="o">=</span> <span class="n">get_line_from_api</span>
+</span><span class="hll"><span class="k">else</span><span class="p">:</span>
+</span>    <span class="n">file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span>
+    <span class="n">size</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span>
+<span class="hll">    <span class="n">get_line</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">hexdigest</span><span class="p">:</span> <span class="n">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">hexdigest</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span> <span class="n">size</span><span class="p">)</span>
+</span></code></pre></div>
+</td></tr></table>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">72</span>
+<span class="normal">73</span>
+<span class="normal">74</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+<span class="hll"><span class="n">line</span> <span class="o">=</span> <span class="n">get_line</span><span class="p">(</span><span class="n">hexdigest</span><span class="p">)</span>
+</span><span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+</code></pre></div>
+</td></tr></table>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>Which is <a href="https://stackoverflow.com/q/28676177">kinda difficult to do</a> in Python anyway. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
