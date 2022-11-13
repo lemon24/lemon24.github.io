@@ -24,7 +24,7 @@
 
 
 
-<title>pwned - death and gravity</title>
+<title>Has your password been pwned? Or, how I almost failed to search a 37 GB text file in under 1 millisecond - death and gravity</title>
 
 
 
@@ -58,7 +58,7 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">pwned</h1>
+<h1 class="heading-noindex">Has your password been pwned? Or, how I almost failed to search a 37 GB text file in under 1 millisecond</h1>
 
 <p class="text-gray text-nowrap"><small>
 <span class="tooltip" data-tooltip="published on 2022-06-01">June 2022</span>
@@ -103,9 +103,11 @@ window.addEventListener('resize', set_vh);
 <li><a href="#problem-it-needs-tuning">Problem: it needs tuning</a>
 <ul>
 <li><a href="#advanced-skipping">Advanced skipping</a></li>
+<li><a href="#timing">timing</a></li>
 </ul>
 </li>
-<li><a href="#bonus">bonus</a></li>
+<li><a href="#failing-to-get-to-under-1ms">failing to get to under 1ms</a></li>
+<li><a href="#getting-to-under-1ms">getting to under 1ms</a></li>
 </ul>
 </section>
 <h2 id="intro">intro<span class="headerlink"> <a href="#intro" title="permalink">#</a></span></h2>
@@ -425,6 +427,7 @@ it's still an unpleasant property.</p>
 <span class="go">pwned! seen 9,545,824 times before</span>
 <span class="go">in 0.000268 seconds</span>
 </code></pre></div>
+<p>TODO: talk about caches</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt password <span class="p">|</span> grep -o <span class="s1">&#39;jumped to .&#39;</span> <span class="p">|</span> uniq -c
 <span class="go">   1 jumped to 7</span>
 <span class="go">   1 jumped to 3</span>
@@ -448,46 +451,40 @@ it's still an unpleasant property.</p>
 <span class="go">   1 jumped to 5A</span>
 <span class="go">  32 jumped to 5B</span>
 </code></pre></div>
-<h2 id="bonus">bonus<span class="headerlink"> <a href="#bonus" title="permalink">#</a></span></h2>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">45</span>
-<span class="normal">46</span>
-<span class="normal">47</span>
-<span class="normal">48</span>
-<span class="normal">49</span>
-<span class="normal">50</span>
-<span class="normal">51</span>
-<span class="normal">52</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">get_line_from_api</span><span class="p">(</span><span class="n">hexdigest</span><span class="p">):</span>
-    <span class="kn">import</span> <span class="nn">io</span><span class="o">,</span> <span class="nn">requests</span>
+<h3 id="timing">timing<span class="headerlink"> <a href="#timing" title="permalink">#</a></span></h3>
+<div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="k">function</span> average-many <span class="o">{</span>
+    <span class="k">for</span> _ <span class="k">in</span> <span class="o">{</span><span class="m">1</span>..100<span class="o">}</span><span class="p">;</span> <span class="k">do</span>
+        python <span class="nv">$@</span> <span class="k">$(</span> python -c <span class="s1">&#39;import time; print(time.time())&#39;</span> <span class="k">)</span>
+    <span class="k">done</span> <span class="se">\</span>
+    <span class="p">|</span> grep seconds <span class="se">\</span>
+    <span class="p">|</span> cut -d<span class="s1">&#39; &#39;</span> -f2 <span class="se">\</span>
+    <span class="p">|</span> tr <span class="s1">&#39;\n&#39;</span> + <span class="se">\</span>
+    <span class="p">|</span> sed <span class="s1">&#39;s#^#scale=6;(#&#39;</span> <span class="p">|</span> sed <span class="s1">&#39;s#\+$#)/100#&#39;</span> <span class="se">\</span>
+    <span class="p">|</span> bc
+<span class="o">}</span>
+</code></pre></div>
+<pre class="code code-container"><code>for i in {1..100}; do python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt &quot;`gdate +%s.%N`&quot;; done | grep seconds | cut -d' ' -f2 | tr '\n' + | sed &quot;s#^#scale=6;(&quot;' | sed &quot;s#\+$#)/100#&quot; | bc
+for i in {1..100}; do python pwned.py pwned-passwords-sha1-ordered-by-hash-v8.txt &quot;`gdate +%s.%N`&quot;; done | pyp 'keep(&quot;seconds&quot;) | whitespace[1] | sum(pp)/len(pp) | f&quot;{p:.6f}&quot;'
+</code></pre>
+<p>TODO: talk more about caches (show how it becomes faster and faster)</p>
+<h2 id="failing-to-get-to-under-1ms">failing to get to under 1ms<span class="headerlink"> <a href="#failing-to-get-to-under-1ms" title="permalink">#</a></span></h2>
+<h2 id="getting-to-under-1ms">getting to under 1ms<span class="headerlink"> <a href="#getting-to-under-1ms" title="permalink">#</a></span></h2>
+<!-- TODO: fix file to be api only
 
-    <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;https://api.pwnedpasswords.com/range/&quot;</span> <span class="o">+</span> <span class="n">hexdigest</span><span class="p">[:</span><span class="mi">5</span><span class="p">])</span>
-    <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
-    <span class="n">file</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-    <span class="n">size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">hexdigest</span><span class="p">[</span><span class="mi">5</span><span class="p">:]</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span> <span class="n">size</span><span class="p">)</span>
-</code></pre></div>
-</td></tr></table>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">55</span>
-<span class="normal">56</span>
-<span class="normal">57</span>
-<span class="normal">58</span>
-<span class="normal">59</span>
-<span class="normal">60</span>
-<span class="normal">61</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">path</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-<span class="hll"><span class="k">if</span> <span class="n">path</span> <span class="o">==</span> <span class="s1">&#39;:api:&#39;</span><span class="p">:</span>
-</span><span class="hll">    <span class="n">get_line</span> <span class="o">=</span> <span class="n">get_line_from_api</span>
-</span><span class="hll"><span class="k">else</span><span class="p">:</span>
-</span>    <span class="n">file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span>
-    <span class="n">size</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span>
-<span class="hll">    <span class="n">get_line</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">hexdigest</span><span class="p">:</span> <span class="n">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">hexdigest</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span> <span class="n">size</span><span class="p">)</span>
-</span></code></pre></div>
-</td></tr></table>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">72</span>
-<span class="normal">73</span>
-<span class="normal">74</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
-<span class="hll"><span class="n">line</span> <span class="o">=</span> <span class="n">get_line</span><span class="p">(</span><span class="n">hexdigest</span><span class="p">)</span>
-</span><span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
-</code></pre></div>
-</td></tr></table>
+# bonus: kanon
+
+.. literalinclude:: 03-kanon.py
+    :lines: 45-52
+
+.. literalinclude:: 03-kanon.py
+    :lines: 55-61
+    :emphasize-lines: 2-4,7
+
+.. literalinclude:: 03-kanon.py
+    :lines: 72-74
+    :emphasize-lines: 2
+
+-->
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>Which is <a href="https://stackoverflow.com/q/28676177">kinda difficult to do</a> in Python anyway. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
