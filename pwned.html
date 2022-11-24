@@ -65,7 +65,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ eight minute read
+∙ nine minute read
 
 
 </small></p>
@@ -83,8 +83,8 @@ window.addEventListener('resize', set_vh);
 
 <section class="toc">
 <ul>
-<li><a href="#intro">intro</a></li>
-<li><a href="#problem-we-re-lazy-but-paranoid">Problem: we're lazy, but paranoid</a></li>
+<li><a href="#introduction">Introduction</a></li>
+<li><a href="#downloading-the-file">Downloading the file</a></li>
 <li><a href="#problem-no-minimal-plausible-solution">Problem: no minimal plausible solution</a>
 <ul>
 <li><a href="#imports">Imports</a></li>
@@ -109,36 +109,53 @@ window.addEventListener('resize', set_vh);
 <li><a href="#getting-to-under-1ms">getting to under 1ms</a></li>
 </ul>
 </section>
-<h2 id="intro">intro<span class="headerlink"> <a href="#intro" title="permalink">#</a></span></h2>
-<p>https://haveibeenpwned.com/Passwords</p>
-<p>https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/</p>
-<p>https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#cloudflareprivacyandkanonymity</p>
-<p>https://api.pwnedpasswords.com/range/5baa6</p>
-<p>https://haveibeenpwned.com/API/v3#PwnedPasswords</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>head -n5 pwned.txt
+<h2 id="introduction">Introduction<span class="headerlink"> <a href="#introduction" title="permalink">#</a></span></h2>
+<p>So, there's this website, <a href="https://haveibeenpwned.com/">Have I Been Pwned</a>,
+that allows you to check if your email has been compromised in a data breach.</p>
+<p>It has another section, <a href="https://haveibeenpwned.com/Passwords">Pwned Passwords</a>, that also allow you to check <em>passwords</em>.</p>
+<p>But, plugging a password you're actively using
+in a random text box on a random website
+probably isn't such a good idea, right?</p>
+<p>Of course, we <em>could</em> follow the
+<a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/">Read more about how HIBP protects the privacy of searched passwords</a>
+link above the textbox,
+and read the article,
+and understand how <a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#cloudflareprivacyandkanonymity">k-Anonymity</a> works (it does),
+and check the website uses the <a href="https://haveibeenpwned.com/API/v3#PwnedPasswords">k-Anonymity API</a> (it does),
+but that's waaay too much work.
+Of course, we could call the k-Anonymity API ourselves,
+but where's the fun in that?</p>
+<p>Instead, we'll download the password list,
+and check for the password <em>offline</em>.</p>
+<h2 id="downloading-the-file">Downloading the file<span class="headerlink"> <a href="#downloading-the-file" title="permalink">#</a></span></h2>
+<p>Go to the <a href="https://haveibeenpwned.com/Passwords">Pwned Passwords</a>,
+scroll down to <em>Downloading the Pwned Passwords list</em>,
+and download the SHA-1 ordered by hash file;
+be nice and download the torrent, if you can.</p>
+<p>The extracted file is a hefty 37 GB:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">pushd</span> ~/Downloads
+<span class="gp">$ </span>7zz e pwned-passwords-sha1-ordered-by-hash-v8.7z
+<span class="gp">$ </span>ls -l pwned-passwords-sha1-ordered-by-hash-v8.txt
+<span class="go">-rw-r--r--  1 lemon  staff  37342268646 Dec  2  2021 pwned-passwords-sha1-ordered-by-hash-v8.txt</span>
+<span class="gp">$ </span>ls -lh pwned-passwords-sha1-ordered-by-hash-v8.txt
+<span class="go">-rw-r--r--  1 lemon  staff    35G Dec  2  2021 pwned-passwords-sha1-ordered-by-hash-v8.txt</span>
+<span class="gp">$ </span><span class="nb">popd</span>
+</code></pre></div>
+<p>And looks like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>head -n5 ~/Downloads/pwned-passwords-sha1-ordered-by-hash-v8.txt
 <span class="go">000000005AD76BD555C1D6D771DE417A4B87E4B4:10</span>
 <span class="go">00000000A8DAE4228F821FB418F59826079BF368:4</span>
 <span class="go">00000000DD7F2A1C68A35673713783CA390C9E93:873</span>
 <span class="go">00000001E225B908BAC31C56DB04D892E47536E0:6</span>
 <span class="go">00000006BAB7FC3113AA73DE3589630FC08218E7:3</span>
 </code></pre></div>
-<section class="admonition note">
-<p class="admonition-title">relaxed ursid says</p>
-<p>bonjour</p>
-</section>
-<h2 id="problem-we-re-lazy-but-paranoid">Problem: we're lazy, but paranoid<span class="headerlink"> <a href="#problem-we-re-lazy-but-paranoid" title="permalink">#</a></span></h2>
-<p>TODO:</p>
-<p>We could follow the &quot;how hibp protects...&quot; Link next to the textbox,
-and read the article,
-and understand how the Kanonimity thing works (indeed, it does protect your privacy),
-and even check that the website uses the kanonimity API (it does),
-but that's waaay too much work.</p>
-<p>So instead, let's scroll down to the Downloading the Pwned Passwords list section,
-and download the sha1 pwned passwords list, ordered by hash
-(be nice and download the torrent, if you can)
-We'll search for the password ourselves,
-since that perfectly secure
-And can't be too hard</p>
+<p>That is, each line has the format:</p>
+<pre class="code code-container"><code>&lt;SHA-1 of the password&gt;:&lt;how many times it appeared in various breaches&gt;
+</code></pre>
+<p>(See the article for <a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#theyrestillsha1hashedbutwithsomejunkremoved">why SHA-1</a> and <a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#eachpasswordnowhasacountnexttoit">why show the counts</a>.)</p>
+<p>To make command lines using it shorter, we'll link it in the current directory:</p>
+<pre class="code code-container"><code>$ ln -s ~/Downloads/pwned-passwords-sha1-ordered-by-hash-v8.txt pwned.txt
+</code></pre>
 <h2 id="problem-no-minimal-plausible-solution">Problem: no minimal plausible solution<span class="headerlink"> <a href="#problem-no-minimal-plausible-solution" title="permalink">#</a></span></h2>
 <p>We'll take an iterative, <a href="https://hintjens.gitbooks.io/scalable-c/content/chapter1.html#problem-what-do-we-do-next">problem-solution</a> approach to this.</p>
 <p>At the moment, we don't have <em>any</em> solution, so we'll treat <em>that</em> as our problem.</p>
@@ -263,7 +280,7 @@ We'll put the logic in a function, since it'll be useful later on.</p>
 <p>You may have noticed the password I used above was <code>127</code>;
 that's because I was cheating, and I chose a password that starts with <code>00</code>,
 quite close to the beginning of the file.</p>
-<p>Searching for <code>password</code> takes 86 seconds!</p>
+<p>On my 2013 laptop, searching for <code>password</code> takes 86 seconds!</p>
 <p>To put a lower bound on the time it takes to go line by line through this file,
 let's do so with something written in C:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">time</span> wc -l pwned.txt
@@ -273,8 +290,7 @@ let's do so with something written in C:</p>
 <span class="go">user	0m31.133s</span>
 <span class="go">sys	0m16.379s</span>
 </code></pre></div>
-<!-- old laptop: password: 86s, wc -l: 67s, for line in: 88s -->
-<p>There are probably faster implementations of <code>wc -l</code> out there,
+<p>There are <a href="https://chrispenner.ca/posts/wc">probably</a> <a href="https://medium.com/@martinmroz/beating-c-with-120-lines-of-rust-wc-a0db679fe920">faster</a> <a href="https://github.com/expr-fi/fastlwc/">implementations</a> of <code>wc</code> out there,
 but it's unlikely Python can even beat this one; indeed:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">time</span> python3 -c <span class="s1">&#39;for line in open(&quot;pwned.txt&quot;, &quot;rb&quot;): pass&#39;</span>
 
@@ -537,6 +553,8 @@ then by a quarter, then by an eighth, ...</p>
 </code></pre></div>
 <p>TODO: talk more about caches (show how it becomes faster and faster)</p>
 <h2 id="failing-to-get-to-under-1ms">failing to get to under 1ms<span class="headerlink"> <a href="#failing-to-get-to-under-1ms" title="permalink">#</a></span></h2>
+<p>I wave my hands, and a miracle happens. It's far enough into the totally unpredictable future, now, that you can completely destroy a rocky planet. You can do anything you want.</p>
+<p>https://qntm.org/destro</p>
 <h2 id="getting-to-under-1ms">getting to under 1ms<span class="headerlink"> <a href="#getting-to-under-1ms" title="permalink">#</a></span></h2>
 <pre class="code code-container"><code>(.venv) pwned $ average-many 03-binary-index.py ~/Downloads/pwned.txt index.bin
 .003182
@@ -568,6 +586,11 @@ then by a quarter, then by an eighth, ...</p>
 .. literalinclude:: 03-kanon.py
     :lines: 72-74
     :emphasize-lines: 2
+
+https://api.pwnedpasswords.com/range/5baa6
+
+
+https://haveibeenpwned.com/API/v3#PwnedPasswords
 
 -->
 <section class="footnotes">
