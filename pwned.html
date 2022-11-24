@@ -65,7 +65,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ nine minute read
+∙ 10 minute read
 
 
 </small></p>
@@ -102,11 +102,19 @@ window.addEventListener('resize', set_vh);
 <li><a href="#problem-it-needs-tuning-it-s-still-slow">Problem: it needs tuning, it's still slow</a>
 <ul>
 <li><a href="#advanced-skipping">Advanced skipping</a></li>
-<li><a href="#timing">timing</a></li>
+<li><a href="#better-timing">Better timing</a></li>
 </ul>
 </li>
-<li><a href="#failing-to-get-to-under-1ms">failing to get to under 1ms</a></li>
-<li><a href="#getting-to-under-1ms">getting to under 1ms</a></li>
+<li><a href="#failing-to-get-to-under-1-millisecond">Failing to get to under 1 millisecond</a>
+<ul>
+<li><a href="#profile-before-optimizing-profile">Profile before optimizing</a></li>
+<li><a href="#proportional-position-heuristic-1-7-ms">Proportional position heuristic (1.7 ms)</a></li>
+<li><a href="#index-file-1-2-ms">Index file (1.2 ms)</a></li>
+<li><a href="#binary-file-2-6-ms">Binary file (2.6 ms)</a></li>
+</ul>
+</li>
+<li><a href="#getting-to-under-1-millisecond">Getting to under 1 millisecond</a></li>
+<li><a href="#bonus-the-k-anonymity-api">Bonus: the k-Anonymity API</a></li>
 </ul>
 </section>
 <h2 id="introduction">Introduction<span class="headerlink"> <a href="#introduction" title="permalink">#</a></span></h2>
@@ -123,7 +131,7 @@ and read the article,
 and understand how <a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#cloudflareprivacyandkanonymity">k-Anonymity</a> works (it does),
 and check the website uses the <a href="https://haveibeenpwned.com/API/v3#PwnedPasswords">k-Anonymity API</a> (it does),
 but that's waaay too much work.
-Of course, we could call the k-Anonymity API ourselves,
+Of course, we could call the API ourselves,
 but where's the fun in that?</p>
 <p>Instead, we'll download the password list,
 and check for the password <em>offline</em>.</p>
@@ -158,7 +166,8 @@ be nice and download the torrent, if you can.</p>
 </code></pre>
 <h2 id="problem-no-minimal-plausible-solution">Problem: no minimal plausible solution<span class="headerlink"> <a href="#problem-no-minimal-plausible-solution" title="permalink">#</a></span></h2>
 <p>We'll take an iterative, <a href="https://hintjens.gitbooks.io/scalable-c/content/chapter1.html#problem-what-do-we-do-next">problem-solution</a> approach to this.</p>
-<p>At the moment, we don't have <em>any</em> solution, so we'll treat <em>that</em> as our problem.</p>
+<p>At the moment, we don't have <em>any</em> solution,
+so we'll <a href="https://wiki.c2.com/?DoTheSimplestThingThatCouldPossiblyWork">do the simplest thing that could possibly work</a>.</p>
 <h3 id="imports">Imports<span class="headerlink"> <a href="#imports" title="permalink">#</a></span></h3>
 <p>First, let's get the imports out of the way:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">1</span>
@@ -382,16 +391,15 @@ we don't even need to change the calling code</p>
 <span class="go">pwned! seen 9,545,824 times before</span>
 <span class="go">in 0.027203 seconds</span>
 </code></pre></div>
-<p>TODO: Talk about offsets.</p>
+<p>After running the script with a bunch of values a few times each,
+16 MiB seems to be the fastest one; here's a little table:</p>
 <pre class="code code-container"><code>offset (MiB)   time (s)
            1      0.05
            4      0.035
            8      0.030
           16      0.027  &lt;-- sweet spot
-          64      0.13
+          32      0.14
 </code></pre>
-<p>note: 1 MiB sometimes goes over 2 seconds, likely depending on the OS caches;
-ran repeatedly, and used the lowest it settled at</p>
 <h2 id="problem-it-needs-tuning-it-s-still-slow">Problem: it needs tuning, it's still slow<span class="headerlink"> <a href="#problem-it-needs-tuning-it-s-still-slow" title="permalink">#</a></span></h2>
 <p>While an order of magnitude faster, our solution still has a bunch of issues.</p>
 <ol>
@@ -481,7 +489,12 @@ then by a quarter, then by an eighth, ...</p>
 <span class="go">pwned! seen 9,545,824 times before</span>
 <span class="go">in 0.000268 seconds</span>
 </code></pre></div>
-<p>TODO: talk about caches</p>
+<p>The huge difference between the two times is due to <a href="https://en.wikipedia.org/wiki/Page_cache">OS</a> and/or SSD caches
+– on the second run, the (same) parts of the file are likely already in memory.</p>
+<p>Anyway, we can look again at the <code>jumped to</code> output:
+instead of jumping blindly through the whole file,
+we're jumping <em>around</em> the place where our hash is,
+with the jumps closer and closer to it.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned.txt password <span class="p">|</span> grep -o <span class="s1">&#39;jumped to .&#39;</span> <span class="p">|</span> uniq -c
 <span class="go">   1 jumped to 7</span>
 <span class="go">   1 jumped to 3</span>
@@ -505,7 +518,18 @@ then by a quarter, then by an eighth, ...</p>
 <span class="go">   1 jumped to 5A</span>
 <span class="go">  32 jumped to 5B</span>
 </code></pre></div>
-<h3 id="timing">timing<span class="headerlink"> <a href="#timing" title="permalink">#</a></span></h3>
+<p>You may notice we're ending up at the same <code>7F...</code> prefix more than once;
+this makes sense –
+we're jumping once to a line that's a bit after half the file size,
+and then twice to a line that's a bit after a quarter of the file size.
+We're not all that concerned about it,
+since the second time the data will likely come from the cache.</p>
+<h3 id="better-timing">Better timing<span class="headerlink"> <a href="#better-timing" title="permalink">#</a></span></h3>
+<p>Given the way caching muddies the waters,
+how fast is it <em>really?</em></p>
+<p>This shell function runs it one hundred times,
+with the current time as the password (so it's always different),
+and prints out the average:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="k">function</span> average-many <span class="o">{</span>
     <span class="k">for</span> _ <span class="k">in</span> <span class="o">{</span><span class="m">1</span>..100<span class="o">}</span><span class="p">;</span> <span class="k">do</span>
         python <span class="nv">$@</span> <span class="k">$(</span> python -c <span class="s1">&#39;import time; print(time.time())&#39;</span> <span class="k">)</span>
@@ -518,63 +542,102 @@ then by a quarter, then by an eighth, ...</p>
 <span class="o">}</span>
 </code></pre></div>
 <!-- pyp 'keep("seconds") | whitespace[1] | sum(pp)/len(pp) | f"{p:.6f}"' -->
+<details>
+<summary>
+Running it a few times,
+it starts at 5 ms,
+but then settles around 3.1 ms.
+</summary>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.005106</span>
+<span class="go">.005152</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.004062</span>
+<span class="go">.004186</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.003936</span>
+<span class="go">.003980</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.003992</span>
+<span class="go">.003745</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.003692</span>
+<span class="go">.003426</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.003647</span>
+<span class="go">.003528</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.003704</span>
+<span class="go">.003475</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.003404</span>
+<span class="go">.003321</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.003463</span>
+<span class="go">.003216</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.003453</span>
+<span class="go">.003398</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.003374</span>
+<span class="go">.003328</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.003284</span>
+<span class="go">.003006</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.003274</span>
+<span class="go">.003232</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.003362</span>
+<span class="go">.003119</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.003205</span>
+<span class="go">.003177</span>
 <span class="gp">$ </span>average-many pwned.py pwned.txt
-<span class="go">.003237</span>
+<span class="go">.003098</span>
+<span class="gp">$ </span>average-many pwned.py pwned.txt
+<span class="go">.003125</span>
 </code></pre></div>
-<p>TODO: talk more about caches (show how it becomes faster and faster)</p>
-<h2 id="failing-to-get-to-under-1ms">failing to get to under 1ms<span class="headerlink"> <a href="#failing-to-get-to-under-1ms" title="permalink">#</a></span></h2>
-<p>I wave my hands, and a miracle happens. It's far enough into the totally unpredictable future, now, that you can completely destroy a rocky planet. You can do anything you want.</p>
-<p>https://qntm.org/destro</p>
-<h2 id="getting-to-under-1ms">getting to under 1ms<span class="headerlink"> <a href="#getting-to-under-1ms" title="permalink">#</a></span></h2>
-<pre class="code code-container"><code>(.venv) pwned $ average-many 03-binary-index.py ~/Downloads/pwned.txt index.bin
-.003182
-(.venv) pwned $ average-many 03-binary-index.py ~/Downloads/pwned.txt index.bin
-.002127
-(.venv) pwned $ average-many 03-binary-index.py ~/Downloads/pwned.txt index.bin
-.001787
-(.venv) pwned $ average-many 03-binary-index.py ~/Downloads/pwned.txt index.bin
-.001706
-(.venv) pwned $ average-many 03-binary-index.py ~/Downloads/pwned.txt index.bin
-.001486
-(.venv) pwned $ cat index.bin &gt; /dev/null
-(.venv) pwned $ cat index.bin &gt; /dev/null
-(.venv) pwned $ cat index.bin &gt; /dev/null
-(.venv) pwned $ average-many 03-binary-index.py ~/Downloads/pwned.txt index.bin
-.000647
-</code></pre>
+</details>
+<p>Again, this is due to caching; the more often we run it,
+the more likely it is the pages at half, quarters, eights, sixteenths etc.
+of the file size will already be in memory,
+and the road to any line starts through some of those positions.</p>
+<h2 id="failing-to-get-to-under-1-millisecond">Failing to get to under 1 millisecond<span class="headerlink"> <a href="#failing-to-get-to-under-1-millisecond" title="permalink">#</a></span></h2>
+<p>When I started writing this,
+this was supposed to be the end;
+this was really supposed to be a short one.</p>
+<p>I wave my hands, <em>get a 2021 laptop,</em> and a miracle happens.
+It's <a href="https://qntm.org/destro">far enough into the totally unpredictable future</a>, now,
+that it takes <em>under 1 millisecond</em> to search for any password.
+I can do anything I want.</p>
+<!--
+I wave my hands, and a miracle happens.
+It's far enough into the totally unpredictable future, now,
+that you can completely destroy a rocky planet.
+You can do anything you want.
+-->
+<hr />
+<p>And now that we've arrived at this point,
+let's spend a moment to ponder the arbitrary nature of 1 millisecond.</p>
+<!--
+And now that you have arrived at this point,
+spend a moment to ponder the arbitrary nature of 1 millisecond
+given its dependency on the current year
+and the choice of your particular hardware.
+-->
+<p>Nah, fuck it, <strong>it has to work on the old laptop</strong>, the one I'm writing this on.</p>
+<p>So yeah, here's a bunch of stuff that didn't work.</p>
+<h3 id="profile-before-optimizing-profile"><a href="http://wiki.c2.com/?ProfileBeforeOptimizing">Profile before optimizing</a><span class="headerlink"> <a href="#profile-before-optimizing-profile" title="permalink">#</a></span></h3>
+<p>TODO: ...</p>
+<h3 id="proportional-position-heuristic-1-7-ms">Proportional position heuristic (1.7 ms)<span class="headerlink"> <a href="#proportional-position-heuristic-1-7-ms" title="permalink">#</a></span></h3>
+<p>TODO: ...</p>
+<p>TODO: talk about how caching, show timings for 02 seek()</p>
+<h3 id="index-file-1-2-ms">Index file (1.2 ms)<span class="headerlink"> <a href="#index-file-1-2-ms" title="permalink">#</a></span></h3>
+<p>TODO: ... <code>1.2 ms @ 2**15 (first try), 0.9 ms @ 2**13 !!!</code></p>
+<p>TODO: if we lower chunk size, file gets bigger, makes index search slower</p>
+<h3 id="binary-file-2-6-ms">Binary file (2.6 ms)<span class="headerlink"> <a href="#binary-file-2-6-ms" title="permalink">#</a></span></h3>
+<p>TODO: ...</p>
+<h2 id="getting-to-under-1-millisecond">Getting to under 1 millisecond<span class="headerlink"> <a href="#getting-to-under-1-millisecond" title="permalink">#</a></span></h2>
+<p>TODO: ...</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>average-many pwned.py pwned.txt index.bin
+<span class="go">.003182</span>
+<span class="gp">$ </span>cat index.bin &gt; /dev/null
+<span class="gp">$ </span>cat index.bin &gt; /dev/null
+<span class="gp">$ </span>cat index.bin &gt; /dev/null
+<span class="gp">$ </span>average-many pwned.py pwned.txt index.bin
+<span class="go">.000653</span>
+<span class="gp">$ </span>average-many pwned.py pwned.txt index.bin
+<span class="go">.000641</span>
+</code></pre></div>
+<h2 id="bonus-the-k-anonymity-api">Bonus: the k-Anonymity API<span class="headerlink"> <a href="#bonus-the-k-anonymity-api" title="permalink">#</a></span></h2>
+<p>TODO: ...</p>
 <!-- TODO: fix file to be api only
-
-# bonus: kanon
 
 .. literalinclude:: 03-kanon.py
     :lines: 45-52
@@ -588,7 +651,6 @@ then by a quarter, then by an eighth, ...</p>
     :emphasize-lines: 2
 
 https://api.pwnedpasswords.com/range/5baa6
-
 
 https://haveibeenpwned.com/API/v3#PwnedPasswords
 
