@@ -65,7 +65,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ 10 minute read
+∙ 13 minute read
 
 
 </small></p>
@@ -541,7 +541,7 @@ and prints out the average:</p>
     <span class="p">|</span> bc
 <span class="o">}</span>
 </code></pre></div>
-<!-- pyp 'keep("seconds") | whitespace[1] | sum(pp)/len(pp) | f"{p:.6f}"' -->
+
 <details>
 <summary>
 Running it a few times,
@@ -611,12 +611,119 @@ spend a moment to ponder the arbitrary nature of 1 millisecond
 given its dependency on the current year
 and the choice of your particular hardware.
 -->
+<hr />
 <p>Nah, fuck it, <strong>it has to work on the old laptop</strong>, the one I'm writing this on.</p>
-<p>So yeah, here's a bunch of stuff that didn't work.</p>
+<p>... so yeah, here's a bunch of stuff that didn't work.</p>
 <h3 id="profile-before-optimizing-profile"><a href="http://wiki.c2.com/?ProfileBeforeOptimizing">Profile before optimizing</a><span class="headerlink"> <a href="#profile-before-optimizing-profile" title="permalink">#</a></span></h3>
-<p>TODO: ...</p>
+<p>With the obvious improvements out of the way,
+now it's probably a good time to find out <em>where</em> time is being spent,
+by using <a href="/fast-conway-cubes#intro-to-profiling">profiling</a>.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python -m cProfile -s cumulative pwned.py pwned.txt <span class="s2">&quot;</span><span class="k">$(</span> date <span class="k">)</span><span class="s2">&quot;</span>
+<span class="go">looking for 3960626a8c59fe927d3cf2e991d67f4c505ae198</span>
+<span class="go">not found</span>
+<span class="go">in 0.004902 seconds</span>
+<span class="go">         1631 function calls (1614 primitive calls) in 0.010 seconds</span>
+
+<span class="go">   Ordered by: cumulative time</span>
+
+<span class="go">   ncalls  tottime  percall  cumtime  percall filename:lineno(function)</span>
+<span class="go">      ...</span>
+<span class="go">        1    0.000    0.000    0.005    0.005 02-binary-search.py:8(find_line)</span>
+<span class="go">        1    0.000    0.000    0.005    0.005 02-binary-search.py:22(skip_to_before_line)</span>
+<span class="go">       28    0.000    0.000    0.005    0.000 02-binary-search.py:28(skip_to_before_line_linear)</span>
+<span class="go">       86    0.004    0.000    0.004    0.000 {method &#39;readline&#39; of &#39;_io.BufferedReader&#39; objects}</span>
+<span class="go">      ...</span>
+<span class="go">       71    0.000    0.000    0.000    0.000 {method &#39;seek&#39; of &#39;_io.BufferedReader&#39; objects}</span>
+<span class="go">      ...</span>
+</code></pre></div>
+<p>From the output above, we learn the following:</p>
+<ul>
+<li>Most of the time is spent in <a href="https://docs.python.org/3/library/io.html#io.IOBase.readline">readline()</a> calls.</li>
+<li><a href="https://docs.python.org/3/library/io.html#io.IOBase.seek">seek()</a> calls are almost free.</li>
+</ul>
+<p><a href="https://docs.python.org/3/library/io.html#io.IOBase.readline">readline()</a> is <a href="https://github.com/python/cpython/blob/f15a0fcb1d13d28266f3e97e592e919b3fff2204/Modules/_io/bufferedio.c#L1054">implemented in C</a>,
+so there's not much we can change there.
+What we <em>can</em> change, however, is how often we call it.</p>
+<hr />
+<p>Another thing to look at is how much individual <a href="https://docs.python.org/3/library/io.html#io.IOBase.readline">readline()</a> calls take.</p>
+<p>In <code>skip_to_before_line_linear()</code>:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span>
+<span class="normal">39</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+        <span class="n">file</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span>
+        <span class="n">line</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span>
+        <span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;jumped to&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">line</span><span class="p">[:</span><span class="mi">5</span><span class="p">]</span> <span class="ow">or</span> <span class="sa">b</span><span class="s1">&#39;&lt;eof&gt;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(),</span>
+              <span class="sa">f</span><span class="s2">&quot;in </span><span class="si">{</span><span class="p">(</span><span class="n">end</span><span class="o">-</span><span class="n">start</span><span class="p">)</span><span class="o">*</span><span class="mi">1000000</span><span class="si">:</span><span class="s2">4.0f</span><span class="si">}</span><span class="s2"> us&quot;</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table><details>
+<summary>
+The output is pretty enlightening:
+</summary>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned.txt asdf
+<span class="go">looking for 3da541559918a808c2402bba5012f6c60b27661c</span>
+<span class="go">jumped to 7FF9E in   10 us at offset   18,671,134,394</span>
+<span class="go">jumped to 3FF89 in    4 us at offset    9,335,567,234</span>
+<span class="go">jumped to 1FFBA in    3 us at offset    4,667,783,663</span>
+<span class="go">jumped to 3FF89 in    3 us at offset    9,335,567,322</span>
+<span class="go">jumped to 2FFA4 in    5 us at offset    7,001,675,508</span>
+<span class="go">jumped to 3FF89 in    4 us at offset    9,335,567,366</span>
+<span class="go">jumped to 37F98 in    4 us at offset    8,168,621,453</span>
+<span class="go">jumped to 3FF89 in    3 us at offset    9,335,567,410</span>
+<span class="go">jumped to 3BF94 in    3 us at offset    8,752,094,477</span>
+<span class="go">jumped to 3FF89 in    2 us at offset    9,335,567,498</span>
+<span class="go">jumped to 3DF8E in    3 us at offset    9,043,831,007</span>
+<span class="go">jumped to 3CF90 in    3 us at offset    8,897,962,782</span>
+<span class="go">jumped to 3DF8E in    2 us at offset    9,043,831,095</span>
+<span class="go">jumped to 3D790 in    3 us at offset    8,970,896,964</span>
+<span class="go">jumped to 3DF8E in    2 us at offset    9,043,831,139</span>
+<span class="go">jumped to 3DB90 in  253 us at offset    9,007,364,072</span>
+<span class="go">jumped to 3D990 in  206 us at offset    8,989,130,552</span>
+<span class="go">jumped to 3DB90 in    6 us at offset    9,007,364,160</span>
+<span class="go">jumped to 3DA8F in  270 us at offset    8,998,247,402</span>
+<span class="go">jumped to 3DA0F in  189 us at offset    8,993,689,007</span>
+<span class="go">jumped to 3DA8F in    5 us at offset    8,998,247,446</span>
+<span class="go">jumped to 3DA4F in  212 us at offset    8,995,968,274</span>
+<span class="go">jumped to 3DA8F in    5 us at offset    8,998,247,534</span>
+<span class="go">jumped to 3DA6F in  266 us at offset    8,997,107,921</span>
+<span class="go">jumped to 3DA5F in  203 us at offset    8,996,538,139</span>
+<span class="go">jumped to 3DA57 in  195 us at offset    8,996,253,241</span>
+<span class="go">jumped to 3DA53 in  197 us at offset    8,996,110,772</span>
+<span class="go">jumped to 3DA57 in    6 us at offset    8,996,253,285</span>
+<span class="go">jumped to 3DA55 in  193 us at offset    8,996,182,045</span>
+<span class="go">jumped to 3DA54 in  178 us at offset    8,996,146,471</span>
+<span class="go">jumped to 3DA54 in  189 us at offset    8,996,128,666</span>
+<span class="go">jumped to 3DA54 in  191 us at offset    8,996,119,760</span>
+<span class="go">jumped to 3DA54 in   32 us at offset    8,996,128,710</span>
+<span class="go">jumped to 3DA54 in    5 us at offset    8,996,124,259</span>
+<span class="go">jumped to 3DA54 in   10 us at offset    8,996,122,057</span>
+<span class="go">jumped to 3DA54 in    4 us at offset    8,996,120,955</span>
+<span class="go">jumped to 3DA54 in    4 us at offset    8,996,120,382</span>
+<span class="go">jumped to 3DA54 in    9 us at offset    8,996,120,112</span>
+<span class="go">jumped to 3DA54 in    1 us at offset    8,996,120,470</span>
+<span class="go">jumped to 3DA54 in    1 us at offset    8,996,120,338</span>
+<span class="go">pwned! seen 324,774 times before</span>
+<span class="go">in 0.003654 seconds</span>
+</code></pre></div>
+</details>
+<p>We learn that not all calls take the same amount of time:</p>
+<ul>
+<li>The ones at the beginning take little time,
+confirming our theory that all searches start with the same few pages.</li>
+<li>The ones at the end also take little time.
+This is again due to caching;
+the fast <code>3DA54</code> jumps are all in the same ~4K range
+(the <a href="https://developer.apple.com/library/archive/documentation/Performance/Conceptual/ManagingMemory/Articles/AboutMemory.html#//apple_ref/doc/uid/20001880-99100-TPXREF113">page size in macOS</a>).</li>
+<li>Only the first read at (roughly) the same place takes time (e.g. <code>3DA8F</code>),
+confirming our other theory.</li>
+</ul>
+<p>So, if we want get rid of some of the calls,
+it's the ones in the middle.</p>
 <h3 id="proportional-position-heuristic-1-7-ms">Proportional position heuristic (1.7 ms)<span class="headerlink"> <a href="#proportional-position-heuristic-1-7-ms" title="permalink">#</a></span></h3>
-<p>TODO: ...</p>
+<p>TODO: ... <code>1.7 ms @ skip size /1000</code></p>
 <p>TODO: talk about how caching, show timings for 02 seek()</p>
 <h3 id="index-file-1-2-ms">Index file (1.2 ms)<span class="headerlink"> <a href="#index-file-1-2-ms" title="permalink">#</a></span></h3>
 <p>TODO: ... <code>1.2 ms @ 2**15 (first try), 0.9 ms @ 2**13 !!!</code></p>
