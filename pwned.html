@@ -65,7 +65,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ 13 minute read
+∙ 16 minute read
 
 
 </small></p>
@@ -111,6 +111,7 @@ window.addEventListener('resize', set_vh);
 <li><a href="#proportional-position-heuristic-1-7-ms">Proportional position heuristic (1.7 ms)</a></li>
 <li><a href="#index-file-1-2-ms">Index file (1.2 ms)</a></li>
 <li><a href="#binary-file-2-6-ms">Binary file (2.6 ms)</a></li>
+<li><a href="#aside-mmap">Aside: mmap</a></li>
 </ul>
 </li>
 <li><a href="#getting-to-under-1-millisecond">Getting to under 1 millisecond</a></li>
@@ -723,13 +724,73 @@ confirming our other theory.</li>
 <p>So, if we want get rid of some of the calls,
 it's the ones in the middle.</p>
 <h3 id="proportional-position-heuristic-1-7-ms">Proportional position heuristic (1.7 ms)<span class="headerlink"> <a href="#proportional-position-heuristic-1-7-ms" title="permalink">#</a></span></h3>
-<p>TODO: ... <code>1.7 ms @ skip size /1000</code></p>
-<p>TODO: talk about how caching, show timings for 02 seek()</p>
+<p>one way of jumping to where the hash is to use a property of the hashes:
+the hashes have uniform distribution, in theory,
+so you can do math to estimate where a hash is supposed to be.</p>
+<p>example: hashes that are 1 byte long (2 hex digits); file that's 1000 bytes long</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">digest</span> <span class="o">=</span> <span class="s1">&#39;5b&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">size</span> <span class="o">=</span> <span class="mi">1000</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">int_digest</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">digest</span><span class="p">,</span> <span class="mi">16</span><span class="p">)</span>  <span class="c1"># == 91</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">int_end</span> <span class="o">=</span> <span class="mi">16</span> <span class="o">**</span> <span class="nb">len</span><span class="p">(</span><span class="n">digest</span><span class="p">)</span>   <span class="c1"># == 0xff + 1 == 256</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">int</span><span class="p">(</span><span class="n">size</span> <span class="o">*</span> <span class="n">int_digest</span> <span class="o">/</span> <span class="n">int_end</span><span class="p">)</span>
+<span class="go">355</span>
+</code></pre></div>
+<p>we can do this once for the entire file,
+and then pick some safety margin around the determined position (say, 1 mb)
+to avoid scanning that entire chunk,
+we can use skip_to_before_line() to narrow down on the hash;
+we need the margin, otherwise we risk landing outside the hash</p>
+<p>alas, this mainly saves us from the &quot;cheap&quot; jumps at the beginning of the file;
+for some reason, it actually ends up being slightly slower than the binary search</p>
+<p>we can also use it in a similar way to the binary search approach:
+instead of narrowing down once,
+we do it repeatedly, making the slice smaller in a smaller amount (say, 1000 times smaller, which results in 2 repeats).
+this ends up being faster (~1.7ms),
+and with some manual tuning on slice &quot;times smaller&quot; rate, it peaks out at 1.2ms.
+however, doing the logic above with arbitrary start/end offsets
+complicates the code quite a bit,
+and i'm still not 100% sure the final slice can't land outside the hash
+(the hashes are uniform at large scales, but not necessarily at smaller ones).</p>
 <h3 id="index-file-1-2-ms">Index file (1.2 ms)<span class="headerlink"> <a href="#index-file-1-2-ms" title="permalink">#</a></span></h3>
-<p>TODO: ... <code>1.2 ms @ 2**15 (first try), 0.9 ms @ 2**13 !!!</code></p>
-<p>TODO: if we lower chunk size, file gets bigger, makes index search slower</p>
+<p>initially, i wanted to avoid needing any preparation / additional files.</p>
+<p>but, if we lift this constraint, we can cheat a bit by going through the file once,
+and building an index</p>
+<pre class="code code-container"><code>&lt;hash&gt;:&lt;offset in file&gt;
+</code></pre>
+<p>that we can then go through with skip_to_before_line()</p>
+<p>of course, if we're including all the hashes, we're not actually saving anything,
+but we don't need to; we can include lines that are every few kb apart from each other,
+and this will then allow us to seek directly to within a few kb in the big file.</p>
+<p>at first I arbitrarily picked 32k (57M), which almost gets us there, with 1.2 ms.</p>
+<p>(after some manual attempts,
+4k turns out to be the best (since it takes you directly to the page you need in the big file),
+with average time under .8 ms;
+however, the generated file is 452M,
+and back when i did it
+i didn't think to force the index in the cache with
+<code>cat index.txt &gt; /dev/null</code>, so on manual runs (without average-many),
+it seemed it's constantly above 1 ms.)</p>
 <h3 id="binary-file-2-6-ms">Binary file (2.6 ms)<span class="headerlink"> <a href="#binary-file-2-6-ms" title="permalink">#</a></span></h3>
-<p>TODO: ...</p>
+<p>as a desperate measure (and since i already accepted the possiblity of external files),
+i thought of converting the file to binary,
+mostly to make the file smaller;</p>
+<p>i packed each line into 24 bytes,</p>
+<pre class="code code-container"><code>| binary hash (20 bytes) | count (4 bytes) |
+</code></pre>
+<p>this ended up with a 19G file (after running for 4 minutes or so),
+and a modest improvement in run time, to 2.6 ms.
+(alone, this is probably not a good solution</p>
+<p>more importantly, though, this made the code much, much simpler:
+because items are fixed size, you can find out at what offset the Nth item is with math;
+with a simple sequence wrapper, i was able to use <a href="https://docs.python.org/3/library/bisect.html">bisect</a>,
+and not have to do any of the binary search logic.</p>
+<h3 id="aside-mmap">Aside: mmap<span class="headerlink"> <a href="#aside-mmap" title="permalink">#</a></span></h3>
+<p>Mentioning this mainly because I'm not the only one that thought of it.</p>
+<p>As a low hanging fruit, I though of [mmap[]]-ing the file.
+Sadly, this was roughly twice as slow as normal file,
+both for the text and the binary file.</p>
+<p>Another thing that might help is <a href="https://linux.die.net/man/2/posix_fadvise">fadvise()</a>,
+but that's not available on macOS.</p>
 <h2 id="getting-to-under-1-millisecond">Getting to under 1 millisecond<span class="headerlink"> <a href="#getting-to-under-1-millisecond" title="permalink">#</a></span></h2>
 <p>TODO: ...</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>average-many pwned.py pwned.txt index.bin
