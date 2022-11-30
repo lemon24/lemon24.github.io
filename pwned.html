@@ -65,7 +65,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ 17 minute read
+∙ 18 minute read
 
 
 </small></p>
@@ -109,13 +109,18 @@ window.addEventListener('resize', set_vh);
 <ul>
 <li><a href="#aside-better-data-structures">Aside: better data structures</a></li>
 <li><a href="#profile-before-optimizing-profile">Profile before optimizing</a></li>
-<li><a href="#proportional-position-heuristic-1-7-ms">Proportional position heuristic (1.7 ms)</a></li>
-<li><a href="#index-file-1-2-ms">Index file (1.2 ms)</a></li>
+<li><a href="#position-heuristic-1-7-ms-1-2-ms">Position heuristic (1.7 ms / 1.2 ms)</a></li>
+<li><a href="#index-file-1-2-ms-0-8-ms">Index file (1.2 ms / 0.8 ms)</a></li>
 <li><a href="#binary-file-2-6-ms">Binary file (2.6 ms)</a></li>
 <li><a href="#aside-mmap">Aside: mmap</a></li>
 </ul>
 </li>
-<li><a href="#getting-to-under-1-millisecond">Getting to under 1 millisecond</a></li>
+<li><a href="#getting-to-under-1-millisecond">Getting to under 1 millisecond</a>
+<ul>
+<li><a href="#generating-the-index">Generating the index</a></li>
+<li><a href="#using-the-index">Using the index</a></li>
+</ul>
+</li>
 <li><a href="#bonus-the-k-anonymity-api">Bonus: the k-Anonymity API</a></li>
 </ul>
 </section>
@@ -736,7 +741,7 @@ confirming our other theory.</li>
 </ul>
 <p>So, if we want get rid of some of the calls,
 it's the ones in the middle.</p>
-<h3 id="proportional-position-heuristic-1-7-ms">Proportional position heuristic (1.7 ms)<span class="headerlink"> <a href="#proportional-position-heuristic-1-7-ms" title="permalink">#</a></span></h3>
+<h3 id="position-heuristic-1-7-ms-1-2-ms">Position heuristic (1.7 ms / 1.2 ms)<span class="headerlink"> <a href="#position-heuristic-1-7-ms-1-2-ms" title="permalink">#</a></span></h3>
 <p>one thing we could use is a property of hash functions:
 they should behave as much as possible as a random function,
 so, in theory, hashes have uniform distribution.</p>
@@ -759,15 +764,15 @@ we need the margin, otherwise we risk landing outside the hash</p>
 for some reason, it actually ends up being slightly slower than only binary search</p>
 <p>we can also use it in a similar way to the binary search approach:
 instead of narrowing down once,
-we do it repeatedly, making the slice smaller in a smaller amount 
+we do it repeatedly, making the slice smaller in a smaller amount
 (say, 1000 times smaller, which results in 2 repeats).
-this ends up being faster (~1.7ms),
-and with some manual tuning on slice &quot;times smaller&quot; rate, it peaks out at 1.2ms.
+this ends up being faster (~1.7ms),</p>
+<p>with some manual tuning on slice &quot;times smaller&quot; rate, it peaks out at 1.2ms.
 however, doing the logic above with arbitrary start/end offsets
 complicates the code quite a bit,
 and i'm still not 100% sure the final slice can't land outside the hash
 (the hashes are uniform at large scales, but not necessarily at smaller ones).</p>
-<h3 id="index-file-1-2-ms">Index file (1.2 ms)<span class="headerlink"> <a href="#index-file-1-2-ms" title="permalink">#</a></span></h3>
+<h3 id="index-file-1-2-ms-0-8-ms">Index file (1.2 ms / 0.8 ms)<span class="headerlink"> <a href="#index-file-1-2-ms-0-8-ms" title="permalink">#</a></span></h3>
 <p>initially, i wanted to avoid needing any preparation / additional files.</p>
 <p>but, if we lift this constraint a bit,
 we can cheat a bit by going through the file once,
@@ -780,30 +785,34 @@ we're not actually saving anything,
 since the file will have just as many lines;
 but we don't need to; we can include lines that are every few kb apart from each other,
 and this will then allow us to seek directly to within a few kb in the big file.</p>
-<p>at first I arbitrarily picked 32k (57M), which almost gets us there, with 1.2 ms.</p>
+<p>at first I arbitrarily picked 32k (57M),
+which almost gets us there, but not quite,
+with 1.2 ms.</p>
+<hr />
 <p>when I tested this,
 i didn't force the index into the OS cache,
 nor did I think that 4k is the ideal skip size
 (since it takes you to the page with the hash in one go),
 so I abandoned this as a &quot;not good enough&quot;.</p>
 <p>(turns out, 4k can actually get to under .8 ms,
-at the cost of a 452M index file, 
+at the cost of a 452M index file,
 and 8k hovers below .9 ms too.)</p>
 <h3 id="binary-file-2-6-ms">Binary file (2.6 ms)<span class="headerlink"> <a href="#binary-file-2-6-ms" title="permalink">#</a></span></h3>
 <p>as a desperate measure (and since i already accepted the possiblity of external files),
 i thought of converting the file to binary,
-mostly to make the file smaller 
+mostly to make the file smaller
 – a smaller file should result in fewer readline()s.</p>
 <p>i packed each line into 24 bytes,</p>
 <pre class="code code-container"><code>| binary hash (20 bytes) | count (4 bytes) |
 </code></pre>
 <p>this ended up with a 19G file (after running for 4 minutes or so),
 and a modest improvement in run time, to 2.6 ms.</p>
-<p>more importantly, though, this made the code much, much simpler:
-because items are fixed size, 
+<p>more importantly, though, it made the code much, much simpler:
+because items are fixed size,
 you can do math to find out at what offset the Nth item is.</p>
 <p>with a simple Sequence wrapper (<code>__getitem__()</code> and <code>__len__()</code>),
-i was able to use <a href="https://docs.python.org/3/library/bisect.html">bisect</a> for the binary search logic.</p>
+i was able to use <a href="https://docs.python.org/3/library/bisect.html">bisect</a> for the binary search logic
+(more on this below).</p>
 <h3 id="aside-mmap">Aside: mmap<span class="headerlink"> <a href="#aside-mmap" title="permalink">#</a></span></h3>
 <p>Mentioning this mainly because I'm not the only one that thought of it.</p>
 <p>As a low hanging fruit, I though of <a href="https://docs.python.org/3/library/mmap.html">mmap()</a>-ing the file.
@@ -812,6 +821,23 @@ both for the text and the binary file.</p>
 <p>Another thing that might help is <a href="https://linux.die.net/man/2/posix_fadvise">fadvise()</a>,
 but that's not available on macOS.</p>
 <h2 id="getting-to-under-1-millisecond">Getting to under 1 millisecond<span class="headerlink"> <a href="#getting-to-under-1-millisecond" title="permalink">#</a></span></h2>
+<p>OK, what now? We've tried some things, we've learned some stuff:</p>
+<ul>
+<li>The position heuristic kinda works,
+but TBH it's kinda hard to reason about how correct it is
+– &quot;If the implementation is hard to explain, it's a bad idea.&quot;
+On the upside, it doesn't need any pre-processing.</li>
+<li>The index file gets us there in the end, but barely.
+Also, the index is kinda big.</li>
+<li>The binary file isn't much faster,
+and it creates a huge file.
+But, less code!</li>
+</ul>
+<p>The first one I don't know what to do with,
+but maybe we can combine the last two,
+for a binary index.</p>
+<h3 id="generating-the-index">Generating the index<span class="headerlink"> <a href="#generating-the-index" title="permalink">#</a></span></h3>
+<p>Let's start with the script I made for the text index:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 1</span>
 <span class="normal"> 2</span>
 <span class="normal"> 3</span>
@@ -836,14 +862,27 @@ but that's not available on macOS.</p>
     <span class="n">line</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">line</span><span class="p">:</span>
         <span class="k">break</span>
-    
+
     <span class="n">outf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="sa">b</span><span class="s1">&#39;:&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="sa">b</span><span class="s1">&#39;:&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span> <span class="o">+</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
 
     <span class="n">file</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">2</span><span class="o">**</span><span class="mi">12</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">SEEK_CUR</span><span class="p">)</span>
     <span class="n">file</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span>
 </code></pre></div>
 </td></tr></table>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python generate-index.py &lt; pwned.txt <span class="p">|</span> cut -c-6 <span class="p">|</span> uniq -c <span class="p">|</span> head
+<p>The output looks like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python generate-index.py &lt; pwned.txt <span class="m">2</span>&gt;/dev/null <span class="p">|</span> head -n5
+<span class="go">000000005AD76BD555C1D6D771DE417A4B87E4B4:0</span>
+<span class="go">00000099A4D3034E14DF60EF50799F695C27C0EC:4157</span>
+<span class="go">00000172E8E1D1BD54AC23B3F9AB4383F291CA17:8312</span>
+<span class="go">000002C8F808A7DB504BBC3C711BE8A8D508C0F9:12453</span>
+<span class="go">0000047139578F13D70DD96BADD425C372DB64A9:16637</span>
+</code></pre></div>
+<p>We need to pack that into bytes.</p>
+<p>A hash takes 20 bytes.
+But, looking at the values above, we don't actually <em>need</em> 20 bytes,
+we need just slightly more than 6 hex digits (3 bytes)
+to distinguish between the index lines:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python generate-index.py &lt; pwned.txt <span class="m">2</span>&gt;/dev/null <span class="p">|</span> cut -c-6 <span class="p">|</span> uniq -c <span class="p">|</span> head
 <span class="go">   2 000000</span>
 <span class="go">   1 000001</span>
 <span class="go">   1 000002</span>
@@ -854,10 +893,16 @@ but that's not available on macOS.</p>
 <span class="go">   1 00000A</span>
 <span class="go">   1 00000B</span>
 <span class="go">   1 00000C</span>
-<span class="go">Traceback (most recent call last):</span>
-<span class="go">  ...</span>
-<span class="go">BrokenPipeError: [Errno 32] Broken pipe</span>
 </code></pre></div>
+<p>To represent all the offsets in the file,
+we need <code>log2(35G) / 8 = 4.39...</code> bytes,
+which results in a total of 9 bytes per entry
+(I'm guessing we could even pack it in 8 bytes,
+if we mess with individual bits).</p>
+<p>But let's splurge, and make this big enough to hold any forseeable file:
+6 bytes for the hash gets us files that are at least 65536 times bigger,
+and 6 bytes for offset gets us files that are 1 petabyte.</p>
+<p>So let's do that:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">12</span>
 <span class="normal">13</span>
 <span class="normal">14</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">digest</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="sa">b</span><span class="s1">&#39;:&#39;</span><span class="p">)</span>
@@ -865,12 +910,27 @@ but that's not available on macOS.</p>
     <span class="n">outf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">pos</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="s1">&#39;big&#39;</span><span class="p">))</span>
 </code></pre></div>
 </td></tr></table>
+<p>If you look at the offsets in the text index,
+you'll notice we skip 4K + ~50 bytes;
+this results in some pages that
+don't have a corresponding entry in the index
+which results in us sometimes having to read 2 pages from the big file
+until we find the hash we're looking for.</p>
+<p>Let's fix that so that we always read the first whole line
+after a 4K boundary instead:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">16</span>
+<span class="normal">17</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">file</span><span class="o">.</span><span class="n">seek</span><span class="p">((</span><span class="n">pos</span> <span class="o">//</span> <span class="mi">4096</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mi">4096</span><span class="p">)</span>
+    <span class="n">file</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span>
+</code></pre></div>
+</td></tr></table>
+<p>OK, we're done:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">time</span> python generate-index.py &lt; pwned.txt &gt; index.bin
 
-<span class="go">real	1m11.682s</span>
-<span class="go">user	0m39.158s</span>
-<span class="go">sys	0m24.786s</span>
+<span class="go">real	1m2.729s</span>
+<span class="go">user	0m34.292s</span>
+<span class="go">sys	0m21.392s</span>
 </code></pre></div>
+<h3 id="using-the-index">Using the index<span class="headerlink"> <a href="#using-the-index" title="permalink">#</a></span></h3>
 <p>TODO: redo this:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>average-many pwned.py pwned.txt index.bin
 <span class="go">.002670</span>
