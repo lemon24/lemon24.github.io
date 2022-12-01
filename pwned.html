@@ -937,6 +937,30 @@ the only difference is I've added stubs
 for passing and using the index:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 9</span>
 <span class="normal">10</span>
+<span class="normal">11</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+    <span class="n">skip_to_before_line_index</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">find_line_linear</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">23</span>
+<span class="normal">24</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">skip_to_before_line_index</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+    <span class="o">...</span>
+</code></pre></div>
+</td></tr></table>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">30</span>
+<span class="normal">31</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">index_path</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+<span class="n">index</span> <span class="o">=</span> <span class="o">...</span>
+</code></pre></div>
+</td></tr></table>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">43</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">line</span> <span class="o">=</span> <span class="n">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">hexdigest</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span> <span class="n">index</span><span class="p">)</span>
+</code></pre></div>
+</td></tr></table>
+<details>
+<summary>
+(In case you want to see the whole script. TODO: is this needed?)
+</summary>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 9</span>
+<span class="normal">10</span>
 <span class="normal">11</span>
 <span class="normal">12</span>
 <span class="normal">13</span>
@@ -1024,51 +1048,75 @@ for passing and using the index:</p>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;in </span><span class="si">{</span><span class="n">end</span><span class="o">-</span><span class="n">start</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> seconds&quot;</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+</details>
 <hr />
-<p>TODO: wrap</p>
+<p>As mentioned before,
+we'll use the standard library <a href="https://docs.python.org/3/library/bisect.html">bisect</a> module
+to search the index.</p>
+<p>We <em>could</em> read the entire index in memory,
+as a list of 12-byte <a href="https://docs.python.org/3/library/stdtypes.html#bytes">bytes</a>. But that has at least two issues:</p>
+<ul>
+<li>It'd still be slow, even if outside the current timing code.</li>
+<li>Memory usage would increase with the size of the file.</li>
+</ul>
+<p>Although the module documentation says they work with lists,
+the <code>bisect*</code> functions work with any arbitrary sequence;
+a <a href="https://docs.python.org/3/glossary.html#term-sequence">sequence</a> is an object that implements a couple special methods
+that allow it to pretend to be a list.</p>
+<p>We'll need a object,
+which needs the file and its size:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">27</span>
 <span class="normal">28</span>
 <span class="normal">29</span>
 <span class="normal">30</span>
-<span class="normal">31</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">BytesArray</span><span class="p">:</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">BytesArray</span><span class="p">:</span>
+
+    <span class="n">item_size</span> <span class="o">=</span> <span class="mi">12</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="n">size</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">file</span> <span class="o">=</span> <span class="n">file</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">size</span> <span class="o">=</span> <span class="n">size</span>
 </code></pre></div>
 </td></tr></table>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">38</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">index</span> <span class="o">=</span> <span class="n">BytesArray</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">index_path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">),</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">index_path</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span><span class="p">)</span>
+<p>With __init__() done, we can go ahead and plug it in:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">40</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">index</span> <span class="o">=</span> <span class="n">BytesArray</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">index_path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">),</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">index_path</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<p>TODO: ... talk about Sequence, and how the <code>__getitem__/__len__</code> protocol predates <code>__iter__</code> etc (link to unravelling for?)</p>
-<p>https://docs.python.org/3/library/collections.abc.html#collections-abstract-base-classes</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">33</span>
-<span class="normal">34</span>
-<span class="normal">35</span>
+<p>The first special method is <a href="https://docs.python.org/3/reference/datamodel.html#object.__getitem__">__getitem__()</a>, to implement <code>a[i]</code>:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">35</span>
 <span class="normal">36</span>
 <span class="normal">37</span>
 <span class="normal">38</span>
 <span class="normal">39</span>
-<span class="normal">40</span>
-<span class="normal">41</span>
-<span class="normal">42</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">item_size</span> <span class="o">=</span> <span class="mi">12</span>
-
-    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
-        <span class="n">offset</span> <span class="o">=</span> <span class="n">index</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">item_size</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span> <span class="o">!=</span> <span class="n">offset</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+<span class="normal">40</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">index</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">item_size</span><span class="p">)</span>
         <span class="n">buffer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">item_size</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">buffer</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item_size</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">buffer</span>
 </code></pre></div>
 </td></tr></table>
-<p>TODO: len is trivial</p>
+<p>At the end of file, we raise IndexError to signal an out-of-bounds index.</p>
+<p>The second special method is <a href="https://docs.python.org/3/reference/datamodel.html#object.__len__">__len__()</a>, to implement <code>len(a)</code>:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">44</span>
 <span class="normal">45</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">item_size</span>
 </code></pre></div>
 </td></tr></table>
+<p>TODO: fix line numbers above</p>
+<section class="admonition note">
+<p class="admonition-title">Note</p>
+<p>We're implementing a very barebones sequence,
+ since that's everything that <code>bisect</code> uses.</p>
+<p>For the  full <a href="https://docs.python.org/3/glossary.html#term-sequence">sequence</a> protocol,
+ <a href="https://docs.python.org/3/reference/datamodel.html#object.__getitem__">__getitem__()</a> would need to implement fancy features
+ like negative indexes and slicing.
+ On top of that, inheriting from <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence">collections.abc.Sequence</a>
+ would give us even more sequence methods like <code>count()</code> and <code>index()</code>.</p>
+<p>TODO: ... talk about Sequence, and how the <code>__getitem__/__len__</code> protocol predates <code>__iter__</code> etc (link to unravelling for?)</p>
+</section>
 <hr />
 <p>TODO: ...</p>
 <p>find_le from https://docs.python.org/3/library/bisect.html#searching-sorted-lists</p>
