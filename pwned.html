@@ -65,7 +65,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ 20 minute read
+∙ 21 minute read
 
 
 </small></p>
@@ -362,14 +362,6 @@ with no <em>whence</em> (same as <code>SEEK_SET</code>), that's absolute.</p>
 <p>Because seek() might not leave the file at the beginning of a line,
 we read and discard the possibly incomplete line,
 and look at the one after that.</p>
-<section class="admonition note">
-<p class="admonition-title">Note</p>
-<p>File objects are line <a href="https://docs.python.org/3/glossary.html#term-iterator">iterators</a>, so we could've used <a href="https://docs.python.org/3/library/functions.html#next">next()</a> instead:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nb">next</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-<span class="n">line</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-</code></pre></div>
-<p>... but <a href="https://docs.python.org/3/library/io.html#io.IOBase.readline">readline()</a> conveys better what we're doing in this case.</p>
-</section>
 <p><a href="https://docs.python.org/3/library/io.html#io.IOBase.tell">tell()</a> returns the current stream position,
 so we know where to jump back;
 we're using it at the beginning too,
@@ -596,9 +588,6 @@ the more likely it is the pages at half, quarters, eights, sixteenths etc.
 of the file size will already be in memory,
 and the road to any line starts through some of those positions.</p>
 <h2 id="failing-to-get-to-under-1-millisecond">Failing to get to under 1 millisecond<span class="headerlink"> <a href="#failing-to-get-to-under-1-millisecond" title="permalink">#</a></span></h2>
-<p>When I started writing this,
-this was supposed to be the end;
-this was really supposed to be a short one.</p>
 <p>I wave my hands, <em>get a 2021 laptop,</em> and a miracle happens.
 It's <a href="https://qntm.org/destro">far enough into the totally unpredictable future</a>, now,
 that it takes <em>under 1 millisecond</em> to search for any password.
@@ -609,16 +598,26 @@ It's far enough into the totally unpredictable future, now,
 that you can completely destroy a rocky planet.
 You can do anything you want.
 -->
+<p>So, there we go.
+Wasn't that an interesting story?
+That's the end of the article.
+Don't look at the scroll bar.
+<a href="https://youtu.be/0twDETh6QaI?t=1787">Don't worry about it.</a></p>
+<p>I'll go chill out.</p>
+<p>See ya.</p>
 <hr />
-<p>And now that we've arrived at this point,
-let's spend a moment to ponder the arbitrary nature of 1 millisecond.</p>
-<!--
-And now that you have arrived at this point,
+<p>Originally, this was supposed to be the end.
+This was supposed to be a short one.</p>
+<p>Here's what a friend of mine had to say,
+that chronologically should be way later into the article,
+but I think makes a great summary for what follows:</p>
+<blockquote>
+<p>And now that you have arrived at this point,
 spend a moment to ponder the arbitrary nature of 1 millisecond
 given its dependency on the current year
-and the choice of your particular hardware.
--->
-<hr />
+and the choice of your particular hardware.</p>
+<p>After that moment, continue celebrating.</p>
+</blockquote>
 <p>Nah, fuck it, <strong>it has to work on the old laptop</strong>, the one I'm writing this on.</p>
 <p>... so yeah, here's a bunch of stuff that didn't work.</p>
 <h3 id="aside-better-data-structures">Aside: better data structures<span class="headerlink"> <a href="#aside-better-data-structures" title="permalink">#</a></span></h3>
@@ -627,12 +626,12 @@ there are better data structures to solve this problem,
 but one of my <em>arbitrary</em> requirements was
 that I should use the original file,
 with little to no preparation.</p>
-<p>If you're curious about how that might work,
+<p>If you're curious about how the &quot;better data structures&quot; approach might work,
 check out <a href="https://scotthelme.co.uk/sketchy-pwned-passwords/">Sketchy Pwned Passwords</a> by Scott Helme,
 in which he uses the <a href="https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch">count-min sketch</a> implementation
-provided by <a href="https://redis.io/docs/stack/bloom/">RedisBloom</a> for the Pwned Passwords list (with counts!).
+provided by <a href="https://redis.io/docs/stack/bloom/">RedisBloom</a>.
 Spoiler: It takes 11 hours to generate a ~1.5GB CMS,
-after which it is possible to query it in 0.001ms (in memory).</p>
+but after that it's possible to query it in 0.001ms (in memory).</p>
 <h3 id="profile-before-optimizing-profile"><a href="http://wiki.c2.com/?ProfileBeforeOptimizing">Profile before optimizing</a><span class="headerlink"> <a href="#profile-before-optimizing-profile" title="permalink">#</a></span></h3>
 <p>With the obvious improvements out of the way,
 now it's probably a good time to find out <em>where</em> time is being spent
@@ -660,7 +659,7 @@ by <a href="/fast-conway-cubes#intro-to-profiling">profiling</a>.</p>
 <li>Most of the time is spent in <a href="https://docs.python.org/3/library/io.html#io.IOBase.readline">readline()</a> calls.</li>
 <li><a href="https://docs.python.org/3/library/io.html#io.IOBase.seek">seek()</a> calls are almost free.</li>
 </ul>
-<p><a href="https://docs.python.org/3/library/io.html#io.IOBase.readline">readline()</a> is <a href="https://github.com/python/cpython/blob/f15a0fcb1d13d28266f3e97e592e919b3fff2204/Modules/_io/bufferedio.c#L1054">implemented in C</a>,
+<p><a href="https://docs.python.org/3/library/io.html#io.IOBase.readline">readline()</a> is <a href="https://github.com/python/cpython/blob/3.10/Modules/_io/bufferedio.c#L1070-L1178">implemented in C</a>,
 so there's not much we can change there.
 What we <em>can</em> change, however, is how often we call it.</p>
 <hr />
@@ -1080,8 +1079,10 @@ which needs the file and its size:</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">size</span> <span class="o">=</span> <span class="n">size</span>
 </code></pre></div>
 </td></tr></table>
-<p>With __init__() done, we can go ahead and plug it in:</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">40</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">index</span> <span class="o">=</span> <span class="n">BytesArray</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">index_path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">),</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">index_path</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span><span class="p">)</span>
+<p>We can go ahead and plug it in:</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">39</span>
+<span class="normal">40</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">index_path</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+<span class="n">index</span> <span class="o">=</span> <span class="n">BytesArray</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">index_path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">),</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">index_path</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
 <p>The first special method is <a href="https://docs.python.org/3/reference/datamodel.html#object.__getitem__">__getitem__()</a>, to implement <code>a[i]</code>:</p>
@@ -1100,26 +1101,31 @@ which needs the file and its size:</p>
 </td></tr></table>
 <p>At the end of file, we raise IndexError to signal an out-of-bounds index.</p>
 <p>The second special method is <a href="https://docs.python.org/3/reference/datamodel.html#object.__len__">__len__()</a>, to implement <code>len(a)</code>:</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">44</span>
-<span class="normal">45</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">42</span>
+<span class="normal">43</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">item_size</span>
 </code></pre></div>
 </td></tr></table>
-<p>TODO: fix line numbers above</p>
 <section class="admonition note">
 <p class="admonition-title">Note</p>
-<p>We're implementing a very barebones sequence,
- since that's everything that <code>bisect</code> uses.</p>
-<p>For the  full <a href="https://docs.python.org/3/glossary.html#term-sequence">sequence</a> protocol,
- <a href="https://docs.python.org/3/reference/datamodel.html#object.__getitem__">__getitem__()</a> would need to implement fancy features
- like negative indexes and slicing.
- On top of that, inheriting from <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence">collections.abc.Sequence</a>
- would give us even more sequence methods like <code>count()</code> and <code>index()</code>.</p>
-<p>TODO: ... talk about Sequence, and how the <code>__getitem__/__len__</code> protocol predates <code>__iter__</code> etc (link to unravelling for?)</p>
+<p>We're only implementing the parts of the
+ <a href="https://docs.python.org/3/glossary.html#term-sequence">sequence</a> protocol that <code>bisect</code> uses.</p>
+<p>For the full protocol,
+ <a href="https://docs.python.org/3/reference/datamodel.html#object.__getitem__">__getitem__()</a> would need to also implement
+ negative indexes and slicing.
+ To get even more sequence methods like count() and index() for free,
+ we can inherit <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence">collections.abc.Sequence</a>.</p>
+<p>Interestingly, our class will work in a <code>for</code> loop
+ without needing an <a href="https://docs.python.org/3/reference/datamodel.html#object.__iter__">__iter__()</a> method.
+ That's because there are actually two iteration protocols:
+ an older one, using __getitem__(),
+ and a newer one, <a href="https://peps.python.org/pep-0234/">added in Python 2.1</a>,
+ using __iter__() / __next__();
+ for backwards compatibility, Python still supports the old one
+ (more details on the logic <a href="https://snarky.ca/unravelling-for-statements/#iter-iterable-">here</a>).</p>
 </section>
 <hr />
-<p>TODO: ...</p>
-<p>find_le from https://docs.python.org/3/library/bisect.html#searching-sorted-lists</p>
+<p>Using the index becomes straightforward:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">23</span>
 <span class="normal">24</span>
 <span class="normal">25</span>
@@ -1133,28 +1139,42 @@ which needs the file and its size:</p>
 <span class="normal">33</span>
 <span class="normal">34</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">skip_to_before_line_index</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
     <span class="n">item_prefix</span> <span class="o">=</span> <span class="nb">bytes</span><span class="o">.</span><span class="n">fromhex</span><span class="p">(</span><span class="n">prefix</span><span class="o">.</span><span class="n">decode</span><span class="p">())[:</span><span class="mi">6</span><span class="p">]</span>
-    <span class="n">item</span> <span class="o">=</span> <span class="n">find_le</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">item_prefix</span><span class="p">)</span>
+    <span class="n">item</span> <span class="o">=</span> <span class="n">find_lt</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">item_prefix</span><span class="p">)</span>
     <span class="n">offset</span> <span class="o">=</span> <span class="nb">int</span><span class="o">.</span><span class="n">from_bytes</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="mi">6</span><span class="p">:],</span> <span class="s1">&#39;big&#39;</span><span class="p">)</span> <span class="k">if</span> <span class="n">item</span> <span class="k">else</span> <span class="mi">0</span>
     <span class="n">file</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">find_le</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
-    <span class="n">i</span> <span class="o">=</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect_right</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">find_lt</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+    <span class="n">i</span> <span class="o">=</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect_left</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">i</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">a</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">a</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
     <span class="k">return</span> <span class="kc">None</span>
 </code></pre></div>
 </td></tr></table>
+<p>We get the first 6 bytes of the hash,
+find the rightmost value less than that,
+extract the offset from it,
+and seek to there.
+<code>find_lt()</code> comes from <a href="https://docs.python.org/3/library/bisect.html">bisect</a>'s recipes for <a href="https://docs.python.org/3/library/bisect.html#searching-sorted-lists">searching sorted lists</a>.</p>
 <hr />
-<p>TODO: redo timings (after reboot)</p>
+<p>And we're done:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>average-many pwned.py pwned.txt index.bin
-<span class="go">.002670</span>
-<span class="gp">$ </span>average-many pwned.py pwned.txt index.bin
-<span class="go">.001957</span>
-<span class="gp">$ </span><span class="k">for</span> _ <span class="k">in</span> <span class="o">{</span><span class="m">1</span>..10<span class="o">}</span><span class="p">;</span> <span class="k">do</span> cat index.bin &gt; /dev/null<span class="p">;</span> <span class="k">done</span>
-<span class="gp">$ </span>average-many pwned.py pwned.txt index.bin
-<span class="go">.000510</span>
+<span class="go">.002546</span>
 </code></pre></div>
+<p>Huh? ... that's unexpected...</p>
+<p>Oh.</p>
+<p>I said we won't read the index in memory.
+But we <em>can</em> force it into the OS cache, fadvise() or not,
+by getting the OS to read it a bunch of times:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="k">for</span> _ <span class="k">in</span> <span class="o">{</span><span class="m">1</span>..10<span class="o">}</span><span class="p">;</span> <span class="k">do</span> cat index.bin &gt; /dev/null<span class="p">;</span> <span class="k">done</span>
+</code></pre></div>
+<p>That should have done it:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>average-many pwned.py pwned.txt index.bin
+<span class="go">.000501</span>
+</code></pre></div>
+<p>FINALLY! I am free!</p>
+<hr />
+<p>TODO: bye-bye etc</p>
 <h2 id="bonus-the-k-anonymity-api">Bonus: the k-Anonymity API<span class="headerlink"> <a href="#bonus-the-k-anonymity-api" title="permalink">#</a></span></h2>
 <p>TODO: ...</p>
 <!-- TODO: fix file to be api only
