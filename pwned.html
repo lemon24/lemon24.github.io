@@ -131,20 +131,21 @@ we'll check for the password <em>offline</em>.</p>
 </ul>
 </section>
 <h2 id="the-pwned-passwords-list">The Pwned Passwords list<span class="headerlink"> <a href="#the-pwned-passwords-list" title="permalink">#</a></span></h2>
-<p>Go to the <a href="https://haveibeenpwned.com/Passwords">Pwned Passwords</a>,
-scroll down to <em>Downloading the Pwned Passwords list</em>,
-and download the SHA-1 ordered by hash file;
-be nice and download the torrent, if you can.</p>
-<p>The extracted file is a hefty 37 GB:</p>
+<p>OK, first we need to get password list.</p>
+<p>Go to <a href="https://haveibeenpwned.com/Passwords">Pwned Passwords</a>,
+scroll to <em>Downloading the Pwned Passwords list</em>,
+and download the SHA-1 ordered by hash file –
+be nice and use the torrent, if you can.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
+<p>The 16 GB archive extracts to a 37 GB text file:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">pushd</span> ~/Downloads
+<span class="gp">$ </span>stat -f %z pwned-passwords-sha1-ordered-by-hash-v8.7z
+<span class="go">16257755606</span>
 <span class="gp">$ </span>7zz e pwned-passwords-sha1-ordered-by-hash-v8.7z
-<span class="gp">$ </span>ls -l pwned-passwords-sha1-ordered-by-hash-v8.txt
-<span class="go">-rw-r--r--  1 lemon  staff  37342268646 Dec  2  2021 pwned-passwords-sha1-ordered-by-hash-v8.txt</span>
-<span class="gp">$ </span>ls -lh pwned-passwords-sha1-ordered-by-hash-v8.txt
-<span class="go">-rw-r--r--  1 lemon  staff    35G Dec  2  2021 pwned-passwords-sha1-ordered-by-hash-v8.txt</span>
+<span class="gp">$ </span>stat -f %z pwned-passwords-sha1-ordered-by-hash-v8.txt
+<span class="go">37342268646</span>
 <span class="gp">$ </span><span class="nb">popd</span>
 </code></pre></div>
-<p>And looks like this:</p>
+<p>... that looks like this:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>head -n5 ~/Downloads/pwned-passwords-sha1-ordered-by-hash-v8.txt
 <span class="go">000000005AD76BD555C1D6D771DE417A4B87E4B4:10</span>
 <span class="go">00000000A8DAE4228F821FB418F59826079BF368:4</span>
@@ -152,11 +153,16 @@ be nice and download the torrent, if you can.</p>
 <span class="go">00000001E225B908BAC31C56DB04D892E47536E0:6</span>
 <span class="go">00000006BAB7FC3113AA73DE3589630FC08218E7:3</span>
 </code></pre></div>
-<p>That is, each line has the format:</p>
-<pre class="code code-container"><code>&lt;SHA-1 of the password&gt;:&lt;how many times it appeared in various breaches&gt;
+<p>Each line has the format:</p>
+<pre class="code code-container"><code>&lt;SHA-1 of the password&gt;:&lt;times it appeared in various breaches&gt;
 </code></pre>
-<p>(See the article for <a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#theyrestillsha1hashedbutwithsomejunkremoved">why SHA-1</a> and <a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#eachpasswordnowhasacountnexttoit">why show the counts</a>.)</p>
-<p>To make command lines using it shorter, we'll link it in the current directory:</p>
+<section class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The article mentioned in the introduction explains
+ <a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#theyrestillsha1hashedbutwithsomejunkremoved">why use a hash instead of the actual password</a>, and
+ <a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#eachpasswordnowhasacountnexttoit">what the counts are good for</a>.</p>
+</section>
+<p>To make commands using it shorter, we link it in the current directory:</p>
 <pre class="code code-container"><code>$ ln -s ~/Downloads/pwned-passwords-sha1-ordered-by-hash-v8.txt pwned.txt
 </code></pre>
 <h2 id="problem-no-minimal-plausible-solution">Problem: no minimal plausible solution<span class="headerlink"> <a href="#problem-no-minimal-plausible-solution" title="permalink">#</a></span></h2>
@@ -214,7 +220,7 @@ so we'll <a href="https://wiki.c2.com/?DoTheSimplestThingThatCouldPossiblyWork">
 but if not provided, we prompt for it with <a href="https://docs.python.org/3/library/getpass.html#getpass.getpass">getpass()</a>
 – you don't want your <em>actual</em> password in your shell history, right?</p>
 <p>After we compute the SHA1 hash of the password, we delete it;
-we're not going as far as to <a href="https://en.wikipedia.org/wiki/Zeroisation#Software">zero</a> it<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>,
+we're not going as far as to <a href="https://en.wikipedia.org/wiki/Zeroisation#Software">zero</a> it<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>,
 but it prevents us from accidentally printing it (e.g. in a traceback).</p>
 <p>Let's see if it works, by using <code>password</code> as our test password:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned.txt password
@@ -1300,7 +1306,9 @@ https://haveibeenpwned.com/API/v3#PwnedPasswords
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>It's <a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/">linked</a> right above the textbox, after all. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>Which is <a href="https://stackoverflow.com/q/28676177">kinda difficult to do</a> in Python anyway. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>You can also use the downloader to get an up-to-date version of the file,
+but that wasn't available a year ago when I actually started writing this. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>Which is <a href="https://stackoverflow.com/q/28676177">kinda difficult to do</a> in Python anyway. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
