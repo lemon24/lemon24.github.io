@@ -99,7 +99,7 @@ we'll check for the password <em>offline</em>.</p>
 <section class="toc">
 <ul>
 <li><a href="#the-pwned-passwords-list">The Pwned Passwords list</a></li>
-<li><a href="#problem-no-minimal-plausible-solution">Problem: no minimal plausible solution</a></li>
+<li><a href="#a-minimal-plausible-solution">A minimal plausible solution</a></li>
 <li><a href="#problem-it-s-slow">Problem: it's slow</a>
 <ul>
 <li><a href="#skipping">Skipping</a></li>
@@ -135,7 +135,12 @@ we'll check for the password <em>offline</em>.</p>
 <p>Go to <a href="https://haveibeenpwned.com/Passwords">Pwned Passwords</a>,
 scroll to <em>Downloading the Pwned Passwords list</em>,
 and download the SHA-1 ordered by hash file –
-be nice and use the torrent, if you can.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
+be nice and use the torrent, if you can.</p>
+<section class="admonition note">
+<p class="admonition-title">Note</p>
+<p>You can also use the <a href="https://www.troyhunt.com/downloading-pwned-passwords-hashes-with-the-hibp-downloader/">downloader</a> to get an up-to-date version of the file,
+ but that wasn't available a year ago when I actually started writing this.</p>
+</section>
 <p>The 16 GB archive extracts to a 37 GB text file:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">pushd</span> ~/Downloads
 <span class="gp">$ </span>stat -f %z pwned-passwords-sha1-ordered-by-hash-v8.7z
@@ -158,19 +163,19 @@ be nice and use the torrent, if you can.<sup class="footnote-ref" id="fnref-2"><
 </code></pre>
 <section class="admonition note">
 <p class="admonition-title">Note</p>
-<p>The article mentioned in the introduction explains
+<p>See the article mentioned in the introduction for
  <a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#theyrestillsha1hashedbutwithsomejunkremoved">why use a hash instead of the actual password</a>, and
  <a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#eachpasswordnowhasacountnexttoit">what the counts are good for</a>.</p>
 </section>
 <p>To make commands using it shorter, we link it in the current directory:</p>
 <pre class="code code-container"><code>$ ln -s ~/Downloads/pwned-passwords-sha1-ordered-by-hash-v8.txt pwned.txt
 </code></pre>
-<h2 id="problem-no-minimal-plausible-solution">Problem: no minimal plausible solution<span class="headerlink"> <a href="#problem-no-minimal-plausible-solution" title="permalink">#</a></span></h2>
-<p>We'll take an iterative, <a href="https://hintjens.gitbooks.io/scalable-c/content/chapter1.html#problem-what-do-we-do-next">problem-solution</a> approach to this.</p>
-<p>At the moment, we don't have <em>any</em> solution,
-so we'll <a href="https://wiki.c2.com/?DoTheSimplestThingThatCouldPossiblyWork">do the simplest thing that could possibly work</a>.</p>
+<h2 id="a-minimal-plausible-solution">A minimal plausible solution<span class="headerlink"> <a href="#a-minimal-plausible-solution" title="permalink">#</a></span></h2>
+<p>We'll take an iterative, <a href="https://hintjens.gitbooks.io/scalable-c/content/chapter1.html#problem-what-do-we-do-next">problem-solution</a> approach to this.
+But since right now we don't have <em>any</em> solution,
+we'll start with <a href="https://wiki.c2.com/?DoTheSimplestThingThatCouldPossiblyWork">the simplest thing that could possibly work</a>.</p>
 <!-- ## Imports -->
-<p>First, let's get the imports out of the way:</p>
+<p>First, we get the imports out of the way:<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">1</span>
 <span class="normal">2</span>
 <span class="normal">3</span>
@@ -182,12 +187,6 @@ so we'll <a href="https://wiki.c2.com/?DoTheSimplestThingThatCouldPossiblyWork">
 <span class="kn">import</span> <span class="nn">hashlib</span>
 </code></pre></div>
 </td></tr></table>
-<section class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Sorting imports by length looks <em>neat</em>,
- but it can make things hard to find when there's a lot of them;
- maybe sort alphabetically when working with other people.</p>
-</section>
 <!-- ## File -->
 <p>Then, we open the file:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">7</span>
@@ -195,10 +194,15 @@ so we'll <a href="https://wiki.c2.com/?DoTheSimplestThingThatCouldPossiblyWork">
 <span class="n">file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<p>We do it from the beginning, since we want the exception to happen before reading the password – no point in reading it if the file isn't there.</p>
-<p>Also, we open the file as binary, since we know it's ASCII, and will likely make searching it faster (no needless decoding); it's &quot;minimal <em>plausible</em> solution&quot;, it doesn't mean we can't do some obvious things.</p>
+<p>By opening the file early,
+we get free error checking
+– no point in reading the password if the file isn't there.</p>
+<p>Opening it in binary mode makes searching a bit faster,
+as it skips needless decoding.
+It's minimal <em>plausible</em> solution,
+it doesn't mean we can't do some obvious things.</p>
 <!-- ## Password -->
-<p>Then, get the password:</p>
+<p>Next, the password:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">10</span>
 <span class="normal">11</span>
 <span class="normal">12</span>
@@ -216,27 +220,27 @@ so we'll <a href="https://wiki.c2.com/?DoTheSimplestThingThatCouldPossiblyWork">
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;looking for&quot;</span><span class="p">,</span> <span class="n">hexdigest</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<p>We read the password as the second argument to the script,
-but if not provided, we prompt for it with <a href="https://docs.python.org/3/library/getpass.html#getpass.getpass">getpass()</a>
-– you don't want your <em>actual</em> password in your shell history, right?</p>
-<p>After we compute the SHA1 hash of the password, we delete it;
-we're not going as far as to <a href="https://en.wikipedia.org/wiki/Zeroisation#Software">zero</a> it<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>,
-but it prevents us from accidentally printing it (e.g. in a traceback).</p>
-<p>Let's see if it works, by using <code>password</code> as our test password:</p>
+<p>We either take the it as the second argument to the script,
+or read it from the terminal with <a href="https://docs.python.org/3/library/getpass.html#getpass.getpass">getpass()</a>
+– you don't want your <em>actual</em> password in the shell history, do you?</p>
+<p>After computing its SHA1 hash, we delete the password.
+We won't go as far as to <a href="https://en.wikipedia.org/wiki/Zeroisation#Software">zero</a> it<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>,
+but at least we prevent accidentally printing it (e.g. in a traceback).</p>
+<p>Let's see if it works:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned.txt password
 <span class="go">looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8</span>
 <span class="gp">$ </span>python pwned.py pwned.txt
 <span class="go">Password:</span>
 <span class="go">looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8</span>
 </code></pre></div>
-<p>As a sanity check, the shell agrees:</p>
+<p>The shell <code>sha1sum</code> seems to agree:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span><span class="nb">echo</span> -n password <span class="p">|</span> sha1sum
 <span class="go">5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8  -</span>
 </code></pre></div>
 <!-- ## Finding the hash -->
-<p>To find the hash, we'll do the simplest thing that could possibly work
-– just go through the lines in the file, one by one.
-We'll put the logic in a function, since it'll be useful later on.</p>
+<p>To find the hash, we just go through the file line by line
+(remember, the simplest thing that could possibly work).
+We put this in a function, it might be useful later on.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
 <span class="normal"> 9</span>
 <span class="normal">10</span>
@@ -252,7 +256,7 @@ We'll put the logic in a function, since it'll be useful later on.</p>
     <span class="k">return</span> <span class="kc">None</span>
 </code></pre></div>
 </td></tr></table>
-<p>Then, we just call it to get the line of interest:</p>
+<p>If a line was found, we print the count:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">29</span>
 <span class="normal">30</span>
 <span class="normal">31</span>
@@ -269,26 +273,27 @@ We'll put the logic in a function, since it'll be useful later on.</p>
 </code></pre></div>
 </td></tr></table>
 <!-- ## Timing stuff -->
-<p>Before trying it, let's add a bit of code to measure how long it takes to find the hash:</p>
+<p>Before giving it a whirl, let's add some timing code:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">29</span>
 <span class="normal">30</span>
-<span class="normal">31</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="hll"><span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
-</span><span class="n">line</span> <span class="o">=</span> <span class="n">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">hexdigest</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
-<span class="hll"><span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
-</span></code></pre></div>
+<span class="normal">31</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+<span class="n">line</span> <span class="o">=</span> <span class="n">find_line</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">hexdigest</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+<span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+</code></pre></div>
 </td></tr></table>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">39</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;in </span><span class="si">{</span><span class="n">end</span><span class="o">-</span><span class="n">start</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> seconds&quot;</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<p>And here it is:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned.txt <span class="m">127</span>
-<span class="go">looking for 008451a05e1e7aa32c75119df950d405265e0904</span>
-<span class="go">pwned! seen 2,352 times before</span>
-<span class="go">in 0.452512 seconds</span>
+<p>And, it works:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python pwned.py pwned.txt blocking
+<span class="go">looking for 000085013a02852372159cb94101b99ccaec59e1</span>
+<span class="go">pwned! seen 587 times before</span>
+<span class="go">in 0.002070 seconds</span>
 </code></pre></div>
 <h2 id="problem-it-s-slow">Problem: it's slow<span class="headerlink"> <a href="#problem-it-s-slow" title="permalink">#</a></span></h2>
-<p>You may have noticed the password I used above was <code>127</code>;
-that's because I was cheating, and I chose a password that starts with <code>00</code>,
+<p>...kinda.</p>
+<p>You may have noticed the password I used above was <code>blocking</code>;
+that's because I was cheating, and I chose a password that starts with <code>0000</code>,
 quite close to the beginning of the file.</p>
 <p>On my 2013 laptop, searching for <code>password</code> takes 86 seconds!</p>
 <p>To put a lower bound on the time it takes to go line by line through this file,
@@ -1306,8 +1311,9 @@ https://haveibeenpwned.com/API/v3#PwnedPasswords
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>It's <a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/">linked</a> right above the textbox, after all. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>You can also use the downloader to get an up-to-date version of the file,
-but that wasn't available a year ago when I actually started writing this. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>I remember reading that Guido van Rossum thinks
+sorting imports by length looks cool (I know I do).
+In production code, though, maybe stick to alphabetical :) <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-3"><p>Which is <a href="https://stackoverflow.com/q/28676177">kinda difficult to do</a> in Python anyway. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
