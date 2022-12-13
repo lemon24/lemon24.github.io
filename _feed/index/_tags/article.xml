@@ -2,13 +2,1239 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #article</title>
-  <updated>2022-06-20T15:02:01+00:00</updated>
+  <updated>2022-12-13T18:00:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
   </author>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index/_tags/article.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/pwned">
+    <id>https://death.andgravity.com/pwned</id>
+    <title>Has your password been pwned? Or, how I almost failed to search a 37 GB text file in under 1 millisecond (in Python)</title>
+    <updated>2022-12-13T18:00:00+00:00</updated>
+    <content type="html">&lt;p&gt;So, there's this website, &lt;a href="https://haveibeenpwned.com/"&gt;Have I Been Pwned&lt;/a&gt;,
+where you can check if your email address has appeared in a data breach.&lt;/p&gt;
+&lt;p&gt;There's also a &lt;a href="https://haveibeenpwned.com/Passwords"&gt;Pwned Passwords&lt;/a&gt; section for checking passwords
+... but, typing your password on a random website
+probably isn't such a great idea, right?&lt;/p&gt;
+&lt;p&gt;Of course, you &lt;em&gt;could&lt;/em&gt;
+read about &lt;a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/"&gt;how HIBP protects the privacy of searched passwords&lt;/a&gt;&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;,
+and understand how &lt;a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#cloudflareprivacyandkanonymity"&gt;k-Anonymity&lt;/a&gt; works (it does),
+and check that the website uses the &lt;a href="https://haveibeenpwned.com/API/v3#PwnedPasswords"&gt;k-Anonymity API&lt;/a&gt; (it does),
+but that's waaay too much work.&lt;/p&gt;
+&lt;p&gt;Of course, we could use the API ourselves,
+but where's the fun in that?&lt;/p&gt;
+&lt;p&gt;Instead, we'll do it the hard way –
+we'll check for the password &lt;em&gt;offline&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;And we're not stopping until it's &lt;em&gt;fast&lt;/em&gt;. (This is a threat.)&lt;/p&gt;
+&lt;section class="toc"&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#the-pwned-passwords-list"&gt;The Pwned Passwords list&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#a-minimal-plausible-solution"&gt;A minimal plausible solution&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#problem-it-s-slow"&gt;Problem: it's slow&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#skipping"&gt;Skipping&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#problem-it-needs-tuning-it-s-still-slow"&gt;Problem: it needs tuning, it's still slow&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#binary-skipping"&gt;Binary skipping&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#better-timing"&gt;Better timing&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#failing-to-get-to-under-1-millisecond"&gt;Failing to get to under 1 millisecond&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#profile-before-optimizing-profile"&gt;Profile before optimizing&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#position-heuristic"&gt;Position heuristic&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#index-file"&gt;Index file&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#binary-file"&gt;Binary file&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#getting-to-under-1-millisecond"&gt;Getting to under 1 millisecond&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#generating-the-index"&gt;Generating the index&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#using-the-index"&gt;Using the index&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#i-herd-you-like-indexes-the-end"&gt;I herd you like indexes (the end)&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h2 id="the-pwned-passwords-list"&gt;The Pwned Passwords list&lt;span class="headerlink"&gt; &lt;a href="#the-pwned-passwords-list" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;OK, first we need to get password list.&lt;/p&gt;
+&lt;p&gt;Go to &lt;a href="https://haveibeenpwned.com/Passwords"&gt;Pwned Passwords&lt;/a&gt;,
+scroll to &lt;em&gt;Downloading the Pwned Passwords list&lt;/em&gt;,
+and download the SHA-1 ordered by hash file –
+be nice and use the torrent, if you can.&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Note&lt;/p&gt;
+&lt;p&gt;You can also use the &lt;a href="https://www.troyhunt.com/downloading-pwned-passwords-hashes-with-the-hibp-downloader/"&gt;downloader&lt;/a&gt; to get an up-to-date version of the file,
+ but that wasn't available a year ago when I started writing this.&lt;/p&gt;
+&lt;/section&gt;
+&lt;p&gt;The 16 GB archive extracts to a 37 GB text file:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;&lt;span class="nb"&gt;pushd&lt;/span&gt; ~/Downloads
+&lt;span class="gp"&gt;$ &lt;/span&gt;stat -f %z pwned-passwords-sha1-ordered-by-hash-v8.7z
+&lt;span class="go"&gt;16257755606&lt;/span&gt;
+&lt;span class="gp"&gt;$ &lt;/span&gt;7zz e pwned-passwords-sha1-ordered-by-hash-v8.7z
+&lt;span class="gp"&gt;$ &lt;/span&gt;stat -f %z pwned-passwords-sha1-ordered-by-hash-v8.txt
+&lt;span class="go"&gt;37342268646&lt;/span&gt;
+&lt;span class="gp"&gt;$ &lt;/span&gt;&lt;span class="nb"&gt;popd&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;... that looks like this:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;head -n5 ~/Downloads/pwned-passwords-sha1-ordered-by-hash-v8.txt
+&lt;span class="go"&gt;000000005AD76BD555C1D6D771DE417A4B87E4B4:10&lt;/span&gt;
+&lt;span class="go"&gt;00000000A8DAE4228F821FB418F59826079BF368:4&lt;/span&gt;
+&lt;span class="go"&gt;00000000DD7F2A1C68A35673713783CA390C9E93:873&lt;/span&gt;
+&lt;span class="go"&gt;00000001E225B908BAC31C56DB04D892E47536E0:6&lt;/span&gt;
+&lt;span class="go"&gt;00000006BAB7FC3113AA73DE3589630FC08218E7:3&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Each line has the format:&lt;/p&gt;
+&lt;pre class="code code-container"&gt;&lt;code&gt;&amp;lt;SHA-1 of the password&amp;gt;:&amp;lt;times it appeared in various breaches&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Note&lt;/p&gt;
+&lt;p&gt;See the article mentioned in the introduction for
+ &lt;a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#theyrestillsha1hashedbutwithsomejunkremoved"&gt;why use a hash instead of the actual password&lt;/a&gt;, and
+ &lt;a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/#eachpasswordnowhasacountnexttoit"&gt;what the counts are good for&lt;/a&gt;.&lt;/p&gt;
+&lt;/section&gt;
+&lt;p&gt;To make commands using it shorter, we link it in the current directory:&lt;/p&gt;
+&lt;pre class="code code-container"&gt;&lt;code&gt;$ ln -s ~/Downloads/pwned-passwords-sha1-ordered-by-hash-v8.txt pwned.txt
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2 id="a-minimal-plausible-solution"&gt;A minimal plausible solution&lt;span class="headerlink"&gt; &lt;a href="#a-minimal-plausible-solution" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;We'll take an iterative, &lt;a href="https://hintjens.gitbooks.io/scalable-c/content/chapter1.html#problem-what-do-we-do-next"&gt;problem-solution&lt;/a&gt; approach to this.
+But since right now we don't have &lt;em&gt;any&lt;/em&gt; solution,
+we start with &lt;a href="https://wiki.c2.com/?DoTheSimplestThingThatCouldPossiblyWork"&gt;the simplest thing that could possibly work&lt;/a&gt;.&lt;/p&gt;
+&lt;!-- ## Imports --&gt;
+&lt;p&gt;First, we get the imports out of the way:&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;1&lt;/span&gt;
+&lt;span class="normal"&gt;2&lt;/span&gt;
+&lt;span class="normal"&gt;3&lt;/span&gt;
+&lt;span class="normal"&gt;4&lt;/span&gt;
+&lt;span class="normal"&gt;5&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;os&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;sys&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;time&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;getpass&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;hashlib&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;!-- ## File --&gt;
+&lt;p&gt;Then, we open the file:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;7&lt;/span&gt;
+&lt;span class="normal"&gt;8&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;path&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;sys&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;argv&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="n"&gt;file&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;rb&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;By opening the file early,
+we get free error checking
+– no point in reading the password if the file isn't there.&lt;/p&gt;
+&lt;p&gt;Opening it in binary mode makes searching a bit faster,
+as it skips needless decoding.
+It's minimal &lt;em&gt;plausible&lt;/em&gt; solution,
+it doesn't mean we can't do some obvious things.&lt;/p&gt;
+&lt;!-- ## Password --&gt;
+&lt;p&gt;Next, the password:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;10&lt;/span&gt;
+&lt;span class="normal"&gt;11&lt;/span&gt;
+&lt;span class="normal"&gt;12&lt;/span&gt;
+&lt;span class="normal"&gt;13&lt;/span&gt;
+&lt;span class="normal"&gt;14&lt;/span&gt;
+&lt;span class="normal"&gt;15&lt;/span&gt;
+&lt;span class="normal"&gt;16&lt;/span&gt;
+&lt;span class="normal"&gt;17&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;password&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;sys&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;argv&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="ne"&gt;IndexError&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;password&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;getpass&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;getpass&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="n"&gt;hexdigest&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;hashlib&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sha1&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;password&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;encode&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hexdigest&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="k"&gt;del&lt;/span&gt; &lt;span class="n"&gt;password&lt;/span&gt;
+
+&lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;looking for&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;hexdigest&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;We either take it as the second argument to the script,
+or read it with &lt;a href="https://docs.python.org/3/library/getpass.html#getpass.getpass"&gt;getpass()&lt;/a&gt;,
+so your &lt;em&gt;actual&lt;/em&gt; password doesn't remain the shell history.&lt;/p&gt;
+&lt;p&gt;After computing the password's hash, we delete it.
+We won't go as far as to &lt;a href="https://en.wikipedia.org/wiki/Zeroisation#Software"&gt;zero&lt;/a&gt; it,&lt;sup class="footnote-ref" id="fnref-3"&gt;&lt;a href="#fn-3"&gt;3&lt;/a&gt;&lt;/sup&gt;
+but at least we prevent accidental printing (e.g. in a traceback).&lt;/p&gt;
+&lt;p&gt;Let's see if it works:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;python pwned.py pwned.txt password
+&lt;span class="go"&gt;looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8&lt;/span&gt;
+&lt;span class="gp"&gt;$ &lt;/span&gt;python pwned.py pwned.txt
+&lt;span class="go"&gt;Password:&lt;/span&gt;
+&lt;span class="go"&gt;looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The shell &lt;code&gt;sha1sum&lt;/code&gt; seems to agree:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;&lt;span class="nb"&gt;echo&lt;/span&gt; -n password &lt;span class="p"&gt;|&lt;/span&gt; sha1sum
+&lt;span class="go"&gt;5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8  -&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;!-- ## Finding the hash --&gt;
+&lt;p&gt;To find the hash, we just go through the file line by line
+(remember, simplest thing that could possibly work).
+We put this in a function, it might be useful later on.&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt; 8&lt;/span&gt;
+&lt;span class="normal"&gt; 9&lt;/span&gt;
+&lt;span class="normal"&gt;10&lt;/span&gt;
+&lt;span class="normal"&gt;11&lt;/span&gt;
+&lt;span class="normal"&gt;12&lt;/span&gt;
+&lt;span class="normal"&gt;13&lt;/span&gt;
+&lt;span class="normal"&gt;14&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;find_line&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lines&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;lines&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+            &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;break&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;If a line was found, we print the count:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;29&lt;/span&gt;
+&lt;span class="normal"&gt;30&lt;/span&gt;
+&lt;span class="normal"&gt;31&lt;/span&gt;
+&lt;span class="normal"&gt;32&lt;/span&gt;
+&lt;span class="normal"&gt;33&lt;/span&gt;
+&lt;span class="normal"&gt;34&lt;/span&gt;
+&lt;span class="normal"&gt;35&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;find_line&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;hexdigest&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;upper&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;encode&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;
+
+&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;times&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;line&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;decode&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;rstrip&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;partition&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;:&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)[&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+    &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;pwned! seen &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;times&lt;/span&gt;&lt;span class="si"&gt;:&lt;/span&gt;&lt;span class="s2"&gt;,&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; times before&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;not found&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;!-- ## Timing stuff --&gt;
+&lt;p&gt;Before giving it a whirl, let's add some timing code:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;29&lt;/span&gt;
+&lt;span class="normal"&gt;30&lt;/span&gt;
+&lt;span class="normal"&gt;31&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;start&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;time&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;monotonic&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;find_line&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;hexdigest&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;upper&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;encode&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;
+&lt;span class="n"&gt;end&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;time&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;monotonic&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;39&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;in &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;end&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="n"&gt;start&lt;/span&gt;&lt;span class="si"&gt;:&lt;/span&gt;&lt;span class="s2"&gt;.6f&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; seconds&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;And, it works (&lt;a href="/_file/pwned/00-linear.py"&gt;the code so far&lt;/a&gt;):&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;python pwned.py pwned.txt blocking
+&lt;span class="go"&gt;looking for 000085013a02852372159cb94101b99ccaec59e1&lt;/span&gt;
+&lt;span class="go"&gt;pwned! seen 587 times before&lt;/span&gt;
+&lt;span class="go"&gt;in 0.002070 seconds&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id="problem-it-s-slow"&gt;Problem: it's slow&lt;span class="headerlink"&gt; &lt;a href="#problem-it-s-slow" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;...kinda.&lt;/p&gt;
+&lt;p&gt;You may have noticed I switched from &lt;code&gt;password&lt;/code&gt; to &lt;code&gt;blocking&lt;/code&gt;.
+That's because I was cheating –
+I deliberately chose a password whose hash is at the beginning of the file.&lt;/p&gt;
+&lt;p&gt;On my 2013 laptop, searching for &lt;code&gt;password&lt;/code&gt; actually takes &lt;strong&gt;86 seconds&lt;/strong&gt;!&lt;/p&gt;
+&lt;p&gt;Let's put a lower bound on the time it takes to go through the file:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;&lt;span class="nb"&gt;time&lt;/span&gt; wc -l pwned.txt
+&lt;span class="go"&gt; 847223402 pwned.txt&lt;/span&gt;
+
+&lt;span class="go"&gt;real	1m7.234s&lt;/span&gt;
+&lt;span class="go"&gt;user	0m31.133s&lt;/span&gt;
+&lt;span class="go"&gt;sys	0m16.379s&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;There are &lt;a href="https://chrispenner.ca/posts/wc"&gt;faster&lt;/a&gt; &lt;a href="https://medium.com/@martinmroz/beating-c-with-120-lines-of-rust-wc-a0db679fe920"&gt;implementations&lt;/a&gt; of &lt;code&gt;wc&lt;/code&gt; &lt;a href="https://github.com/expr-fi/fastlwc/"&gt;out there&lt;/a&gt;,
+but Python can't even beat this one:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;&lt;span class="nb"&gt;time&lt;/span&gt; python3 -c &lt;span class="s1"&gt;&amp;#39;for line in open(&amp;quot;pwned.txt&amp;quot;, &amp;quot;rb&amp;quot;): pass&amp;#39;&lt;/span&gt;
+
+&lt;span class="go"&gt;real	1m28.325s&lt;/span&gt;
+&lt;span class="go"&gt;user	1m10.049s&lt;/span&gt;
+&lt;span class="go"&gt;sys	0m15.577s&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;&lt;a href="https://www.youtube.com/watch?v=UANN2Eu6ZnM&amp;amp;t=438s"&gt;There must be a better way.&lt;/a&gt;&lt;/p&gt;
+&lt;h3 id="skipping"&gt;Skipping&lt;span class="headerlink"&gt; &lt;a href="#skipping" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;There's a hint about that in the file name: the hashes are &lt;em&gt;ordered&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;That means we don't &lt;em&gt;have&lt;/em&gt; to check all the lines;
+we can skip ahead until we're past the hash,
+go back one step, and only check each line from there.&lt;/p&gt;
+&lt;p&gt;Lines are different lengths,
+so we can't skip exactly X lines without reading them.
+But we don't need to,
+skipping to any line that's a reasonable amount ahead will do.&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;17&lt;/span&gt;
+&lt;span class="normal"&gt;18&lt;/span&gt;
+&lt;span class="normal"&gt;19&lt;/span&gt;
+&lt;span class="normal"&gt;20&lt;/span&gt;
+&lt;span class="normal"&gt;21&lt;/span&gt;
+&lt;span class="normal"&gt;22&lt;/span&gt;
+&lt;span class="normal"&gt;23&lt;/span&gt;
+&lt;span class="normal"&gt;24&lt;/span&gt;
+&lt;span class="normal"&gt;25&lt;/span&gt;
+&lt;span class="normal"&gt;26&lt;/span&gt;
+&lt;span class="normal"&gt;27&lt;/span&gt;
+&lt;span class="normal"&gt;28&lt;/span&gt;
+&lt;span class="normal"&gt;29&lt;/span&gt;
+&lt;span class="normal"&gt;30&lt;/span&gt;
+&lt;span class="normal"&gt;31&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;skip_to_before_line&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;offset&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;old_position&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;tell&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+
+    &lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;seek&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;offset&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;os&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;SEEK_CUR&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+        &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;readline&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;readline&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="c1"&gt;# print(&amp;quot;jumped to&amp;quot;, (line or b&amp;#39;&amp;lt;eof&amp;gt;&amp;#39;).decode().rstrip())&lt;/span&gt;
+
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="ow"&gt;or&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;=&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;seek&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;old_position&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+            &lt;span class="k"&gt;break&lt;/span&gt;
+
+        &lt;span class="n"&gt;old_position&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;tell&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;So we just &lt;a href="https://docs.python.org/3/library/io.html#io.IOBase.seek"&gt;seek()&lt;/a&gt; ahead a set number of bytes.
+Since that might not leave us at the start of a line,
+we discard the incomplete line,
+and use the next one.&lt;/p&gt;
+&lt;!--
+If we can still skip ahead,
+we remember the [current position][tell],
+so we can return to it if needed.
+--&gt;
+&lt;p&gt;Finally, we wrap the original &lt;code&gt;find_line()&lt;/code&gt; with one that does the skipping:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt; 8&lt;/span&gt;
+&lt;span class="normal"&gt; 9&lt;/span&gt;
+&lt;span class="normal"&gt;10&lt;/span&gt;
+&lt;span class="normal"&gt;11&lt;/span&gt;
+&lt;span class="normal"&gt;12&lt;/span&gt;
+&lt;span class="normal"&gt;13&lt;/span&gt;
+&lt;span class="normal"&gt;14&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;find_line&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;skip_to_before_line&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;16&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="mi"&gt;20&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;find_line_linear&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+
+&lt;span class="hll"&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;find_line_linear&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lines&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+&lt;/span&gt;    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;lines&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;It works:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;python pwned.py pwned.txt password
+&lt;span class="go"&gt;looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8&lt;/span&gt;
+&lt;span class="go"&gt;pwned! seen 9,545,824 times before&lt;/span&gt;
+&lt;span class="go"&gt;in 0.027203 seconds&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;I found the magic 16 MiB offset by trying a bunch of different values:&lt;/p&gt;
+&lt;pre class="code code-container"&gt;&lt;code&gt;offset (MiB)   time (s)
+           1      0.05
+           4      0.035
+           8      0.030
+          16      0.027  &amp;lt;-- sweet spot
+          32      0.14
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;a href="/_file/pwned/01-linear-skip.py"&gt;The code so far.&lt;/a&gt;&lt;/p&gt;
+&lt;h2 id="problem-it-needs-tuning-it-s-still-slow"&gt;Problem: it needs tuning, it's still slow&lt;span class="headerlink"&gt; &lt;a href="#problem-it-needs-tuning-it-s-still-slow" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;While three orders of magnitude faster, we still have a bunch of issues:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;The ideal skip size depends on computer you're running this on.&lt;/li&gt;
+&lt;li&gt;The run time still increases linearly with file size;
+we haven't really solved the problem,
+as much as made it smaller by a (large, but) constant factor.&lt;/li&gt;
+&lt;li&gt;The run time still increases linearly with where the hash is in the file.&lt;/li&gt;
+&lt;li&gt;To be honest, it's still kinda slow. ¯\_(ツ)_/¯&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;&lt;a href="https://www.youtube.com/watch?v=OSGv2VnC0go&amp;amp;t=557s"&gt;There must be a better way.&lt;/a&gt;&lt;/p&gt;
+&lt;h3 id="binary-skipping"&gt;Binary skipping&lt;span class="headerlink"&gt; &lt;a href="#binary-skipping" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;To make the &amp;quot;linear&amp;quot; part painfully obvious,
+uncomment the &lt;code&gt;jumped to&lt;/code&gt; line.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;python pwned.py pwned.txt password &lt;span class="p"&gt;|&lt;/span&gt; grep -o &lt;span class="s1"&gt;&amp;#39;jumped to .&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;|&lt;/span&gt; uniq -c
+&lt;span class="go"&gt; 139 jumped to 0&lt;/span&gt;
+&lt;span class="go"&gt; 139 jumped to 1&lt;/span&gt;
+&lt;span class="go"&gt; 139 jumped to 2&lt;/span&gt;
+&lt;span class="go"&gt; 139 jumped to 3&lt;/span&gt;
+&lt;span class="go"&gt; 139 jumped to 4&lt;/span&gt;
+&lt;span class="go"&gt; 103 jumped to 5&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Surely, after we've ju       44    0.000    0.000    0.000    0.000 {method 'tell' of '_io.BufferedReader' objects}mped to &lt;code&gt;0&lt;/code&gt; once,
+we don't &lt;em&gt;need&lt;/em&gt; to do it 138 more times, right?&lt;/p&gt;
+&lt;p&gt;We could jump directly to a line in the middle of the file;
+if there at all,
+the hash will be in either of the halves.
+We then jump to the middle of that half,
+and to the middle of &lt;em&gt;that&lt;/em&gt; half,
+and so on,
+until we either find the hash
+or there's nowhere left to jump.&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Note&lt;/p&gt;
+&lt;p&gt;If that sounds a lot like &lt;a href="https://en.wikipedia.org/wiki/Binary_search_algorithm"&gt;binary search&lt;/a&gt;, that's because it is
+ – it's just not wearing its usual array clothes.&lt;/p&gt;
+&lt;/section&gt;
+&lt;p&gt;And most of the work is already done:
+we can jump to a line at most X bytes from where the hash should be,
+we only need to do it repeatedly,
+in smaller and smaller fractions of the file size:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;25&lt;/span&gt;
+&lt;span class="normal"&gt;26&lt;/span&gt;
+&lt;span class="normal"&gt;27&lt;/span&gt;
+&lt;span class="normal"&gt;28&lt;/span&gt;
+&lt;span class="normal"&gt;29&lt;/span&gt;
+&lt;span class="normal"&gt;30&lt;/span&gt;
+&lt;span class="normal"&gt;31&lt;/span&gt;
+&lt;span class="normal"&gt;32&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;skip_to_before_line&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;offset&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="n"&gt;offset&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="n"&gt;offset&lt;/span&gt; &lt;span class="o"&gt;//=&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;
+        &lt;span class="n"&gt;skip_to_before_line_linear&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;offset&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+
+&lt;span class="hll"&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;skip_to_before_line_linear&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;offset&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+&lt;/span&gt;    &lt;span class="n"&gt;old_position&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;tell&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;The only thing left is to get the file size:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt; 8&lt;/span&gt;
+&lt;span class="normal"&gt; 9&lt;/span&gt;
+&lt;span class="normal"&gt;10&lt;/span&gt;
+&lt;span class="normal"&gt;11&lt;/span&gt;
+&lt;span class="normal"&gt;12&lt;/span&gt;
+&lt;span class="normal"&gt;13&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;find_line&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;seek&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;os&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;SEEK_END&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;tell&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+    &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;seek&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;skip_to_before_line&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;size&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;find_line_linear&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;!--
+
+.. note:: Fun fact
+
+    I initially used `os.stat(path).st_size` for this,
+    and passing `file.fileno()` instead of the path would've worked too.
+
+    But, the `seek(0, os.SEEK_END)` + `tell()` trick I discovered
+    by trying to get [ChatGPT] to write the code for this article
+    from a description of the problem alone
+    (it got as far as the linear solution!).
+
+    I swear everything else in this article was generated by a human.
+
+    ...
+
+    Written. Written by a human.
+
+    [ChatGPT]: https://en.wikipedia.org/wiki/ChatGPT
+
+--&gt;
+&lt;p&gt;It works:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;python pwned.py pwned.txt password
+&lt;span class="go"&gt;looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8&lt;/span&gt;
+&lt;span class="go"&gt;pwned! seen 9,545,824 times before&lt;/span&gt;
+&lt;span class="go"&gt;in 0.009559 seconds&lt;/span&gt;
+&lt;span class="gp"&gt;$ &lt;/span&gt;python pwned.py pwned.txt password
+&lt;span class="go"&gt;looking for 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8&lt;/span&gt;
+&lt;span class="go"&gt;pwned! seen 9,545,824 times before&lt;/span&gt;
+&lt;span class="go"&gt;in 0.000268 seconds&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The huge time difference is due to &lt;a href="https://en.wikipedia.org/wiki/Page_cache"&gt;operating system and/or disk caches&lt;/a&gt;
+– on the second run, the (same) parts of the file are likely already in memory.&lt;/p&gt;
+&lt;p&gt;Anyway, look again at the &lt;code&gt;jumped to&lt;/code&gt; output:
+instead of jumping blindly through the whole file,
+now we're jumping &lt;em&gt;around&lt;/em&gt; the hash,
+getting closer and closer to it.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;python pwned.py pwned.txt password &lt;span class="p"&gt;|&lt;/span&gt; grep -o &lt;span class="s1"&gt;&amp;#39;jumped to .&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;|&lt;/span&gt; uniq -c
+&lt;span class="go"&gt;   1 jumped to 7&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 3&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 7&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 5&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 4&lt;/span&gt;
+&lt;span class="go"&gt;  39 jumped to 5&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;python pwned.py pwned.txt password &lt;span class="p"&gt;|&lt;/span&gt; grep -o &lt;span class="s1"&gt;&amp;#39;jumped to ..&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;|&lt;/span&gt; uniq -c
+&lt;span class="go"&gt;   1 jumped to 7F&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 3F&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 7F&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 5F&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 4F&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 5F&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 57&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 5F&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 5B&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 59&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 5B&lt;/span&gt;
+&lt;span class="go"&gt;   1 jumped to 5A&lt;/span&gt;
+&lt;span class="go"&gt;  32 jumped to 5B&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;You may notice we end up at the same &lt;code&gt;7F...&lt;/code&gt; prefix twice;
+this makes sense –
+we skip ahead by half the file size,
+then back,
+then ahead by a quarter two times.
+It shouldn't really change anything,
+the second time the data is likely already cached.&lt;/p&gt;
+&lt;p&gt;&lt;a href="/_file/pwned/02-binary-search.py"&gt;The code so far.&lt;/a&gt;&lt;/p&gt;
+&lt;h3 id="better-timing"&gt;Better timing&lt;span class="headerlink"&gt; &lt;a href="#better-timing" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Given the way caching muddies the waters,
+how fast is it &lt;em&gt;really?&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;This shell function averages a hundred runs,
+each with a different password:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;function&lt;/span&gt; average-many &lt;span class="o"&gt;{&lt;/span&gt;
+    &lt;span class="k"&gt;for&lt;/span&gt; _ &lt;span class="k"&gt;in&lt;/span&gt; &lt;span class="o"&gt;{&lt;/span&gt;&lt;span class="m"&gt;1&lt;/span&gt;..100&lt;span class="o"&gt;}&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt;
+        python &lt;span class="nv"&gt;$@&lt;/span&gt; &lt;span class="k"&gt;$(&lt;/span&gt; python -c &lt;span class="s1"&gt;&amp;#39;import time; print(time.time())&amp;#39;&lt;/span&gt; &lt;span class="k"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;done&lt;/span&gt; &lt;span class="se"&gt;\&lt;/span&gt;
+    &lt;span class="p"&gt;|&lt;/span&gt; grep seconds &lt;span class="se"&gt;\&lt;/span&gt;
+    &lt;span class="p"&gt;|&lt;/span&gt; cut -d&lt;span class="s1"&gt;&amp;#39; &amp;#39;&lt;/span&gt; -f2 &lt;span class="se"&gt;\&lt;/span&gt;
+    &lt;span class="p"&gt;|&lt;/span&gt; paste -sd+ - &lt;span class="se"&gt;\&lt;/span&gt;
+    &lt;span class="p"&gt;|&lt;/span&gt; sed &lt;span class="s1"&gt;&amp;#39;s#^#scale=6;(#&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;|&lt;/span&gt; sed &lt;span class="s1"&gt;&amp;#39;s#$#)/100#&amp;#39;&lt;/span&gt; &lt;span class="se"&gt;\&lt;/span&gt;
+    &lt;span class="p"&gt;|&lt;/span&gt; bc
+&lt;span class="o"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;details&gt;
+&lt;summary&gt;
+After a few repeats, the average time settles around 3 ms.
+&lt;/summary&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt; _ &lt;span class="k"&gt;in&lt;/span&gt; &lt;span class="o"&gt;{&lt;/span&gt;&lt;span class="m"&gt;1&lt;/span&gt;..20&lt;span class="o"&gt;}&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; average-many pwned.py pwned.txt&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="k"&gt;done&lt;/span&gt;
+&lt;span class="go"&gt;.004802&lt;/span&gt;
+&lt;span class="go"&gt;.003904&lt;/span&gt;
+&lt;span class="go"&gt;.004088&lt;/span&gt;
+&lt;span class="go"&gt;.003486&lt;/span&gt;
+&lt;span class="go"&gt;.003451&lt;/span&gt;
+&lt;span class="go"&gt;.003476&lt;/span&gt;
+&lt;span class="go"&gt;.003414&lt;/span&gt;
+&lt;span class="go"&gt;.003442&lt;/span&gt;
+&lt;span class="go"&gt;.003169&lt;/span&gt;
+&lt;span class="go"&gt;.003297&lt;/span&gt;
+&lt;span class="go"&gt;.002931&lt;/span&gt;
+&lt;span class="go"&gt;.003077&lt;/span&gt;
+&lt;span class="go"&gt;.003092&lt;/span&gt;
+&lt;span class="go"&gt;.003011&lt;/span&gt;
+&lt;span class="go"&gt;.002980&lt;/span&gt;
+&lt;span class="go"&gt;.003147&lt;/span&gt;
+&lt;span class="go"&gt;.003112&lt;/span&gt;
+&lt;span class="go"&gt;.002942&lt;/span&gt;
+&lt;span class="go"&gt;.002984&lt;/span&gt;
+&lt;span class="go"&gt;.002934&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/details&gt;
+&lt;p&gt;Again, this is due to caching; the more we run it,
+the more likely it is the pages at half, quarters, eights, sixteenths, and so on
+of the file size are already in memory,
+and the road to any line starts through a subset of those.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;&lt;a href="https://qntm.org/destro"&gt;I wave my hands&lt;/a&gt;, get a 2020 laptop, and a miracle happens.
+It's far enough into the totally unpredictable future, now,
+that you can search any password in under 1 millisecond.
+You can do anything you want.&lt;/p&gt;
+&lt;!--
+I wave my hands, and a miracle happens.
+It's far enough into the totally unpredictable future, now,
+that you can completely destroy a rocky planet.
+You can do anything you want.
+--&gt;
+&lt;p&gt;&lt;a href="https://youtu.be/0twDETh6QaI?t=1787"&gt;So, there we go.&lt;/a&gt;
+Wasn't that an interesting story?
+That's the end of the article.
+Don't look at the scroll bar.
+Don't worry about it.&lt;/p&gt;
+&lt;p&gt;If you came here to find
+a somewhat inconvenient way of checking if your password has been compromised,
+you can go.&lt;/p&gt;
+&lt;p&gt;Subscribe on the way out if you'd like, but take care :)&lt;/p&gt;
+&lt;p&gt;Go solve &lt;a href="/conway-cubes"&gt;Advent of Code&lt;/a&gt; or something.&lt;/p&gt;
+&lt;p&gt;I'm just chilling out.&lt;/p&gt;
+&lt;!--
+I'll go chill out.
+--&gt;
+&lt;p&gt;See ya.&lt;/p&gt;
+
+&lt;h2 id="failing-to-get-to-under-1-millisecond"&gt;Failing to get to under 1 millisecond&lt;span class="headerlink"&gt; &lt;a href="#failing-to-get-to-under-1-millisecond" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;OK, I think they're gone.&lt;/p&gt;
+&lt;p&gt;I swear this was supposed to be the end;
+this really was supposed to be a short one.&lt;/p&gt;
+&lt;p&gt;Here's what a friend of mine said,
+that chronologically should be way later into the article,
+but makes a great summary for what follows:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;And now that you have arrived at this point,
+spend a moment to ponder the arbitrary nature of 1 millisecond
+given its dependency on the current year
+and the choice of your particular hardware.&lt;/p&gt;
+&lt;p&gt;After that moment, continue celebrating.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Nah, fuck it, &lt;strong&gt;it has to take less than 1 millisecond on the old laptop&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;... so yeah, here's a bunch of stuff that didn't work.&lt;/p&gt;
+&lt;h3 id="profile-before-optimizing-profile"&gt;&lt;a href="http://wiki.c2.com/?ProfileBeforeOptimizing"&gt;Profile before optimizing&lt;/a&gt;&lt;span class="headerlink"&gt; &lt;a href="#profile-before-optimizing-profile" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Now, with the obvious improvements out of the way,
+it's probably a good time to stop and
+&lt;a href="/fast-conway-cubes#intro-to-profiling"&gt;find out where time is being spent&lt;/a&gt;.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;python -m cProfile -s cumulative pwned.py pwned.txt &lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="k"&gt;$(&lt;/span&gt; date &lt;span class="k"&gt;)&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;
+&lt;span class="go"&gt;looking for 3960626a8c59fe927d3cf2e991d67f4c505ae198&lt;/span&gt;
+&lt;span class="go"&gt;not found&lt;/span&gt;
+&lt;span class="go"&gt;in 0.004902 seconds&lt;/span&gt;
+&lt;span class="go"&gt;         1631 function calls (1614 primitive calls) in 0.010 seconds&lt;/span&gt;
+
+&lt;span class="go"&gt;   Ordered by: cumulative time&lt;/span&gt;
+
+&lt;span class="go"&gt;   ncalls  tottime  percall  cumtime  percall filename:lineno(function)&lt;/span&gt;
+&lt;span class="go"&gt;      ...&lt;/span&gt;
+&lt;span class="go"&gt;        1    0.000    0.000    0.005    0.005 02-binary-search.py:8(find_line)&lt;/span&gt;
+&lt;span class="go"&gt;        1    0.000    0.000    0.005    0.005 02-binary-search.py:22(skip_to_before_line)&lt;/span&gt;
+&lt;span class="go"&gt;       28    0.000    0.000    0.005    0.000 02-binary-search.py:28(skip_to_before_line_linear)&lt;/span&gt;
+&lt;span class="go"&gt;       86    0.004    0.000    0.004    0.000 {method &amp;#39;readline&amp;#39; of &amp;#39;_io.BufferedReader&amp;#39; objects}&lt;/span&gt;
+&lt;span class="go"&gt;      ...&lt;/span&gt;
+&lt;span class="go"&gt;       71    0.000    0.000    0.000    0.000 {method &amp;#39;seek&amp;#39; of &amp;#39;_io.BufferedReader&amp;#39; objects}&lt;/span&gt;
+&lt;span class="go"&gt;      ...&lt;/span&gt;
+&lt;span class="go"&gt;       44    0.000    0.000    0.000    0.000 {method &amp;#39;tell&amp;#39; of &amp;#39;_io.BufferedReader&amp;#39; objects}&lt;/span&gt;
+&lt;span class="go"&gt;      ...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;From the output above, we learn that:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Most of the time is spent in &lt;a href="https://docs.python.org/3/library/io.html#io.IOBase.readline"&gt;readline()&lt;/a&gt; calls.&lt;/li&gt;
+&lt;li&gt;Both &lt;a href="https://docs.python.org/3/library/io.html#io.IOBase.seek"&gt;seek()&lt;/a&gt; and &lt;a href="https://docs.python.org/3/library/io.html#io.IOBase.tell"&gt;tell()&lt;/a&gt; calls are almost free.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;a href="https://docs.python.org/3/library/io.html#io.IOBase.readline"&gt;readline()&lt;/a&gt; is &lt;a href="https://github.com/python/cpython/blob/3.10/Modules/_io/bufferedio.c#L1070-L1178"&gt;implemented in C&lt;/a&gt;,
+so there's not much we can change there.&lt;/p&gt;
+&lt;p&gt;What we &lt;em&gt;can&lt;/em&gt; change, however, is how often we call it.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;Another thing of interest is how much individual &lt;a href="https://docs.python.org/3/library/io.html#io.IOBase.readline"&gt;readline()&lt;/a&gt; calls take.&lt;/p&gt;
+&lt;p&gt;In &lt;code&gt;skip_to_before_line_linear()&lt;/code&gt;:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;34&lt;/span&gt;
+&lt;span class="normal"&gt;35&lt;/span&gt;
+&lt;span class="normal"&gt;36&lt;/span&gt;
+&lt;span class="normal"&gt;37&lt;/span&gt;
+&lt;span class="normal"&gt;38&lt;/span&gt;
+&lt;span class="normal"&gt;39&lt;/span&gt;
+&lt;span class="normal"&gt;40&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;        &lt;span class="n"&gt;start&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;time&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;monotonic&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;readline&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;readline&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="n"&gt;end&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;time&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;monotonic&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;jumped to&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;line&lt;/span&gt;&lt;span class="p"&gt;[:&lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="ow"&gt;or&lt;/span&gt; &lt;span class="sa"&gt;b&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&amp;lt;eof&amp;gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;decode&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;rstrip&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt;
+              &lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;in &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;end&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="n"&gt;start&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="mi"&gt;1000000&lt;/span&gt;&lt;span class="si"&gt;:&lt;/span&gt;&lt;span class="s2"&gt;4.0f&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; us&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+              &lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;at offset &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;tell&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="si"&gt;:&lt;/span&gt;&lt;span class="s2"&gt;16,&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;details&gt;
+&lt;summary&gt;
+The output is pretty enlightening:
+&lt;/summary&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;python pwned.py pwned.txt asdf
+&lt;span class="go"&gt;looking for 3da541559918a808c2402bba5012f6c60b27661c&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 7FF9E in   10 us at offset   18,671,134,394  &amp;lt;-- 1/2 file size&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3FF89 in    4 us at offset    9,335,567,234  &amp;lt;-- 1/4 file size&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 1FFBA in    3 us at offset    4,667,783,663  &amp;lt;-- 1/8 file size&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3FF89 in    3 us at offset    9,335,567,322  &amp;lt;-- 1/4 file size&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 2FFA4 in    5 us at offset    7,001,675,508&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3FF89 in    4 us at offset    9,335,567,366  &amp;lt;-- 1/4 file size&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 37F98 in    4 us at offset    8,168,621,453&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3FF89 in    3 us at offset    9,335,567,410  &amp;lt;-- 1/4 file size&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3BF94 in    3 us at offset    8,752,094,477&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3FF89 in    2 us at offset    9,335,567,498  &amp;lt;-- 1/4 file size&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DF8E in    3 us at offset    9,043,831,007&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3CF90 in    3 us at offset    8,897,962,782&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DF8E in    2 us at offset    9,043,831,095&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3D790 in    3 us at offset    8,970,896,964&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DF8E in    2 us at offset    9,043,831,139&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DB90 in  253 us at offset    9,007,364,072&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3D990 in  206 us at offset    8,989,130,552&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DB90 in    6 us at offset    9,007,364,160&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA8F in  270 us at offset    8,998,247,402  &amp;lt;-- page 2,196,837&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA0F in  189 us at offset    8,993,689,007&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA8F in    5 us at offset    8,998,247,446  &amp;lt;-- page 2,196,837&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA4F in  212 us at offset    8,995,968,274&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA8F in    5 us at offset    8,998,247,534  &amp;lt;-- page 2,196,837&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA6F in  266 us at offset    8,997,107,921&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA5F in  203 us at offset    8,996,538,139&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA57 in  195 us at offset    8,996,253,241&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA53 in  197 us at offset    8,996,110,772&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA57 in    6 us at offset    8,996,253,285&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA55 in  193 us at offset    8,996,182,045&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA54 in  178 us at offset    8,996,146,471&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA54 in  189 us at offset    8,996,128,666&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA54 in  191 us at offset    8,996,119,760  &amp;lt;-- page 2,196,318&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA54 in   32 us at offset    8,996,128,710&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA54 in    5 us at offset    8,996,124,259&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA54 in   10 us at offset    8,996,122,057  &amp;lt;-- page 2,196,318&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA54 in    4 us at offset    8,996,120,955  &amp;lt;-- page 2,196,318&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA54 in    4 us at offset    8,996,120,382  &amp;lt;-- page 2,196,318&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA54 in    9 us at offset    8,996,120,112  &amp;lt;-- page 2,196,318&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA54 in    1 us at offset    8,996,120,470  &amp;lt;-- page 2,196,318&lt;/span&gt;
+&lt;span class="go"&gt;jumped to 3DA54 in    1 us at offset    8,996,120,338  &amp;lt;-- page 2,196,318&lt;/span&gt;
+&lt;span class="go"&gt;pwned! seen 324,774 times before&lt;/span&gt;
+&lt;span class="go"&gt;in 0.003654 seconds&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/details&gt;
+&lt;p&gt;At least half the reads are pretty fast:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;In the beginning, because searches start with the same few pages.&lt;/li&gt;
+&lt;li&gt;At the end, because searches end on the same page (the &lt;a href="https://developer.apple.com/library/archive/documentation/Performance/Conceptual/ManagingMemory/Articles/AboutMemory.html#//apple_ref/doc/uid/20001880-99100-TPXREF113"&gt;macOS page size&lt;/a&gt; is 4K).&lt;/li&gt;
+&lt;li&gt;Reads on the same page, after the first one.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;So, it's the reads in the middle that we need to get rid of.&lt;/p&gt;
+&lt;h3 id="position-heuristic"&gt;Position heuristic&lt;span class="headerlink"&gt; &lt;a href="#position-heuristic" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;In theory, the output of a good hash function
+&lt;a href="https://en.wikipedia.org/wiki/Hash_function#Uniformity"&gt;should be uniformly distributed&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;This means that with a bit of math,
+we can estimate where a hash would be
+–
+a hash that's ~1/5 in the range of all possible hashes
+should be at ~1/5 of the file.&lt;/p&gt;
+&lt;p&gt;Here's a tiny example:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;digest&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;5b&amp;#39;&lt;/span&gt;  &lt;span class="c1"&gt;# 1-byte hash (2 hex digits)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;1000&lt;/span&gt;    &lt;span class="c1"&gt;# 1000-byte long file&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;int_digest&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;digest&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;  &lt;span class="c1"&gt;# == 91&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;int_end&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;16&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt; &lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;digest&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;   &lt;span class="c1"&gt;# == 0xff + 1 == 256&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="n"&gt;int_digest&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt; &lt;span class="n"&gt;int_end&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;355&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;We can do this once,
+and then binary search a safety interval around that position.
+Alas, this only gets rid of the fast jumps at the beginning of the binary search
+(and for some reason,
+it ends up being slightly slower than binary search alone). (&lt;a href="/_file/pwned/80-proportional-position-lite.py"&gt;code&lt;/a&gt;)&lt;/p&gt;
+&lt;p&gt;We can also narrow down around the estimated position iteratively,
+making the interval smaller by constant factor each time.
+This seems to work:
+a factor of 1000 yields 1.7 ms,
+and a factor of 8000 yields 1.2 ms
+(both in 2 steps). (&lt;a href="/_file/pwned/80-proportional-position.py"&gt;code&lt;/a&gt;)&lt;/p&gt;
+&lt;p&gt;However, it has other issues:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Having arbitrary start/end offsets complicates the code quite a bit.&lt;/li&gt;
+&lt;li&gt;I don't know how to reliably determine the factor.&lt;sup class="footnote-ref" id="fnref-4"&gt;&lt;a href="#fn-4"&gt;4&lt;/a&gt;&lt;/sup&gt;&lt;/li&gt;
+&lt;li&gt;I don't know how to prove it's correct
+(especially for smaller intervals, where the hashes are less uniform).
+To be honest, I don't think it &lt;em&gt;can&lt;/em&gt; be 100% correct.&lt;sup class="footnote-ref" id="fnref-5"&gt;&lt;a href="#fn-5"&gt;5&lt;/a&gt;&lt;/sup&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Anyway, &lt;a href="https://peps.python.org/pep-0020/"&gt;if the implementation is hard to explain, it's a bad idea&lt;/a&gt;.&lt;/p&gt;
+&lt;h3 id="index-file"&gt;Index file&lt;span class="headerlink"&gt; &lt;a href="#index-file" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;An arbitrary self-imposed restriction I had was that
+any solution should mostly use the original passwords list,
+with little to no preparation.&lt;/p&gt;
+&lt;p&gt;By relaxing this a bit,
+and going through the file once,
+we can build an index like:&lt;/p&gt;
+&lt;pre class="code code-container"&gt;&lt;code&gt;&amp;lt;SHA-1 of the password&amp;gt;:&amp;lt;offset in file&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;... that we can search with &lt;code&gt;skip_to_before_line()&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Of course, we can't include all the hashes,
+since the index will have just as many lines as the original file.
+But we don't need to
+–
+by including only lines a few kilobytes apart from each other,
+we can seek directly to within a few kilobytes in the big file.&lt;/p&gt;
+&lt;p&gt;The only thing left to figure out is how much &amp;quot;a few kilobytes&amp;quot; is.&lt;/p&gt;
+&lt;p&gt;After my endless harping about pages and caching,
+the answer should be obvious: one page size (4K).
+And this actually gets us &lt;strong&gt;0.8 ms&lt;/strong&gt;
+(with a 452M index file).&lt;/p&gt;
+&lt;p&gt;Back when I wrote the code,
+that thought hadn't really sunk in,
+so after getting 1.2 ms with a 32K &amp;quot;block size&amp;quot;,
+I deemed this not good enough, and moved on.&lt;/p&gt;
+&lt;p&gt;(Code: &lt;a href="/_file/pwned/81-generate-index.py"&gt;search&lt;/a&gt;, &lt;a href="/_file/pwned/81-index.py"&gt;index&lt;/a&gt;.)&lt;/p&gt;
+&lt;h3 id="binary-file"&gt;Binary file&lt;span class="headerlink"&gt; &lt;a href="#binary-file" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;At this point, I was grasping for straws.&lt;/p&gt;
+&lt;p&gt;Since I was already on the external file slipery slope,
+I thought of converting the file to binary,
+mostly to make the file smaller – smaller file, fewer reads.&lt;/p&gt;
+&lt;p&gt;I packed each line into 24 bytes:&lt;/p&gt;
+&lt;pre class="code code-container"&gt;&lt;code&gt;| binary hash (20 bytes) | count (4 bytes) |
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This halved the file, but only lowered the runtime to 2.6 ms :(&lt;/p&gt;
+&lt;p&gt;But more importantly, it made the code much, much simpler:
+because items are fixed size,
+you &lt;em&gt;can&lt;/em&gt; know where the Nth item is,
+so I was able to use &lt;a href="https://docs.python.org/3/library/bisect.html"&gt;bisect&lt;/a&gt; for the binary search.&lt;/p&gt;
+&lt;p&gt;(Code: &lt;a href="/_file/pwned/82-binary.py"&gt;search&lt;/a&gt;, &lt;a href="/_file/pwned/82-convert-to-binary.py"&gt;convert&lt;/a&gt;.)&lt;/p&gt;
+&lt;!-- TODO FIXME
+
+## Aside: mmap
+
+Mentioning this mainly because I'm not the only one that thought of it.
+
+As a low hanging fruit, I though of [mmap()]-ing the file.
+Sadly, this was roughly twice as slow as normal file,
+both for the text and the binary file.
+
+Another thing that might help is [fadvise()],
+but that's not available on macOS.
+
+[mmap()]: https://docs.python.org/3/library/mmap.html
+[fadvise()]: https://linux.die.net/man/2/posix_fadvise
+
+
+## Aside: better data structures
+
+As always, one can find better data structures to solve a problem,
+but one of the *arbitrary* restrictions I had was that
+the solution should mostly use the original file
+with little to no preparation.
+
+If you're curious about how the "better data structures" approach might work,
+check out [Sketchy Pwned Passwords] by Scott Helme,
+in which he uses the [count-min sketch] implementation
+provided by [RedisBloom].
+Spoiler: It takes 11 hours to generate a ~1.5GB CMS,
+but after that it's possible to query it in 0.001ms (in memory).
+
+
+[Sketchy Pwned Passwords]: https://scotthelme.co.uk/sketchy-pwned-passwords/
+[RedisBloom]: https://redis.io/docs/stack/bloom/
+[count-min sketch]: https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch
+
+--&gt;
+&lt;h2 id="getting-to-under-1-millisecond"&gt;Getting to under 1 millisecond&lt;span class="headerlink"&gt; &lt;a href="#getting-to-under-1-millisecond" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;OK, what now? We've tried some things, we've learned some stuff:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;The position heuristic kinda (maybe?) works,
+but is hard to reason about.&lt;/li&gt;
+&lt;li&gt;The index file gets us there in the end, but barely,
+and the index is pretty big.&lt;/li&gt;
+&lt;li&gt;The binary file isn't much faster,
+and it creates a huge file.
+But, less code!&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;I don't know what to do with the first one, but we can combine the last two.&lt;/p&gt;
+&lt;h3 id="generating-the-index"&gt;Generating the index&lt;span class="headerlink"&gt; &lt;a href="#generating-the-index" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Let's start with the script I made for the text index:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt; 1&lt;/span&gt;
+&lt;span class="normal"&gt; 2&lt;/span&gt;
+&lt;span class="normal"&gt; 3&lt;/span&gt;
+&lt;span class="normal"&gt; 4&lt;/span&gt;
+&lt;span class="normal"&gt; 5&lt;/span&gt;
+&lt;span class="normal"&gt; 6&lt;/span&gt;
+&lt;span class="normal"&gt; 7&lt;/span&gt;
+&lt;span class="normal"&gt; 8&lt;/span&gt;
+&lt;span class="normal"&gt; 9&lt;/span&gt;
+&lt;span class="normal"&gt;10&lt;/span&gt;
+&lt;span class="normal"&gt;11&lt;/span&gt;
+&lt;span class="normal"&gt;12&lt;/span&gt;
+&lt;span class="normal"&gt;13&lt;/span&gt;
+&lt;span class="normal"&gt;14&lt;/span&gt;
+&lt;span class="normal"&gt;15&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;os&lt;/span&gt;&lt;span class="o"&gt;,&lt;/span&gt; &lt;span class="nn"&gt;sys&lt;/span&gt;
+
+&lt;span class="n"&gt;file&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;sys&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;stdin&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;buffer&lt;/span&gt;
+&lt;span class="n"&gt;outf&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;sys&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;stdout&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;buffer&lt;/span&gt;
+
+&lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;pos&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;tell&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+    &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;readline&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;break&lt;/span&gt;
+
+    &lt;span class="n"&gt;outf&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;write&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;line&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;partition&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;b&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;:&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="sa"&gt;b&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;:&amp;#39;&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;pos&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;encode&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="sa"&gt;b&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&lt;/span&gt;&lt;span class="se"&gt;\n&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;seek&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="mi"&gt;12&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;os&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;SEEK_CUR&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;readline&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;The output looks like this:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;python generate-index.py &amp;lt; pwned.txt &lt;span class="m"&gt;2&lt;/span&gt;&amp;gt;/dev/null &lt;span class="p"&gt;|&lt;/span&gt; head -n5
+&lt;span class="go"&gt;000000005AD76BD555C1D6D771DE417A4B87E4B4:0&lt;/span&gt;
+&lt;span class="go"&gt;00000099A4D3034E14DF60EF50799F695C27C0EC:4157&lt;/span&gt;
+&lt;span class="go"&gt;00000172E8E1D1BD54AC23B3F9AB4383F291CA17:8312&lt;/span&gt;
+&lt;span class="go"&gt;000002C8F808A7DB504BBC3C711BE8A8D508C0F9:12453&lt;/span&gt;
+&lt;span class="go"&gt;0000047139578F13D70DD96BADD425C372DB64A9:16637&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;We need to pack that into bytes.&lt;/p&gt;
+&lt;p&gt;A hash takes 20 bytes.
+But, looking at the values above,
+we only need slightly more than 3 bytes (6 hex digits)
+to distinguish between the index lines:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;python generate-index.py &amp;lt; pwned.txt &lt;span class="m"&gt;2&lt;/span&gt;&amp;gt;/dev/null &lt;span class="p"&gt;|&lt;/span&gt; cut -c-6 &lt;span class="p"&gt;|&lt;/span&gt; uniq -c &lt;span class="p"&gt;|&lt;/span&gt; head
+&lt;span class="go"&gt;   2 000000&lt;/span&gt;
+&lt;span class="go"&gt;   1 000001&lt;/span&gt;
+&lt;span class="go"&gt;   1 000002&lt;/span&gt;
+&lt;span class="go"&gt;   1 000004&lt;/span&gt;
+&lt;span class="go"&gt;   1 000005&lt;/span&gt;
+&lt;span class="go"&gt;   1 000007&lt;/span&gt;
+&lt;span class="go"&gt;   1 000008&lt;/span&gt;
+&lt;span class="go"&gt;   1 00000A&lt;/span&gt;
+&lt;span class="go"&gt;   1 00000B&lt;/span&gt;
+&lt;span class="go"&gt;   1 00000C&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;To represent all the offsets in the file,
+we need &lt;code&gt;log2(35G) / 8 = 4.39...&lt;/code&gt; bytes,
+which results in a total of 9 bytes
+(maybe even 8, if we mess with individual bits).&lt;/p&gt;
+&lt;p&gt;But, let's make it future-proof:
+6 bytes for the hash buys at least 2.4 petabyte files, and
+6 for the offset buys 0.28 petabyte files.&lt;/p&gt;
+&lt;!--
+
+&gt;&gt;&gt; f"{ 37 * 10**9 * 256**2 :,}"
+'2,424,832,000,000,000'
+&gt;&gt;&gt; f"{ 256**6 :,}"
+'281,474,976,710,656'
+
+--&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;12&lt;/span&gt;
+&lt;span class="normal"&gt;13&lt;/span&gt;
+&lt;span class="normal"&gt;14&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="n"&gt;digest&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;_&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;partition&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;b&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;:&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;outf&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;write&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;bytes&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;fromhex&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;digest&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;decode&lt;/span&gt;&lt;span class="p"&gt;())[:&lt;/span&gt;&lt;span class="mi"&gt;6&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+    &lt;span class="n"&gt;outf&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;write&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;pos&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_bytes&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;6&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;big&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;If you look at the text index,
+you'll notice we skip 4K + ~50 bytes;
+this results in sometimes having to read 2 pages from the big file,
+because not all pages have an index entry.
+Let's fix that by reading the first whole line after a 4K boundary instead:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;16&lt;/span&gt;
+&lt;span class="normal"&gt;17&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;seek&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="n"&gt;pos&lt;/span&gt; &lt;span class="o"&gt;//&lt;/span&gt; &lt;span class="mi"&gt;4096&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mi"&gt;4096&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;readline&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;OK, we're done:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;&lt;span class="nb"&gt;time&lt;/span&gt; python generate-index.py &amp;lt; pwned.txt &amp;gt; index.bin
+
+&lt;span class="go"&gt;real	1m2.729s&lt;/span&gt;
+&lt;span class="go"&gt;user	0m34.292s&lt;/span&gt;
+&lt;span class="go"&gt;sys	0m21.392s&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h3 id="using-the-index"&gt;Using the index&lt;span class="headerlink"&gt; &lt;a href="#using-the-index" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;We start off with a skeleton that's functionally identical
+with the naive &amp;quot;go through every line&amp;quot; script;
+the only difference is I've added stubs
+for passing and using the index:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt; 9&lt;/span&gt;
+&lt;span class="normal"&gt;10&lt;/span&gt;
+&lt;span class="normal"&gt;11&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;find_line&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;index&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;skip_to_before_line_index&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;index&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;find_line_linear&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;23&lt;/span&gt;
+&lt;span class="normal"&gt;24&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;skip_to_before_line_index&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;index&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="o"&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;30&lt;/span&gt;
+&lt;span class="normal"&gt;31&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;index_path&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;sys&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;argv&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="n"&gt;index&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;43&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;find_line&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;hexdigest&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;upper&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;encode&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt; &lt;span class="n"&gt;index&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;details&gt;
+&lt;summary&gt;
+(In case you want to see the whole script.)
+&lt;/summary&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt; 1&lt;/span&gt;
+&lt;span class="normal"&gt; 2&lt;/span&gt;
+&lt;span class="normal"&gt; 3&lt;/span&gt;
+&lt;span class="normal"&gt; 4&lt;/span&gt;
+&lt;span class="normal"&gt; 5&lt;/span&gt;
+&lt;span class="normal"&gt; 6&lt;/span&gt;
+&lt;span class="normal"&gt; 7&lt;/span&gt;
+&lt;span class="normal"&gt; 8&lt;/span&gt;
+&lt;span class="normal"&gt; 9&lt;/span&gt;
+&lt;span class="normal"&gt;10&lt;/span&gt;
+&lt;span class="normal"&gt;11&lt;/span&gt;
+&lt;span class="normal"&gt;12&lt;/span&gt;
+&lt;span class="normal"&gt;13&lt;/span&gt;
+&lt;span class="normal"&gt;14&lt;/span&gt;
+&lt;span class="normal"&gt;15&lt;/span&gt;
+&lt;span class="normal"&gt;16&lt;/span&gt;
+&lt;span class="normal"&gt;17&lt;/span&gt;
+&lt;span class="normal"&gt;18&lt;/span&gt;
+&lt;span class="normal"&gt;19&lt;/span&gt;
+&lt;span class="normal"&gt;20&lt;/span&gt;
+&lt;span class="normal"&gt;21&lt;/span&gt;
+&lt;span class="normal"&gt;22&lt;/span&gt;
+&lt;span class="normal"&gt;23&lt;/span&gt;
+&lt;span class="normal"&gt;24&lt;/span&gt;
+&lt;span class="normal"&gt;25&lt;/span&gt;
+&lt;span class="normal"&gt;26&lt;/span&gt;
+&lt;span class="normal"&gt;27&lt;/span&gt;
+&lt;span class="normal"&gt;28&lt;/span&gt;
+&lt;span class="normal"&gt;29&lt;/span&gt;
+&lt;span class="normal"&gt;30&lt;/span&gt;
+&lt;span class="normal"&gt;31&lt;/span&gt;
+&lt;span class="normal"&gt;32&lt;/span&gt;
+&lt;span class="normal"&gt;33&lt;/span&gt;
+&lt;span class="normal"&gt;34&lt;/span&gt;
+&lt;span class="normal"&gt;35&lt;/span&gt;
+&lt;span class="normal"&gt;36&lt;/span&gt;
+&lt;span class="normal"&gt;37&lt;/span&gt;
+&lt;span class="normal"&gt;38&lt;/span&gt;
+&lt;span class="normal"&gt;39&lt;/span&gt;
+&lt;span class="normal"&gt;40&lt;/span&gt;
+&lt;span class="normal"&gt;41&lt;/span&gt;
+&lt;span class="normal"&gt;42&lt;/span&gt;
+&lt;span class="normal"&gt;43&lt;/span&gt;
+&lt;span class="normal"&gt;44&lt;/span&gt;
+&lt;span class="normal"&gt;45&lt;/span&gt;
+&lt;span class="normal"&gt;46&lt;/span&gt;
+&lt;span class="normal"&gt;47&lt;/span&gt;
+&lt;span class="normal"&gt;48&lt;/span&gt;
+&lt;span class="normal"&gt;49&lt;/span&gt;
+&lt;span class="normal"&gt;50&lt;/span&gt;
+&lt;span class="normal"&gt;51&lt;/span&gt;
+&lt;span class="normal"&gt;52&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;os&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;sys&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;time&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;bisect&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;getpass&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;hashlib&lt;/span&gt;
+
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;find_line&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;index&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;skip_to_before_line_index&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;index&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;find_line_linear&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;find_line_linear&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lines&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;lines&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+            &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;break&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;skip_to_before_line_index&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;index&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="o"&gt;...&lt;/span&gt;
+
+
+&lt;span class="n"&gt;path&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;sys&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;argv&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="n"&gt;file&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;rb&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="n"&gt;index_path&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;sys&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;argv&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="n"&gt;index&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
+
+&lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;password&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;sys&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;argv&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="ne"&gt;IndexError&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;password&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;getpass&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;getpass&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="n"&gt;hexdigest&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;hashlib&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sha1&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;password&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;encode&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hexdigest&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="k"&gt;del&lt;/span&gt; &lt;span class="n"&gt;password&lt;/span&gt;
+
+&lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;looking for&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;hexdigest&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="n"&gt;start&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;time&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;monotonic&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;find_line&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;hexdigest&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;upper&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;encode&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt; &lt;span class="n"&gt;index&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;end&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;time&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;monotonic&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+
+&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;times&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;line&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;decode&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;rstrip&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;partition&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;:&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)[&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+    &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;pwned! seen &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;times&lt;/span&gt;&lt;span class="si"&gt;:&lt;/span&gt;&lt;span class="s2"&gt;,&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; times before&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;not found&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;in &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;end&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="n"&gt;start&lt;/span&gt;&lt;span class="si"&gt;:&lt;/span&gt;&lt;span class="s2"&gt;.6f&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; seconds&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/details&gt;
+&lt;p&gt;As mentioned before,
+we'll use the standard library &lt;a href="https://docs.python.org/3/library/bisect.html"&gt;bisect&lt;/a&gt; module
+to search the index.&lt;/p&gt;
+&lt;p&gt;We &lt;em&gt;could&lt;/em&gt; read the entire index in memory,
+as a list of 12-byte &lt;a href="https://docs.python.org/3/library/stdtypes.html#bytes"&gt;bytes&lt;/a&gt;. But that has at least two issues:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;It'd still be slow, even if outside the current timing code.&lt;/li&gt;
+&lt;li&gt;Memory usage would increase with the size of the file.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Although the module documentation says they work with lists,
+the &lt;code&gt;bisect*&lt;/code&gt; functions work with any arbitrary sequence;
+a &lt;a href="https://docs.python.org/3/glossary.html#term-sequence"&gt;sequence&lt;/a&gt; is an object that implements a couple special methods
+that allow it to behave like a list.&lt;/p&gt;
+&lt;p&gt;We'll need a object,
+which needs the file and its size:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;27&lt;/span&gt;
+&lt;span class="normal"&gt;28&lt;/span&gt;
+&lt;span class="normal"&gt;29&lt;/span&gt;
+&lt;span class="normal"&gt;30&lt;/span&gt;
+&lt;span class="normal"&gt;31&lt;/span&gt;
+&lt;span class="normal"&gt;32&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;BytesArray&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+
+    &lt;span class="n"&gt;item_size&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;12&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="fm"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;We can go ahead and plug it in:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;38&lt;/span&gt;
+&lt;span class="normal"&gt;39&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;index_path&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;sys&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;argv&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="n"&gt;index&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;BytesArray&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;index_path&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;rb&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;The first special method is &lt;a href="https://docs.python.org/3/reference/datamodel.html#object.__getitem__"&gt;__getitem__()&lt;/a&gt;, to implement &lt;code&gt;a[i]&lt;/code&gt;:&lt;sup class="footnote-ref" id="fnref-6"&gt;&lt;a href="#fn-6"&gt;6&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;34&lt;/span&gt;
+&lt;span class="normal"&gt;35&lt;/span&gt;
+&lt;span class="normal"&gt;36&lt;/span&gt;
+&lt;span class="normal"&gt;37&lt;/span&gt;
+&lt;span class="normal"&gt;38&lt;/span&gt;
+&lt;span class="normal"&gt;39&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="fm"&gt;__getitem__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;index&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;seek&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;index&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;item_size&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="n"&gt;buffer&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;read&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;item_size&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;buffer&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;!=&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;item_size&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;IndexError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;index&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;  &lt;span class="c1"&gt;# out of bounds&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;buffer&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;The second special method is &lt;a href="https://docs.python.org/3/reference/datamodel.html#object.__len__"&gt;__len__()&lt;/a&gt;, to implement &lt;code&gt;len(a)&lt;/code&gt;:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;41&lt;/span&gt;
+&lt;span class="normal"&gt;42&lt;/span&gt;
+&lt;span class="normal"&gt;43&lt;/span&gt;
+&lt;span class="normal"&gt;44&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="fm"&gt;__len__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;seek&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;os&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;SEEK_END&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;tell&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;size&lt;/span&gt; &lt;span class="o"&gt;//&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;item_size&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;Using the index becomes straightforward:&lt;/p&gt;
+&lt;table class="highlighttable code-container"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;23&lt;/span&gt;
+&lt;span class="normal"&gt;24&lt;/span&gt;
+&lt;span class="normal"&gt;25&lt;/span&gt;
+&lt;span class="normal"&gt;26&lt;/span&gt;
+&lt;span class="normal"&gt;27&lt;/span&gt;
+&lt;span class="normal"&gt;28&lt;/span&gt;
+&lt;span class="normal"&gt;29&lt;/span&gt;
+&lt;span class="normal"&gt;30&lt;/span&gt;
+&lt;span class="normal"&gt;31&lt;/span&gt;
+&lt;span class="normal"&gt;32&lt;/span&gt;
+&lt;span class="normal"&gt;33&lt;/span&gt;
+&lt;span class="normal"&gt;34&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;skip_to_before_line_index&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;index&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;item_prefix&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;bytes&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;fromhex&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;decode&lt;/span&gt;&lt;span class="p"&gt;())[:&lt;/span&gt;&lt;span class="mi"&gt;6&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+    &lt;span class="n"&gt;item&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;find_lt&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;index&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;item_prefix&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;offset&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;from_bytes&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;6&lt;/span&gt;&lt;span class="p"&gt;:],&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;big&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt; &lt;span class="k"&gt;else&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;
+    &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;seek&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;offset&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;find_lt&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;bisect&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;bisect_left&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;p&gt;We get the first 6 bytes of the hash,
+find the rightmost value less than that,
+extract the offset from it,
+and seek to there.
+&lt;code&gt;find_lt()&lt;/code&gt; comes from &lt;a href="https://docs.python.org/3/library/bisect.html"&gt;bisect&lt;/a&gt;'s recipes for &lt;a href="https://docs.python.org/3/library/bisect.html#searching-sorted-lists"&gt;searching sorted lists&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;And we're done:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;average-many pwned.py pwned.txt index.bin
+&lt;span class="go"&gt;.002546&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Huh? ... that's unexpected...&lt;/p&gt;
+&lt;p&gt;Oh.&lt;/p&gt;
+&lt;p&gt;I said we won't read the index in memory.
+But we &lt;em&gt;can&lt;/em&gt; force it into the OS cache
+by getting the OS to read it a bunch of times:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt; _ &lt;span class="k"&gt;in&lt;/span&gt; &lt;span class="o"&gt;{&lt;/span&gt;&lt;span class="m"&gt;1&lt;/span&gt;..10&lt;span class="o"&gt;}&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; cat index.bin &amp;gt; /dev/null&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="k"&gt;done&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Finally:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;average-many pwned.py pwned.txt index.bin
+&lt;span class="go"&gt;.000421&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h3 id="i-herd-you-like-indexes-the-end"&gt;I herd you like indexes (the end)&lt;span class="headerlink"&gt; &lt;a href="#i-herd-you-like-indexes-the-end" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Hmmm... isn't that cold start bugging you? It is bugging me.&lt;/p&gt;
+&lt;p&gt;I tried it out, and if we make an index (313K) for the big index,
+we get 1.2 ms from a cold start.
+(Forcing the big index in memory doesn't get us more
+than the ~500 ms we hit before,
+because most of that is spent reading from the big file.)&lt;/p&gt;
+&lt;p&gt;Maybe another smaller index can take us to below 1 ms from a cold start?&lt;/p&gt;
+&lt;p&gt;...&lt;/p&gt;
+&lt;p&gt;Just kidding, this is it, this really is the end.&lt;/p&gt;
+&lt;p&gt;Let's take a look at what we've accomplished:&lt;/p&gt;
+&lt;table class="table"&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+  &lt;th&gt;method&lt;/th&gt;
+  &lt;th style="text-align:right"&gt;statements&lt;/th&gt;
+  &lt;th style="text-align:right"&gt;time (ms, order of magnitude)&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+  &lt;td&gt;linear&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;29&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;100,000&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;linear+skip&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;42&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;100&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;binary search&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;49&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;10&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;binary index&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;59 (72)&lt;/td&gt;
+  &lt;td style="text-align:right"&gt;1&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;For twice the code, it's 5 orders of magnitude faster!
+(I'm not counting bisect or the OS cache,
+but that's kinda the point,
+those already exist, they're basically free.)&lt;/p&gt;
+&lt;p&gt;I mean, we &lt;em&gt;could&lt;/em&gt; do indexception,
+but to do it even remotely elegantly,
+I need at least five more hours,
+for something that's definitely not going to be twice the code.
+And for what? Just slightly faster cold start? I'm good.&lt;/p&gt;
+&lt;p&gt;Turns out, you can get pretty far with just a &lt;em&gt;few&lt;/em&gt; tricks.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;That's it for now.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Learned something new today?&lt;/strong&gt; Share this with others, it really helps!&lt;/p&gt;
+
+&lt;!--
+
+# Bonus: the k-Anonymity API
+
+&lt;!-- TODO: fix file to be api only
+
+.. literalinclude:: 03-kanon.py
+    :lines: 45-52
+
+.. literalinclude:: 03-kanon.py
+    :lines: 55-61
+    :emphasize-lines: 2-4,7
+
+.. literalinclude:: 03-kanon.py
+    :lines: 72-74
+    :emphasize-lines: 2
+
+https://api.pwnedpasswords.com/range/5baa6
+
+https://haveibeenpwned.com/API/v3#PwnedPasswords
+
+--&gt;
+&lt;section class="footnotes"&gt;
+&lt;ol&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;It's &lt;a href="https://www.troyhunt.com/ive-just-launched-pwned-passwords-version-2/"&gt;linked&lt;/a&gt; right above the textbox, after all. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-2"&gt;&lt;p&gt;I remember reading that Guido van Rossum thinks
+sorting imports by length looks cool (I know I do).
+In production code, though, maybe stick to alphabetical :) &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-3"&gt;&lt;p&gt;Which is &lt;a href="https://stackoverflow.com/q/28676177"&gt;kinda difficult to do&lt;/a&gt; in Python anyway. &lt;a href="#fnref-3" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-4"&gt;&lt;p&gt;Something like &lt;code&gt;(size / 4096) ** (1 / int(log(size, 4096)))&lt;/code&gt;
+should work, but I didn't have enough patience to debug the infinite loop
+it caused. &lt;a href="#fnref-4" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-5"&gt;&lt;p&gt;I mean, I did cross-check it with the binary search solution
+for a few thousand values, and it &lt;em&gt;seems&lt;/em&gt; correct,
+but that's not proof. &lt;a href="#fnref-5" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-6"&gt;&lt;p&gt;We're only implementing the parts of the
+&lt;a href="https://docs.python.org/3/glossary.html#term-sequence"&gt;sequence&lt;/a&gt; protocol that &lt;code&gt;bisect&lt;/code&gt; uses.&lt;/p&gt;
+&lt;p&gt;For the full protocol,
+&lt;a href="https://docs.python.org/3/reference/datamodel.html#object.__getitem__"&gt;__getitem__()&lt;/a&gt; would need to also implement
+negative indexes and slicing.
+To get even more sequence methods like count() and index() for free,
+we can inherit &lt;a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence"&gt;collections.abc.Sequence&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Interestingly, our class will work in a &lt;code&gt;for&lt;/code&gt; loop
+without needing an &lt;a href="https://docs.python.org/3/reference/datamodel.html#object.__iter__"&gt;__iter__()&lt;/a&gt; method.
+That's because there are actually two iteration protocols:
+an older one, using __getitem__(),
+and a newer one, &lt;a href="https://peps.python.org/pep-0234/"&gt;added in Python 2.1&lt;/a&gt;,
+using __iter__() / __next__();
+for backwards compatibility, Python still supports the old one
+(more details on the logic in &lt;a href="https://snarky.ca/unravelling-for-statements/#iter-iterable-"&gt;Unravelling &lt;code&gt;for&lt;/code&gt; statements&lt;/a&gt;
+by Brett Cannon). &lt;a href="#fnref-6" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+    <link href="https://death.andgravity.com/pwned" rel="alternate"/>
+    <summary>... in which we check if your password has been compromised in many inconvenient ways, in a tale of destruction, obsession, and self-discovery.</summary>
+    <published>2022-12-13T11:20:00+00:00</published>
+  </entry>
   <entry xml:base="https://death.andgravity.com/f-re">
     <id>https://death.andgravity.com/f-re</id>
     <title>The unreasonable effectiveness of f‍-‍strings and re.VERBOSE</title>
