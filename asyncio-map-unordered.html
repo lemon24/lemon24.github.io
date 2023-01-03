@@ -65,7 +65,7 @@ window.addEventListener('resize', set_vh);
 
 
 
-∙ six minute read
+∙ seven minute read
 
 
 </small></p>
@@ -94,7 +94,6 @@ window.addEventListener('resize', set_vh);
     <span class="k">return</span> <span class="n">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
-<p>TODO: map_unordered() being an async generator instead of just returning one</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
@@ -440,10 +439,7 @@ window.addEventListener('resize', set_vh);
 <span class="go">Task exception was never retrieved</span>
 <span class="go">future: &lt;Task finished name=&#39;Task-3&#39; coro=&lt;limit_concurrency.&lt;locals&gt;.worker() done, defined at map_unordered.py:20&gt; exception=ZeroDivisionError(&#39;float division by zero&#39;)&gt;</span>
 <span class="go">Traceback (most recent call last):</span>
-<span class="go">  File &quot;map_unordered.py&quot;, line 28, in worker</span>
-<span class="go">    await queue.put(await aw)</span>
-<span class="go">  File &quot;map_unordered.py&quot;, line 41, in sleep</span>
-<span class="go">    1 / i</span>
+<span class="go">  ...</span>
 <span class="go">ZeroDivisionError: float division by zero</span>
 </code></pre></div>
 <p>One worker gets killed (the bad value is a poison pill),
@@ -510,6 +506,7 @@ because <code>ndone &lt; limit</code> is never false.</p>
             <span class="n">ndone</span> <span class="o">+=</span> <span class="mi">1</span>
 </code></pre></div>
 </td></tr></table>
+<p>No need for a sentinel, since the values are &quot;tagged&quot;.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 <span class="m">0</span> .2 .1
 <span class="go">0.1: 0.1</span>
 <span class="go">error: ZeroDivisionError: float division by zero</span>
@@ -628,7 +625,7 @@ because <code>ndone &lt; limit</code> is never false.</p>
 
         <span class="n">done</span><span class="p">,</span> <span class="n">pending</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">pending</span><span class="p">,</span> <span class="n">return_when</span><span class="o">=</span><span class="n">asyncio</span><span class="o">.</span><span class="n">FIRST_COMPLETED</span><span class="p">)</span>
         <span class="k">while</span> <span class="n">done</span><span class="p">:</span>
-            <span class="k">yield</span> <span class="n">done</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+            <span class="k">yield</span> <span class="k">await</span> <span class="n">done</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
 </code></pre></div>
 </td></tr></table>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 .2 .1
@@ -639,6 +636,78 @@ because <code>ndone &lt; limit</code> is never false.</p>
 <span class="go">iter end</span>
 <span class="go">0.3: done</span>
 </code></pre></div>
+<hr />
+<p>Awaitables in, awaitables out.</p>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">29</span>
+<span class="normal">30</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">while</span> <span class="n">done</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">done</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+</code></pre></div>
+</td></tr></table>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">map_unordered</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
+    <span class="n">aws</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
+        <span class="k">yield</span> <span class="k">await</span> <span class="n">task</span>
+</code></pre></div>
+</td></tr></table>
+<p>TODO: map_unordered() being an async generator instead of just returning one</p>
+<h2 id="exceptions">exceptions<span class="headerlink"> <a href="#exceptions" title="permalink">#</a></span></h2>
+<p>OK, so what about exceptions?</p>
+<p>Sometimes, you still want to process the rest of the things even if one failed.</p>
+<hr />
+<p>A cheap way is to have the user handle this by wrapping their function:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">return_exceptions</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="k">await</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">e</span>
+
+    <span class="k">return</span> <span class="n">wrapper</span>
+</code></pre></div>
+<p>async for result in map_unordered(return_exceptions(sleep), [.2, 0, .1], 2):
+    print(result)</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">async</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">return_exceptions</span><span class="p">(</span><span class="n">sleep</span><span class="p">),</span> <span class="p">[</span><span class="mf">.2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">.1</span><span class="p">],</span> <span class="mi">2</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="go">division by zero</span>
+<span class="go">0.1</span>
+<span class="go">0.2</span>
+</code></pre></div>
+<hr />
+<p>Alternatively, we could just bubble up the Task to the user;
+then they're free to do whatever (either await it, or check the exception).</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">async</span> <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">sleep</span><span class="p">,</span> <span class="p">[</span><span class="mf">.2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">.1</span><span class="p">],</span> <span class="mi">2</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="k">await</span> <span class="n">task</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">ZeroDivisionError</span>: <span class="n">division by zero</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">async</span> <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">sleep</span><span class="p">,</span> <span class="p">[</span><span class="mf">.2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">.1</span><span class="p">],</span> <span class="mi">2</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">task</span><span class="o">.</span><span class="n">exception</span><span class="p">()</span> <span class="ow">or</span> <span class="n">task</span><span class="o">.</span><span class="n">result</span><span class="p">())</span>
+<span class="gp">...</span>
+<span class="go">division by zero</span>
+<span class="go">0.1</span>
+<span class="go">0.2</span>
+</code></pre></div>
+<p>This works, but it somehow feels too low level (and, unlike map).</p>
+<p>Also, the tasks are guaranteed to be done at this point,
+so aside from telling results apart from exceptions,
+they're not all that useful.</p>
+<hr />
+<p>It's probably safe to take some inspiration in terms of ergonomics
+from gather(), and its <code>return_exceptions</code> option:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">aws</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">sleep</span><span class="p">,</span> <span class="p">[</span><span class="mf">.2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">.1</span><span class="p">])</span>
+<span class="gp">... </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="n">aws</span><span class="p">,</span> <span class="n">return_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="go">0.2</span>
+<span class="go">division by zero</span>
+<span class="go">0.1</span>
+</code></pre></div>
+<p>TODO: problem: this is not enough; the map_unordered() yielded by are not in argument order, so how can the user tell which call failed?</p>
 
 
 
