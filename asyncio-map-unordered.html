@@ -24,7 +24,7 @@
 
 
 
-<title>Limiting concurrency in asyncio; or, an async equivalent to imap_unordered() - death and gravity</title>
+<title>Limiting concurrency in Python asyncio; or, the story of async imap_unordered() - death and gravity</title>
 
 
 
@@ -58,7 +58,7 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">Limiting concurrency in asyncio; or, an async equivalent to imap_unordered()</h1>
+<h1 class="heading-noindex">Limiting concurrency in Python asyncio; or, the story of async imap_unordered()</h1>
 
 <p class="text-gray text-nowrap">
 
@@ -66,20 +66,20 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-01-23">January 2023</span>
-∙ nine minute read
+∙ eight minute read
 ∙
 </small><span class="share-icons">
 <a
     class="share-icon twitter"
-    href="https://twitter.com/%73%68%61%72%65?text=Limiting%20concurrency%20in%20asyncio%3B%20or%2C%20an%20async%20equivalent%20to%20imap_unordered%28%29&url=https%3A//death.andgravity.com/asyncio-map-unordered&via=_andgravity"
+    href="https://twitter.com/%73%68%61%72%65?text=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29&url=https%3A//death.andgravity.com/asyncio-map-unordered&via=_andgravity"
 >Twitter</a>
 <a
     class="share-icon hacker-news"
-    href="https://news.ycombinator.com/submitlink?u=https%3A//death.andgravity.com/asyncio-map-unordered&t=Limiting%20concurrency%20in%20asyncio%3B%20or%2C%20an%20async%20equivalent%20to%20imap_unordered%28%29"
+    href="https://news.ycombinator.com/submitlink?u=https%3A//death.andgravity.com/asyncio-map-unordered&t=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29"
 >HN</a>
 <a
     class="share-icon reddit"
-    href="https://www.reddit.com/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/asyncio-map-unordered&title=Limiting%20concurrency%20in%20asyncio%3B%20or%2C%20an%20async%20equivalent%20to%20imap_unordered%28%29"
+    href="https://www.reddit.com/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/asyncio-map-unordered&title=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29"
 >Reddit</a>
 </span>
 
@@ -97,24 +97,61 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>https://hynek.me/articles/waiting-in-asyncio/</p>
+<!-- TODO: rename this to limit-concurrency -->
+<p>So, you're doing some async stuff, repeatedly. Many times.</p>
+<p>Like, <strong>hundreds of thousands of times</strong>.</p>
+<p>Maybe you're just scraping some data.</p>
+<p>Maybe it's more complicated than that
+– you're calling API one,
+passing the result to API two,
+and then saving the result of that.</p>
+<p>Either way, it's probably a good idea to <em>not</em> do it all at once.
+For one, it's not polite to the APIs you're calling.
+For another, it'll load everything in memory, <em>all at once</em>.</p>
+<p>In <strong>sync</strong> code,
+you might use a <a href="https://docs.python.org/3/library/multiprocessing.html#module-multiprocessing.dummy">thread pool</a> and <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">pool</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">dummy</span><span class="o">.</span><span class="n">Pool</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">,</span> <span class="n">things_to_do</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+</code></pre></div>
+
+<p>Here, concurrency is limited by the fixed number of threads.</p>
+<p>How about <strong>async</strong> code?
+In this article,
+we'll examine a few different solutions,
+comparing them along the way,
+to find out which is best.</p>
+<section class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>No, it's not <a href="#asyncio-semaphore">Semaphore</a>,
+ despite what Stack Overflow may tell you.</p>
+</section>
+<section class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>If you're in a hurry – it's <a href="#asyncio-wait">wait()</a>.</p>
+</section>
+<section class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If you need a refresher on the lower level <a href="https://docs.python.org/3/library/asyncio.html">asyncio</a> stuff we'll use,
+ check out Hynek Schlawack's excellent
+ <a href="https://hynek.me/articles/waiting-in-asyncio/">Waiting in asyncio</a>.</p>
+</section>
 <details>
 <summary>Contents</summary>
 <section class="toc">
 <ul>
-<li><a href="#serial">serial</a></li>
-<li><a href="#gather">gather</a></li>
-<li><a href="#semaphore">semaphore</a></li>
-<li><a href="#as-completed">as_completed</a></li>
-<li><a href="#queue">queue</a></li>
-<li><a href="#queue-redux">queue, redux</a></li>
-<li><a href="#wait">wait</a></li>
-<li><a href="#async-iterators">async iterators</a></li>
-<li><a href="#exceptions">exceptions</a></li>
+<li><a href="#setup">Setup</a></li>
+<li><a href="#asyncio-gather">asyncio.gather()</a></li>
+<li><a href="#asyncio-semaphore">asyncio.Semaphore</a></li>
+<li><a href="#asyncio-as-completed">asyncio.as_completed()</a></li>
+<li><a href="#asyncio-queue">asyncio.Queue</a></li>
+<li><a href="#asyncio-wait">asyncio.wait()</a></li>
+<li><a href="#async-iterators">Async iterators</a></li>
+<li><a href="#exceptions">Exceptions</a></li>
 </ul>
 </section>
 </details>
-<h2 id="serial">serial<span class="headerlink"> <a href="#serial" title="permalink">#</a></span></h2>
+<h2 id="setup">Setup<span class="headerlink"> <a href="#setup" title="permalink">#</a></span></h2>
 <!--
 .. literalinclude:: mo_00_serial.py
     :lines: 1-5
@@ -190,7 +227,7 @@ window.addEventListener('resize', set_vh);
 <span class="go">0.3: 0.2</span>
 <span class="go">0.3: done</span>
 </code></pre></div>
-<h2 id="gather">gather<span class="headerlink"> <a href="#gather" title="permalink">#</a></span></h2>
+<h2 id="asyncio-gather">asyncio.gather()<span class="headerlink"> <a href="#asyncio-gather" title="permalink">#</a></span></h2>
 <p>https://docs.python.org/3/library/asyncio-task.html#running-tasks-concurrently</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
@@ -227,7 +264,7 @@ window.addEventListener('resize', set_vh);
 <div class="highlight code-container"><pre class="code" data-lang="Text only"><span></span><code>| sleep(.1) |       sleep(.2)       |
 |       sleep(.2)       | sleep(.1) |
 </code></pre></div>
-<h2 id="semaphore">semaphore<span class="headerlink"> <a href="#semaphore" title="permalink">#</a></span></h2>
+<h2 id="asyncio-semaphore">asyncio.Semaphore<span class="headerlink"> <a href="#asyncio-semaphore" title="permalink">#</a></span></h2>
 <p>https://docs.python.org/3/library/asyncio-sync.html#asyncio.Semaphore</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
@@ -279,7 +316,7 @@ window.addEventListener('resize', set_vh);
 <span class="go">0.3: 0.1</span>
 <span class="go">0.3: done</span>
 </code></pre></div>
-<h2 id="as-completed">as_completed<span class="headerlink"> <a href="#as-completed" title="permalink">#</a></span></h2>
+<h2 id="asyncio-as-completed">asyncio.as_completed()<span class="headerlink"> <a href="#asyncio-as-completed" title="permalink">#</a></span></h2>
 <p>https://docs.python.org/3/library/asyncio-task.html#asyncio.as_completed</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
@@ -318,7 +355,7 @@ window.addEventListener('resize', set_vh);
     <span class="n">todo</span> <span class="o">=</span> <span class="p">{</span><span class="n">ensure_future</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">loop</span><span class="o">=</span><span class="n">loop</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">fs</span><span class="p">)}</span>
     <span class="o">...</span>
 </code></pre></div>
-<h2 id="queue">queue<span class="headerlink"> <a href="#queue" title="permalink">#</a></span></h2>
+<h2 id="asyncio-queue">asyncio.Queue<span class="headerlink"> <a href="#asyncio-queue" title="permalink">#</a></span></h2>
 <p>https://docs.python.org/3/library/asyncio-queue.html#asyncio.Queue</p>
 <p>looks like threads</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
@@ -536,112 +573,74 @@ because <code>ndone &lt; limit</code> is never false.</p>
 <span class="go">  ...</span>
 <span class="go">ZeroDivisionError: float division by zero</span>
 </code></pre></div>
-<h2 id="queue-redux">queue, redux<span class="headerlink"> <a href="#queue-redux" title="permalink">#</a></span></h2>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
-<span class="normal">14</span>
-<span class="normal">15</span>
-<span class="normal">16</span>
-<span class="normal">17</span>
-<span class="normal">18</span>
-<span class="normal">19</span>
-<span class="normal">20</span>
-<span class="normal">21</span>
-<span class="normal">22</span>
-<span class="normal">23</span>
-<span class="normal">24</span>
-<span class="normal">25</span>
-<span class="normal">26</span>
-<span class="normal">27</span>
-<span class="normal">28</span>
-<span class="normal">29</span>
-<span class="normal">30</span>
-<span class="normal">31</span>
-<span class="normal">32</span>
-<span class="normal">33</span>
-<span class="normal">34</span>
-<span class="normal">35</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
-    <span class="n">aws</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
-    <span class="n">queue</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
-    <span class="n">ndone</span> <span class="o">=</span> <span class="mi">0</span>
+<p>TODO: does this do backpressure?</p>
+<!--
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">worker</span><span class="p">():</span>
-        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">aw</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
-                <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-                <span class="k">break</span>
+# asyncio.Queue, redux
 
-            <span class="n">done</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">as_completed</span><span class="p">([</span><span class="n">aw</span><span class="p">]))</span>
-            <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">done</span><span class="o">.</span><span class="n">pop</span><span class="p">())</span>
+.. literalinclude:: mo_45_queue_as_completed.py
+    :lines: 13-35
 
-    <span class="n">worker_tasks</span> <span class="o">=</span> <span class="p">[</span><span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">worker</span><span class="p">())</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">limit</span><span class="p">)]</span>
+```console
+$ python map_unordered.py 2 .1 .2 .2 .1
+iter end
+0.1: 0.1
+0.2: 0.2
+0.2: 0.2
+0.2: 0.1
+0.2: done
+```
 
-    <span class="k">while</span> <span class="n">ndone</span> <span class="o">&lt;</span> <span class="n">limit</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">queue</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
-        <span class="k">if</span> <span class="n">task</span> <span class="o">:=</span> <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">get</span><span class="p">():</span>
-            <span class="k">yield</span> <span class="k">await</span> <span class="n">task</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">ndone</span> <span class="o">+=</span> <span class="mi">1</span>
-</code></pre></div>
-</td></tr></table>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 .2 .1
-<span class="go">iter end</span>
-<span class="go">0.1: 0.1</span>
-<span class="go">0.2: 0.2</span>
-<span class="go">0.2: 0.2</span>
-<span class="go">0.2: 0.1</span>
-<span class="go">0.2: done</span>
-</code></pre></div>
-<p>( ≖_≖)</p>
-<p>Everything runs at once...</p>
-<p>as_completed() yields the coroutines before they are actually finished:</p>
-<blockquote>
-<p>Each coroutine returned can be awaited to get the earliest next result from the iterable of the remaining awaitables.</p>
-</blockquote>
-<p>That is, the waiting happens when you <code>await</code> them.</p>
-<p>This is unlike the original, not-async as_completed() from concurrent.futures:</p>
-<p>https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.as_completed</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">1</span>
-<span class="normal">2</span>
-<span class="normal">3</span>
-<span class="normal">4</span>
-<span class="normal">5</span>
-<span class="normal">6</span>
-<span class="normal">7</span>
-<span class="normal">8</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">concurrent.futures</span> <span class="kn">import</span> <span class="n">ThreadPoolExecutor</span><span class="p">,</span> <span class="n">as_completed</span>
-<span class="kn">from</span> <span class="nn">time</span> <span class="kn">import</span> <span class="n">sleep</span><span class="p">,</span> <span class="n">monotonic</span>
+( ≖_≖)
 
-<span class="n">executor</span> <span class="o">=</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-<span class="n">start</span> <span class="o">=</span> <span class="n">monotonic</span><span class="p">()</span>
-<span class="n">futures</span> <span class="o">=</span> <span class="p">[</span><span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">sleep</span><span class="p">,</span> <span class="n">arg</span><span class="p">)</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">]]</span>
-<span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">as_completed</span><span class="p">(</span><span class="n">futures</span><span class="p">):</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="p">(</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</code></pre></div>
-</td></tr></table>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python sync_as_completed.py
-<span class="go">0.1</span>
-<span class="go">0.2</span>
-<span class="go">0.3</span>
-<span class="go">0.3</span>
-</code></pre></div>
-<p>Note there's no <code>future.result()</code> call here; unlike the async version, the wait happens <em>inside</em> the as_completed() iterator.</p>
-<hr />
-<p>If only there was some other way to wait tasks, also inspired by the concurrent.futures API, that actually blocks until they're done.</p>
-<p>https://docs.python.org/3/library/asyncio-task.html#asyncio.wait</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">26</span>
-<span class="normal">27</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>            <span class="n">done</span><span class="p">,</span> <span class="n">pending</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait</span><span class="p">([</span><span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">aw</span><span class="p">)])</span>
-            <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">done</span><span class="o">.</span><span class="n">pop</span><span class="p">())</span>
-</code></pre></div>
-</td></tr></table>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 .2 .1
-<span class="go">0.1: 0.1</span>
-<span class="go">0.2: 0.2</span>
-<span class="go">iter end</span>
-<span class="go">0.3: 0.1</span>
-<span class="go">0.3: 0.2</span>
-<span class="go">0.3: done</span>
-</code></pre></div>
-<h2 id="wait">wait<span class="headerlink"> <a href="#wait" title="permalink">#</a></span></h2>
+Everything runs at once...
+
+
+as_completed() yields the coroutines before they are actually finished:
+
+> Each coroutine returned can be awaited to get the earliest next result from the iterable of the remaining awaitables.
+
+That is, the waiting happens when you `await` them.
+
+This is unlike the original, not-async as_completed() from concurrent.futures:
+
+https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.as_completed
+
+.. literalinclude:: sync_as_completed.py
+    :lines: 1-
+
+```console
+$ python sync_as_completed.py
+0.1
+0.2
+0.3
+0.3
+```
+
+Note there's no `future.result()` call here; unlike the async version, the wait happens *inside* the as_completed() iterator.
+
+
+---
+
+If only there was some other way to wait tasks, also inspired by the concurrent.futures API, that actually blocks until they're done.
+
+https://docs.python.org/3/library/asyncio-task.html#asyncio.wait
+
+.. literalinclude:: mo_46_queue_wait.py
+    :lines: 26-27
+
+```console
+$ python map_unordered.py 2 .1 .2 .2 .1
+0.1: 0.1
+0.2: 0.2
+iter end
+0.3: 0.1
+0.3: 0.2
+0.3: done
+```
+
+-->
+<h2 id="asyncio-wait">asyncio.wait()<span class="headerlink"> <a href="#asyncio-wait" title="permalink">#</a></span></h2>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
@@ -694,6 +693,7 @@ because <code>ndone &lt; limit</code> is never false.</p>
 </code></pre></div>
 </td></tr></table>
 <p>TODO: map_unordered() being an async generator instead of just returning one; probably should have done this from the beginning</p>
+<p>TODO: unlike Pool.imap_unordered(), this does backpressure too!</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 .2 .1
 <span class="go">0.1: 0.1</span>
 <span class="go">0.2: 0.2</span>
@@ -702,7 +702,7 @@ because <code>ndone &lt; limit</code> is never false.</p>
 <span class="go">iter end</span>
 <span class="go">0.3: done</span>
 </code></pre></div>
-<h2 id="async-iterators">async iterators<span class="headerlink"> <a href="#async-iterators" title="permalink">#</a></span></h2>
+<h2 id="async-iterators">Async iterators<span class="headerlink"> <a href="#async-iterators" title="permalink">#</a></span></h2>
 <p>https://docs.python.org/3/glossary.html#term-asynchronous-iterable</p>
 <p>TODO: punch our way through all of the exceptions</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">55</span>
@@ -795,7 +795,7 @@ because <code>ndone &lt; limit</code> is never false.</p>
 <span class="go">iter end</span>
 <span class="go">0.3: done</span>
 </code></pre></div>
-<h2 id="exceptions">exceptions<span class="headerlink"> <a href="#exceptions" title="permalink">#</a></span></h2>
+<h2 id="exceptions">Exceptions<span class="headerlink"> <a href="#exceptions" title="permalink">#</a></span></h2>
 <p>OK, so what about exceptions?</p>
 <p>Sometimes, you still want to process the rest of the things even if one failed.</p>
 <hr />
