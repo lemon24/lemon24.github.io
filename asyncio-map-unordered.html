@@ -66,20 +66,20 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-01-23">January 2023</span>
-∙ eight minute read
+∙ nine minute read
 ∙
 </small><span class="share-icons">
 <a
     class="share-icon twitter"
-    href="https://twitter.com/%73%68%61%72%65?text=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29&url=https%3A//death.andgravity.com/asyncio-map-unordered&via=_andgravity"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29&url=https%3A//death.andgravity.com/asyncio-map-unordered&via=_andgravity"
 >Twitter</a>
 <a
     class="share-icon hacker-news"
-    href="https://news.ycombinator.com/submitlink?u=https%3A//death.andgravity.com/asyncio-map-unordered&t=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/asyncio-map-unordered&t=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29"
 >HN</a>
 <a
     class="share-icon reddit"
-    href="https://www.reddit.com/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/asyncio-map-unordered&title=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/asyncio-map-unordered&title=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29"
 >Reddit</a>
 </span>
 
@@ -130,12 +130,6 @@ to find out which is best.</p>
 <p class="admonition-title">Tip</p>
 <p>If you're in a hurry – it's <a href="#asyncio-wait">wait()</a>.</p>
 </section>
-<section class="admonition note">
-<p class="admonition-title">Note</p>
-<p>If you need a refresher on the lower level <a href="https://docs.python.org/3/library/asyncio.html">asyncio</a> stuff we'll use,
- check out Hynek Schlawack's excellent
- <a href="https://hynek.me/articles/waiting-in-asyncio/">Waiting in asyncio</a>.</p>
-</section>
 <details>
 <summary>Contents</summary>
 <section class="toc">
@@ -152,10 +146,21 @@ to find out which is best.</p>
 </section>
 </details>
 <h2 id="setup">Setup<span class="headerlink"> <a href="#setup" title="permalink">#</a></span></h2>
+<p>To try things out more easily,
+let's write a test harness of sorts.</p>
 <!--
+<details>
+<summary>Imports:</summary>
+
 .. literalinclude:: mo_00_serial.py
     :lines: 1-5
+
+</details>
 -->
+<p>We start with a <code>map_unordered()</code>
+that relies on a <code>limit_concurrency()</code> generator
+to run awaitables from an iterable in parallel,
+<code>limit</code> at a time:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
 <span class="normal"> 9</span>
 <span class="normal">10</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">map_unordered</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
@@ -163,6 +168,8 @@ to find out which is best.</p>
     <span class="k">return</span> <span class="n">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table>
+<p>... except right now it does them one by one
+(we'll get back to this later on):</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
@@ -180,6 +187,8 @@ to find out which is best.</p>
         <span class="k">yield</span> <span class="k">await</span> <span class="n">aw</span>
 </code></pre></div>
 </td></tr></table>
+<p>To simulate work being done,
+we use something that's almost like <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.sleep">asyncio.sleep()</a>:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">23</span>
 <span class="normal">24</span>
 <span class="normal">25</span>
@@ -189,6 +198,9 @@ to find out which is best.</p>
     <span class="k">return</span> <span class="n">i</span>
 </code></pre></div>
 </td></tr></table>
+<p>We then use map_unordered() to sleep() concurrently
+as directed by the script arguments,
+printing timings along the way:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">29</span>
 <span class="normal">30</span>
 <span class="normal">31</span>
@@ -220,6 +232,7 @@ to find out which is best.</p>
     <span class="n">main</span><span class="p">()</span>
 </code></pre></div>
 </td></tr></table>
+<p>We invoke the script with <code>python map_unordered.py LIMIT TIME...</code>, like so:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span>
 <span class="go">0.0: done</span>
 <span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2
@@ -227,8 +240,18 @@ to find out which is best.</p>
 <span class="go">0.3: 0.2</span>
 <span class="go">0.3: done</span>
 </code></pre></div>
+<section class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>If you need a refresher on the lower level <a href="https://docs.python.org/3/library/asyncio.html">asyncio</a> stuff we'll use,
+ check out Hynek Schlawack's excellent
+ <a href="https://hynek.me/articles/waiting-in-asyncio/">Waiting in asyncio</a>.</p>
+</section>
 <h2 id="asyncio-gather">asyncio.gather()<span class="headerlink"> <a href="#asyncio-gather" title="permalink">#</a></span></h2>
-<p>https://docs.python.org/3/library/asyncio-task.html#running-tasks-concurrently</p>
+<p>In the <a href="https://docs.python.org/3/library/asyncio-task.html#running-tasks-concurrently">Running Tasks Concurrently</a> section of the asyncio docs,
+we find <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.gather">asyncio.gather()</a>,
+which runs multiple awaitables,
+and returns a list of results.</p>
+<p>We can use it to run <code>limit</code>-sized chunks of awaitables:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
@@ -246,11 +269,13 @@ to find out which is best.</p>
             <span class="k">yield</span> <span class="n">result</span>
 </code></pre></div>
 </td></tr></table>
+<p>This seems to work:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2
 <span class="go">0.2: 0.1</span>
 <span class="go">0.2: 0.2</span>
 <span class="go">0.2: done</span>
 </code></pre></div>
+<p>... except:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 .2 .1
 <span class="go">0.2: 0.1</span>
 <span class="go">0.2: 0.2</span>
@@ -258,14 +283,29 @@ to find out which is best.</p>
 <span class="go">0.4: 0.1</span>
 <span class="go">0.4: done</span>
 </code></pre></div>
-<div class="highlight code-container"><pre class="code" data-lang="Text only"><span></span><code>| sleep(.1) |...........|       sleep(.2)       |
-|       sleep(.2)       | sleep(.1) |...........|
-</code></pre></div>
+<p>... those should fit in 0.3 seconds:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Text only"><span></span><code>| sleep(.1) |       sleep(.2)       |
 |       sleep(.2)       | sleep(.1) |
 </code></pre></div>
+<p>It looks like we're waiting for all tasks in a batch to finish,
+instead of allowing any of the next tasks to run:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Text only"><span></span><code>| sleep(.1) |...........|       sleep(.2)       |
+|       sleep(.2)       | sleep(.1) |...........|
+</code></pre></div>
 <h2 id="asyncio-semaphore">asyncio.Semaphore<span class="headerlink"> <a href="#asyncio-semaphore" title="permalink">#</a></span></h2>
-<p>https://docs.python.org/3/library/asyncio-sync.html#asyncio.Semaphore</p>
+<p>Screw the docs, too much to read.</p>
+<p>We do some googling,
+and the first few Stack Overflow answers point us to <a href="https://docs.python.org/3/library/asyncio-sync.html#asyncio.Semaphore">asyncio.Semaphore</a>.</p>
+<p>Like its <a href="https://docs.python.org/3/library/threading.html#threading.Semaphore">threading cousin</a>,
+we can use it to limit
+how many times the body of a <code>with</code> block can be entered in parallel:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">sem</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+
+<span class="c1"># ... later</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">sem</span><span class="p">:</span>
+    <span class="c1"># this can run no more than 10 times in parallel</span>
+</code></pre></div>
+<p>Sounds about what we're looking for:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
@@ -292,6 +332,10 @@ to find out which is best.</p>
 <span class="go">0.3: 0.1</span>
 <span class="go">0.3: done</span>
 </code></pre></div>
+<p>... except, because <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.gather">gather()</a> takes a sequence,
+we end up consuming the entire <code>aws</code> iterable right away,
+before <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.gather">gather()</a> is even called.
+Let's highlight this:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">37</span>
 <span class="normal">38</span>
 <span class="normal">39</span>
@@ -308,6 +352,7 @@ to find out which is best.</p>
     <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">async_main</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">limit</span><span class="p">))</span>
 </code></pre></div>
 </td></tr></table>
+<p>As expected:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 .2 .1
 <span class="go">iter end</span>
 <span class="go">0.3: 0.1</span>
@@ -316,197 +361,144 @@ to find out which is best.</p>
 <span class="go">0.3: 0.1</span>
 <span class="go">0.3: done</span>
 </code></pre></div>
+<p>This may be OK for small iterables, but it has two issues:</p>
+<ul>
+<li>for big iterables, we create thousands upon thousands of tasks,
+without actually running them (yet);
+that has to cause some memory issues</li>
+<li>if the iterable is lazy (say, a paginated API),
+we have to wait for all of it to be consumed,
+instead of starting to do work as soon as we can</li>
+</ul>
 <h2 id="asyncio-as-completed">asyncio.as_completed()<span class="headerlink"> <a href="#asyncio-as-completed" title="permalink">#</a></span></h2>
-<p>https://docs.python.org/3/library/asyncio-task.html#asyncio.as_completed</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
-<span class="normal">14</span>
-<span class="normal">15</span>
-<span class="normal">16</span>
-<span class="normal">17</span>
-<span class="normal">18</span>
-<span class="normal">19</span>
-<span class="normal">20</span>
-<span class="normal">21</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
-    <span class="n">semaphore</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span><span class="n">limit</span><span class="p">)</span>
-
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="n">aw</span><span class="p">):</span>
-        <span class="k">async</span> <span class="k">with</span> <span class="n">semaphore</span><span class="p">:</span>
-            <span class="k">return</span> <span class="k">await</span> <span class="n">aw</span>
-
-    <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">as_completed</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">wrapper</span><span class="p">,</span> <span class="n">aws</span><span class="p">)):</span>
-        <span class="k">yield</span> <span class="k">await</span> <span class="n">task</span>
-</code></pre></div>
-</td></tr></table>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 .2 .1
-<span class="go">iter end</span>
-<span class="go">0.3: 0.1</span>
-<span class="go">0.3: 0.2</span>
-<span class="go">0.3: 0.2</span>
-<span class="go">0.3: 0.1</span>
-<span class="go">0.3: done</span>
-</code></pre></div>
-<p>https://github.com/python/cpython/blob/3.11/Lib/asyncio/tasks.py#L557</p>
+<p>At a quick glance, <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.as_completed">asyncio.as_completed()</a> might do what we need
+– it takes an iterable of awaitables, runs them concurrently,
+and returns an iterator of coroutines that
+&quot;can be awaited to get the earliest next result
+from the iterable of the remaining awaitables&quot;.</p>
+<p>But, it has two issues.</p>
+<p>First, <a href="https://github.com/python/cpython/blob/3.11/Lib/asyncio/tasks.py#L557">it consumes the iterable right away</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">as_completed</span><span class="p">(</span><span class="n">fs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="o">...</span>
-    <span class="kn">from</span> <span class="nn">.queues</span> <span class="kn">import</span> <span class="n">Queue</span>
-    <span class="n">done</span> <span class="o">=</span> <span class="n">Queue</span><span class="p">()</span>
-
-    <span class="n">loop</span> <span class="o">=</span> <span class="n">events</span><span class="o">.</span><span class="n">_get_event_loop</span><span class="p">()</span>
+    <span class="o">...</span>  <span class="c1"># set-up</span>
     <span class="n">todo</span> <span class="o">=</span> <span class="p">{</span><span class="n">ensure_future</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">loop</span><span class="o">=</span><span class="n">loop</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">fs</span><span class="p">)}</span>
-    <span class="o">...</span>
+    <span class="o">...</span>  <span class="c1"># actual logic</span>
 </code></pre></div>
+<p>The second is more subtle, but just as fundamental.</p>
+<p><a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.as_completed">as_completed()</a> has no limits of its own
+– it's up to us to limit how fast we feed it awaitables.
+Presumably, we could wrap the input iterable
+into a generator that yields awaitables
+only if enough results came out the other end,
+and otherwise waits in some way.</p>
+<p>However, due to historical reasons,
+<a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.as_completed">as_completed()</a> takes a plain-old-<em>sync</em>-iterator
+– we cannot <code>await</code> anything in its (sync) <a href="https://docs.python.org/3/library/stdtypes.html#iterator.__next__">__next__()</a> method,
+and sync waiting of any kind would block (and possibly deadlock)
+the entire event loop.</p>
+<p>So, no <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.as_completed">as_completed()</a> for you.</p>
+<!--
+
+.. literalinclude:: mo_30_as_completed.py
+    :lines: 13-21
+
+```console
+$ python map_unordered.py 2 .1 .2 .2 .1
+iter end
+0.3: 0.1
+0.3: 0.2
+0.3: 0.2
+0.3: 0.1
+0.3: done
+```
+
+-->
 <h2 id="asyncio-queue">asyncio.Queue<span class="headerlink"> <a href="#asyncio-queue" title="permalink">#</a></span></h2>
-<p>https://docs.python.org/3/library/asyncio-queue.html#asyncio.Queue</p>
-<p>looks like threads</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
-<span class="normal">14</span>
-<span class="normal">15</span>
-<span class="normal">16</span>
-<span class="normal">17</span>
-<span class="normal">18</span>
-<span class="normal">19</span>
-<span class="normal">20</span>
-<span class="normal">21</span>
-<span class="normal">22</span>
-<span class="normal">23</span>
-<span class="normal">24</span>
-<span class="normal">25</span>
-<span class="normal">26</span>
-<span class="normal">27</span>
-<span class="normal">28</span>
-<span class="normal">29</span>
-<span class="normal">30</span>
-<span class="normal">31</span>
-<span class="normal">32</span>
-<span class="normal">33</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
-    <span class="n">aws</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
-    <span class="n">queue</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
-    <span class="n">ndone</span> <span class="o">=</span> <span class="mi">0</span>
+<p>Speaking of threading cousins,
+how would you implement the (sync) <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>
+if there was no Pool? Queues, of course!</p>
+<!--
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">worker</span><span class="p">():</span>
-        <span class="k">nonlocal</span> <span class="n">ndone</span>
+looks like threads
 
-        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">aw</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
-                <span class="n">ndone</span> <span class="o">+=</span> <span class="mi">1</span>
-                <span class="k">break</span>
+.. literalinclude:: mo_40_queue.py
+    :lines: 13-33
 
-            <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="k">await</span> <span class="n">aw</span><span class="p">)</span>
+```console
+$ python map_unordered.py 2 .1 .2 .2 .1
+0.1: 0.1
+0.2: 0.2
+iter end
+0.3: 0.1
+0.3: 0.2
+0.3: done
+```
 
-    <span class="n">worker_tasks</span> <span class="o">=</span> <span class="p">[</span><span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">worker</span><span class="p">())</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">limit</span><span class="p">)]</span>
+... except, for an empty input, it hangs:
 
-    <span class="k">while</span> <span class="n">ndone</span> <span class="o">&lt;</span> <span class="n">limit</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">queue</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
-        <span class="k">yield</span> <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
-</code></pre></div>
-</td></tr></table>
-<p>TODO: needs lock for anext? https://stackoverflow.com/q/43701647</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 .2 .1
-<span class="go">0.1: 0.1</span>
-<span class="go">0.2: 0.2</span>
-<span class="go">iter end</span>
-<span class="go">0.3: 0.1</span>
-<span class="go">0.3: 0.2</span>
-<span class="go">0.3: done</span>
-</code></pre></div>
-<p>... except, for an empty input, it hangs:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span>
-<span class="go">iter end</span>
-</code></pre></div>
-<p>TODO: explain why; for each get(), you want to have a put()</p>
-<p>https://docs.python.org/3/library/asyncio-task.html#asyncio.wait_for</p>
-<p>In main():</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">58</span>
-<span class="normal">59</span>
-<span class="normal">60</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">timeout</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.1</span>
-    <span class="n">args</span> <span class="o">=</span> <span class="n">on_iter_end</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;iter end&quot;</span><span class="p">))</span>
-    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">async_main</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">limit</span><span class="p">),</span> <span class="n">timeout</span><span class="p">))</span>
-</code></pre></div>
-</td></tr></table>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span>
-<span class="go">iter end</span>
-<span class="go">Traceback (most recent call last):</span>
-<span class="go">  ...</span>
-<span class="go">asyncio.exceptions.TimeoutError</span>
-</code></pre></div>
-<hr />
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
-<span class="normal">14</span>
-<span class="normal">15</span>
-<span class="normal">16</span>
-<span class="normal">17</span>
-<span class="normal">18</span>
-<span class="normal">19</span>
-<span class="normal">20</span>
-<span class="normal">21</span>
-<span class="normal">22</span>
-<span class="normal">23</span>
-<span class="normal">24</span>
-<span class="normal">25</span>
-<span class="normal">26</span>
-<span class="normal">27</span>
-<span class="normal">28</span>
-<span class="normal">29</span>
-<span class="normal">30</span>
-<span class="normal">31</span>
-<span class="normal">32</span>
-<span class="normal">33</span>
-<span class="normal">34</span>
-<span class="normal">35</span>
-<span class="normal">36</span>
-<span class="normal">37</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
-    <span class="n">aws</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
-    <span class="n">queue</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
-    <span class="n">ndone</span> <span class="o">=</span> <span class="mi">0</span>
+```console
+$ python map_unordered.py 2
+iter end
+```
 
-    <span class="n">done</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
+TODO: explain why; for each get(), you want to have a put()
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">worker</span><span class="p">():</span>
-        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">aw</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
-                <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">done</span><span class="p">)</span>
-                <span class="k">break</span>
+https://docs.python.org/3/library/asyncio-task.html#asyncio.wait_for
 
-            <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="k">await</span> <span class="n">aw</span><span class="p">)</span>
+In main():
 
-    <span class="n">worker_tasks</span> <span class="o">=</span> <span class="p">[</span><span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">worker</span><span class="p">())</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">limit</span><span class="p">)]</span>
+.. literalinclude:: mo_40_queue.py
+    :lines: 58-60
 
-    <span class="k">while</span> <span class="n">ndone</span> <span class="o">&lt;</span> <span class="n">limit</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">queue</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
-        <span class="n">rv</span> <span class="o">=</span> <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">rv</span> <span class="ow">is</span> <span class="n">done</span><span class="p">:</span>
-            <span class="n">ndone</span> <span class="o">+=</span> <span class="mi">1</span>
-            <span class="k">continue</span>
-        <span class="k">yield</span> <span class="n">rv</span>
-</code></pre></div>
-</td></tr></table>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span>
-<span class="go">iter end</span>
-<span class="go">0.0: done</span>
-</code></pre></div>
-<p>... but, look what happens if there's an error:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 <span class="m">0</span> .2 .1
-<span class="go">0.1: 0.1</span>
-<span class="go">0.2: 0.2</span>
-<span class="go">0.4: 0.2</span>
-<span class="go">iter end</span>
-<span class="go">0.5: 0.1</span>
-<span class="go">Traceback (most recent call last):</span>
-<span class="go">  ...</span>
-<span class="go">asyncio.exceptions.TimeoutError</span>
-<span class="go">Task exception was never retrieved</span>
-<span class="go">future: &lt;Task finished name=&#39;Task-3&#39; coro=&lt;limit_concurrency.&lt;locals&gt;.worker() done, defined at map_unordered.py:20&gt; exception=ZeroDivisionError(&#39;float division by zero&#39;)&gt;</span>
-<span class="go">Traceback (most recent call last):</span>
-<span class="go">  ...</span>
-<span class="go">ZeroDivisionError: float division by zero</span>
-</code></pre></div>
-<p>One worker gets killed (the bad value is a poison pill),
+```console
+$ python map_unordered.py 2
+iter end
+Traceback (most recent call last):
+  ...
+asyncio.exceptions.TimeoutError
+```
+
+
+---
+
+.. literalinclude:: mo_41_queue.py
+    :lines: 13-37
+
+```console
+$ python map_unordered.py 2
+iter end
+0.0: done
+```
+
+... but, look what happens if there's an error:
+
+```console
+$ python map_unordered.py 2 .1 .2 0 .2 .1
+0.1: 0.1
+0.2: 0.2
+0.4: 0.2
+iter end
+0.5: 0.1
+Traceback (most recent call last):
+  ...
+asyncio.exceptions.TimeoutError
+Task exception was never retrieved
+future: <Task finished name='Task-3' coro=<limit_concurrency.<locals>.worker() done, defined at map_unordered.py:20> exception=ZeroDivisionError('float division by zero')>
+Traceback (most recent call last):
+  ...
+ZeroDivisionError: float division by zero
+```
+
+One worker gets killed (the bad value is a poison pill),
 and the other one keeps going.
-<code>limit_concurrency()</code> never returns,
-because <code>ndone &lt; limit</code> is never false.</p>
-<hr />
+`limit_concurrency()` never returns,
+because `ndone < limit` is never false.
+
+-->
+<p>And <a href="https://docs.python.org/3/library/asyncio.html">asyncio</a> has its own <a href="https://docs.python.org/3/library/asyncio-queue.html#asyncio.Queue">Queue</a>,
+which you use in pretty much the same way:
+start <code>limit</code> worker tasks that loop forever,
+pulling awaitables, awaiting them,
+and putting the results into a queue.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
@@ -566,14 +558,62 @@ because <code>ndone &lt; limit</code> is never false.</p>
             <span class="n">ndone</span> <span class="o">+=</span> <span class="mi">1</span>
 </code></pre></div>
 </td></tr></table>
-<p>No need for a sentinel, since the values are &quot;tagged&quot;.</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 <span class="m">0</span> .2 .1
+<p>The iterable is exhausted before the last &quot;batch&quot; starts:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 .3 .3 .2 .1
 <span class="go">0.1: 0.1</span>
-<span class="go">Traceback (most recent call last):</span>
-<span class="go">  ...</span>
-<span class="go">ZeroDivisionError: float division by zero</span>
+<span class="go">0.2: 0.2</span>
+<span class="go">0.4: 0.3</span>
+<span class="go">0.5: 0.3</span>
+<span class="go">iter end</span>
+<span class="go">0.6: 0.1</span>
+<span class="go">0.6: 0.2</span>
+<span class="go">0.6: done</span>
 </code></pre></div>
-<p>TODO: does this do backpressure?</p>
+<p>I was going to work up to this in a few steps,
+but I'll just point out three common bugs
+this type of code might have (and these apply to threads too).</p>
+<p>First,
+we could increment <code>ndone</code> from the worker
+(<a href="/_file/asyncio-map-unordered/mo_40_queue.py">code</a>),
+but this makes <code>await queue.get()</code> hang forever for empty iterables,
+since workers never get to run by the time we get to it;
+because there's no other await, it's not even a race condition.</p>
+<p>The solution is to signal the worker is done in-band,
+by putting a <a href="/sentinels#what-s-a-sentinel-and-why-do-i-need-one">sentinel</a> on the queue.
+I guess a good rule of thumb for this kind of thing
+is that for each get() without a timeout, you want to have a put().<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
+<!--
+```console
+$ python map_unordered.py 2
+iter end
+0.0: done
+```
+-->
+<p>Second,
+you have to catch exceptions raised by awaitables
+and send them through the queue as well;
+otherwise (<a href="/_file/asyncio-map-unordered/mo_41_queue.py">code</a>),
+the worker gets killed,
+and that's one more get() waiting for a put() that will never come.</p>
+<!--
+```console
+$ python map_unordered.py 2 .1 .2 0 .2 .1
+0.1: 0.1
+Traceback (most recent call last):
+  ...
+ZeroDivisionError: float division by zero
+```
+-->
+<p>Finally, our input iterator is synchronous (for now),
+so no other task can run while we do <code>next(aws)</code>.
+But if it were asynchronous,
+any number of tasks could <code>await anext(aws)</code> at any given time,
+leading to potential <a href="https://stackoverflow.com/a/46858792">concurrency issues</a>.
+The fix is the same as with threads:
+either protect that call with a <a href="https://docs.python.org/3/library/asyncio-sync.html#asyncio.Lock">Lock</a>,
+or feed awaitables to workers through an input queue.</p>
+<p>Anyway, no need to worry about any that – a better solution awaits.</p>
+<!-- TODO: does this do backpressure? -->
 <!--
 
 # asyncio.Queue, redux
@@ -660,7 +700,9 @@ iter end
 <span class="normal">29</span>
 <span class="normal">30</span>
 <span class="normal">31</span>
-<span class="normal">32</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
     <span class="n">aws</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
     <span class="n">aws_ended</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">pending</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
@@ -677,7 +719,9 @@ iter end
         <span class="k">if</span> <span class="ow">not</span> <span class="n">pending</span><span class="p">:</span>
             <span class="k">return</span>
 
-        <span class="n">done</span><span class="p">,</span> <span class="n">pending</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">pending</span><span class="p">,</span> <span class="n">return_when</span><span class="o">=</span><span class="n">asyncio</span><span class="o">.</span><span class="n">FIRST_COMPLETED</span><span class="p">)</span>
+        <span class="n">done</span><span class="p">,</span> <span class="n">pending</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span>
+            <span class="n">pending</span><span class="p">,</span> <span class="n">return_when</span><span class="o">=</span><span class="n">asyncio</span><span class="o">.</span><span class="n">FIRST_COMPLETED</span>
+        <span class="p">)</span>
         <span class="k">while</span> <span class="n">done</span><span class="p">:</span>
             <span class="k">yield</span> <span class="n">done</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
 </code></pre></div>
@@ -902,6 +946,11 @@ so how do you know which one failed?</p>
 <span class="go">iter end</span>
 <span class="go">0.3: done</span>
 </code></pre></div>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>Does this have a fancy, academic name? <a href="/about#contact">Do let me know!</a> <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
 
 
 
