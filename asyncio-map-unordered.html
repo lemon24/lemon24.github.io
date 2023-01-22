@@ -66,7 +66,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-01-23">January 2023</span>
-∙ 11 minute read
+∙ 12 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -705,9 +705,7 @@ with potentially infinite memory usage.</p>
 <p>This can be fixed by making the queue bounded,
 so that when the queue gets full,
 workers can't put() new data until
-the consumer get()s some old data.
-Alas, we don't have access to the queue <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a> uses,
-but that's a story for another time.</p>
+the consumer get()s some old data.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">15</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">queue</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="n">limit</span><span class="p">)</span>
 </code></pre></div>
 </td></tr></table><div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">async</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">async_print</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">),</span> <span class="mi">1</span><span class="p">):</span>
@@ -725,6 +723,8 @@ but that's a story for another time.</p>
 <span class="go">got result</span>
 <span class="go">got result</span>
 </code></pre></div>
+<p>Alas, we don't have access to the queue <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a> uses,
+but that's a story for another time.</p>
 <!--
 
 # asyncio.Queue, redux
@@ -792,8 +792,19 @@ iter end
 
 -->
 <h2 id="asyncio-wait">asyncio.wait()<span class="headerlink"> <a href="#asyncio-wait" title="permalink">#</a></span></h2>
-<p>queue not idiomatic</p>
-<p>https://linux.die.net/man/2/select</p>
+<p>This whole let's-pretend-we're-using-threads thing works,
+but maybe it's not all that idiomatic.
+If only there was some sort of low level <a href="https://linux.die.net/man/2/select">select()</a>-like primitive
+that takes a set of tasks
+and blocks until at least one of them finishes.</p>
+<p>And of course there is – we've been purposefully avoiding it this entire time –
+it's <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.wait">asyncio.wait()</a>, and it can do exactly that.</p>
+<p>By default, it waits until all tasks are completed,
+which for our purposes isn't much better than <a href="#asyncio-gather">gather()</a>.
+But, with <code>return_when=​FIRST_COMPLETED</code>,
+it waits until <em>at least one</em> task is completed.</p>
+<p>We can use this to keep a <code>limit</code>-sized set of tasks
+updated with new tasks as soon as the old ones finish:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
@@ -839,7 +850,11 @@ iter end
             <span class="k">yield</span> <span class="n">done</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
 </code></pre></div>
 </td></tr></table>
-<p>Awaitables in, awaitables out.</p>
+<p>We take this opportunity to change the contract
+between <code>limit_concurrency()</code> and <code>map_unordered()</code>:
+instead of results, <code>limit_concurrency()</code> now yields awaitables,
+making it more consistent –
+awaitables in, awaitables out.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
 <span class="normal"> 9</span>
 <span class="normal">10</span>
@@ -849,7 +864,10 @@ iter end
         <span class="k">yield</span> <span class="k">await</span> <span class="n">task</span>
 </code></pre></div>
 </td></tr></table>
-<p>TODO: map_unordered() being an async generator instead of just returning one; probably should have done this from the beginning</p>
+<p><code>map_unordered()</code> becomes an async generator, instead of just returning one;
+we should have probably done this done this from the beginning,
+to make it clear it's not sync.</p>
+<p>And it has all the properties that the Queues one has:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 .2 .1
 <span class="go">0.1: 0.1</span>
 <span class="go">0.2: 0.2</span>
@@ -858,7 +876,7 @@ iter end
 <span class="go">iter end</span>
 <span class="go">0.3: done</span>
 </code></pre></div>
-<p>TODO: unlike Pool.imap_unordered(), this does backpressure too!</p>
+<p>... and backpressure too:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">async</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">async_print</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="mi">1</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">.1</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;got result&#39;</span><span class="p">)</span>
