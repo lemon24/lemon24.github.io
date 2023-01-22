@@ -66,7 +66,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-01-23">January 2023</span>
-∙ 12 minute read
+∙ 11 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -141,8 +141,7 @@ to find out which is best.</p>
 <li><a href="#asyncio-queue">asyncio.Queue</a></li>
 <li><a href="#aside-backpressure">Aside: backpressure</a></li>
 <li><a href="#asyncio-wait">asyncio.wait()</a></li>
-<li><a href="#async-iterators">Async iterators</a></li>
-<li><a href="#exceptions">Exceptions</a></li>
+<li><a href="#async-iterables">Async iterables</a></li>
 </ul>
 </section>
 </details>
@@ -792,18 +791,19 @@ iter end
 
 -->
 <h2 id="asyncio-wait">asyncio.wait()<span class="headerlink"> <a href="#asyncio-wait" title="permalink">#</a></span></h2>
-<p>This whole let's-pretend-we're-using-threads thing works,
-but maybe it's not all that idiomatic.
-If only there was some sort of low level <a href="https://linux.die.net/man/2/select">select()</a>-like primitive
+<p>This whole pretend-we're-using-threads thing works,
+but it's not all that idiomatic.</p>
+<p>If only there was some sort of low level, <a href="https://linux.die.net/man/2/select">select()</a>-like primitive
 that takes a set of tasks
-and blocks until at least one of them finishes.</p>
-<p>And of course there is – we've been purposefully avoiding it this entire time –
-it's <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.wait">asyncio.wait()</a>, and it can do exactly that.</p>
+and blocks until at least one of them finishes.
+And of course there is
+– I've been purposefully avoiding it this entire time –
+it's <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.wait">asyncio.wait()</a>, and it does exactly that.</p>
 <p>By default, it waits until all tasks are completed,
-which for our purposes isn't much better than <a href="#asyncio-gather">gather()</a>.
-But, with <code>return_when=​FIRST_COMPLETED</code>,
-it waits until <em>at least one</em> task is completed.</p>
-<p>We can use this to keep a <code>limit</code>-sized set of tasks
+which isn't much better than <a href="#asyncio-gather">gather()</a>.</p>
+<p>But, with <code>return_when=​FIRST_COMPLETED</code>,
+it waits until <em>at least one</em> task is completed.
+We can use this to keep a <code>limit</code>-sized set of running tasks
 updated with new tasks as soon as the old ones finish:</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
@@ -850,11 +850,13 @@ updated with new tasks as soon as the old ones finish:</p>
             <span class="k">yield</span> <span class="n">done</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
 </code></pre></div>
 </td></tr></table>
-<p>We take this opportunity to change the contract
-between <code>limit_concurrency()</code> and <code>map_unordered()</code>:
-instead of results, <code>limit_concurrency()</code> now yields awaitables,
-making it more consistent –
-awaitables in, awaitables out.</p>
+<p>We take this opportunity 
+to change <code>limit_concurrency()</code> to yield awaitables instead of results 
+– awaitables in, awaitables out.</p>
+<p><code>map_unordered()</code> becomes an async generator function, 
+instead of a sync function returning an async generator.
+This doesn't really change how you use it,
+but it does make it more self-documenting.</p>
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
 <span class="normal"> 9</span>
 <span class="normal">10</span>
@@ -864,10 +866,7 @@ awaitables in, awaitables out.</p>
         <span class="k">yield</span> <span class="k">await</span> <span class="n">task</span>
 </code></pre></div>
 </td></tr></table>
-<p><code>map_unordered()</code> becomes an async generator, instead of just returning one;
-we should have probably done this done this from the beginning,
-to make it clear it's not sync.</p>
-<p>And it has all the properties that the Queues one has:</p>
+<p>This implementation has all the properties that the Queues one has:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 .2 .1
 <span class="go">0.1: 0.1</span>
 <span class="go">0.2: 0.2</span>
@@ -890,22 +889,37 @@ to make it clear it's not sync.</p>
 <span class="go">3</span>
 <span class="go">got result</span>
 </code></pre></div>
-<h2 id="async-iterators">Async iterators<span class="headerlink"> <a href="#async-iterators" title="permalink">#</a></span></h2>
-<p>https://docs.python.org/3/glossary.html#term-asynchronous-iterable</p>
-<p>TODO: punch our way through all of the exceptions</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">55</span>
-<span class="normal">56</span>
-<span class="normal">57</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>
-
-<span class="k">async</span> <span class="k">def</span> <span class="nf">as_async_iter</span><span class="p">(</span><span class="n">it</span><span class="p">):</span>
+<h2 id="async-iterables">Async iterables<span class="headerlink"> <a href="#async-iterables" title="permalink">#</a></span></h2>
+<p>OK, so what if the arguments iterable we pass to <code>map_unordered()</code>
+is <a href="https://docs.python.org/3/glossary.html#term-asynchronous-iterable">asynchronous</a>?
+This is async code, after all.</p>
+<p>This opens us up to a whole looking-glass world of async iteration
+– instead of <a href="https://docs.python.org/3/library/functions.html#iter">iter()</a> you have <a href="https://docs.python.org/3/library/functions.html#aiter">aiter()</a>,
+instead of <a href="https://docs.python.org/3/library/functions.html#next">next()</a> you have <a href="https://docs.python.org/3/library/functions.html#anext">anext()</a>,
+some of them you await, some of them you don't...</p>
+<p>Thankfully,
+we can support both without having two versions of the code,
+and without making the one version much worse.</p>
+<p>And we don't need to be particularly smart either about it either;
+we can just feed the current code an async iterable from <code>main()</code>,
+and punch our way through the exceptions:</p>
+<!-- on_iter_end -->
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">57</span>
+<span class="normal">58</span>
+<span class="normal">59</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">as_async_iter</span><span class="p">(</span><span class="n">it</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">it</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">x</span>
 </code></pre></div>
 </td></tr></table>
-<p>In main():</p>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">64</span>
-<span class="normal">65</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">args</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">:]]</span>
-    <span class="n">timeout</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.1</span>
+<!-- args = as_async_iter... -->
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="n">args</span> <span class="o">=</span> <span class="n">on_iter_end</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;iter end&quot;</span><span class="p">))</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">as_async_iter</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">async_main</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">limit</span><span class="p">),</span> <span class="n">timeout</span><span class="p">))</span>
 </code></pre></div>
 </td></tr></table>
+<hr />
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 .2 .1
 <span class="go">Traceback (most recent call last):</span>
 <span class="go">  ...</span>
@@ -913,65 +927,72 @@ to make it clear it's not sync.</p>
 <span class="go">    aws = map(func, iterable)</span>
 <span class="go">TypeError: &#39;async_generator&#39; object is not iterable</span>
 </code></pre></div>
-<hr />
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">14</span>
-<span class="normal">15</span>
-<span class="normal">16</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">_map_async</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">):</span>
-    <span class="k">async</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">iterable</span><span class="p">:</span>
-        <span class="k">yield</span> <span class="n">func</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-</code></pre></div>
-</td></tr></table>
+<p><a href="https://docs.python.org/3/library/functions.html#map">map()</a> doesn't work with async iterables,
+so we use a <a href="https://docs.python.org/3/glossary.html#term-generator-expression">generator expression</a> instead.</p>
+<!-- _map_async -->
 <table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
 <span class="normal"> 9</span>
 <span class="normal">10</span>
 <span class="normal">11</span>
 <span class="normal">12</span>
 <span class="normal">13</span>
-<span class="normal">14</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">map_unordered</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
-    <span class="n">is_async</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">iterable</span><span class="p">,</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">AsyncIterator</span><span class="p">)</span>
-    <span class="n">map_func</span> <span class="o">=</span> <span class="n">_map_async</span> <span class="k">if</span> <span class="n">is_async</span> <span class="k">else</span> <span class="nb">map</span>
-    <span class="n">aws</span> <span class="o">=</span> <span class="n">map_func</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">)</span>
+<span class="normal">14</span>
+<span class="normal">15</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">map_unordered</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">aws</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+        <span class="n">aws</span> <span class="o">=</span> <span class="p">(</span><span class="n">func</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">async</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">iterable</span><span class="p">)</span>
 
     <span class="k">async</span> <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
         <span class="k">yield</span> <span class="k">await</span> <span class="n">task</span>
 </code></pre></div>
 </td></tr></table>
+<p>TODO: we could change limit_concurrency to take only async iters, but it's useful on its own, so we dont</p>
+<hr />
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 .2 .1
 <span class="go">Traceback (most recent call last):</span>
 <span class="go">  ...</span>
-<span class="go">  File &quot;map_unordered.py&quot;, line 23, in limit_concurrency</span>
+<span class="go">  File &quot;map_unordered.py&quot;, line 24, in limit_concurrency</span>
 <span class="go">    aws = iter(aws)</span>
 <span class="go">TypeError: &#39;async_generator&#39; object is not iterable</span>
 </code></pre></div>
-<hr />
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">22</span>
-<span class="normal">23</span>
+<!-- aiter(aws) -->
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">23</span>
 <span class="normal">24</span>
-<span class="normal">25</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
-    <span class="n">is_async</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">AsyncIterator</span><span class="p">)</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">aws</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
+        <span class="n">is_async</span> <span class="o">=</span> <span class="kc">False</span>
 
-    <span class="n">aws</span> <span class="o">=</span> <span class="n">aiter</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span> <span class="k">if</span> <span class="n">is_async</span> <span class="k">else</span> <span class="nb">iter</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
+    <span class="n">aws_ended</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">pending</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+    <span class="k">while</span> <span class="n">pending</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">aws_ended</span><span class="p">:</span>
 </code></pre></div>
 </td></tr></table>
+<hr />
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 .2 .1
 <span class="go">Traceback (most recent call last):</span>
 <span class="go">  ...</span>
-<span class="go">  File &quot;map_unordered.py&quot;, line 32, in limit_concurrency</span>
+<span class="go">  File &quot;map_unordered.py&quot;, line 37, in limit_concurrency</span>
 <span class="go">    aw = next(aws)</span>
 <span class="go">TypeError: &#39;async_generator&#39; object is not an iterator</span>
 </code></pre></div>
-<hr />
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">31</span>
-<span class="normal">32</span>
-<span class="normal">33</span>
-<span class="normal">34</span>
-<span class="normal">35</span>
-<span class="normal">36</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>            <span class="k">try</span><span class="p">:</span>
-                <span class="n">aw</span> <span class="o">=</span> <span class="k">await</span> <span class="n">anext</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span> <span class="k">if</span> <span class="n">is_async</span> <span class="k">else</span> <span class="nb">next</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">StopAsyncIteration</span> <span class="k">if</span> <span class="n">is_async</span> <span class="k">else</span> <span class="ne">StopIteration</span><span class="p">:</span>
-                <span class="n">aws_ended</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="k">else</span><span class="p">:</span>
+<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span>
+<span class="normal">39</span>
+<span class="normal">40</span>
+<span class="normal">41</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>            <span class="k">else</span><span class="p">:</span>
                 <span class="n">pending</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="n">aw</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">pending</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">done</span><span class="p">,</span> <span class="n">pending</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span>
 </code></pre></div>
 </td></tr></table>
 <p>It may not look pretty, but it gets the job done.</p>
@@ -983,113 +1004,115 @@ to make it clear it's not sync.</p>
 <span class="go">iter end</span>
 <span class="go">0.3: done</span>
 </code></pre></div>
-<h2 id="exceptions">Exceptions<span class="headerlink"> <a href="#exceptions" title="permalink">#</a></span></h2>
-<p>OK, so what about exceptions?</p>
-<p>Sometimes, you still want to process the rest of the things even if one failed.</p>
-<hr />
-<p>A cheap way is to have the user handle this by wrapping their function:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">return_exceptions</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">return</span> <span class="k">await</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">e</span>
+<!--
 
-    <span class="k">return</span> <span class="n">wrapper</span>
-</code></pre></div>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">async</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">return_exceptions</span><span class="p">(</span><span class="n">sleep</span><span class="p">),</span> <span class="p">[</span><span class="mf">.2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">.1</span><span class="p">],</span> <span class="mi">2</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-<span class="gp">...</span>
-<span class="go">division by zero</span>
-<span class="go">0.1</span>
-<span class="go">0.2</span>
-</code></pre></div>
-<hr />
-<p>Alternatively, we could just bubble up the Task to the user;
-then they're free to do whatever (either await it, or check the exception).</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">async</span> <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">sleep</span><span class="p">,</span> <span class="p">[</span><span class="mf">.2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">.1</span><span class="p">],</span> <span class="mi">2</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="k">await</span> <span class="n">task</span><span class="p">)</span>
-<span class="gp">...</span>
-<span class="gt">Traceback (most recent call last):</span>
-  <span class="c">...</span>
-<span class="gr">ZeroDivisionError</span>: <span class="n">division by zero</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">async</span> <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">sleep</span><span class="p">,</span> <span class="p">[</span><span class="mf">.2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">.1</span><span class="p">],</span> <span class="mi">2</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">task</span><span class="o">.</span><span class="n">exception</span><span class="p">()</span> <span class="ow">or</span> <span class="n">task</span><span class="o">.</span><span class="n">result</span><span class="p">())</span>
-<span class="gp">...</span>
-<span class="go">division by zero</span>
-<span class="go">0.1</span>
-<span class="go">0.2</span>
-</code></pre></div>
-<p>This works, but it somehow feels too low level (and, unlike map).</p>
-<p>Also, the tasks are guaranteed to be done at this point,
+# Exceptions
+
+OK, so what about exceptions?
+
+Sometimes, you still want to process the rest of the things even if one failed.
+
+---
+
+A cheap way is to have the user handle this by wrapping their function:
+
+```python
+def return_exceptions(func):
+    async def wrapper(*args):
+        try:
+            return await func(*args)
+        except Exception as e:
+            return e
+
+    return wrapper
+```
+
+```pycon
+>>> async for result in map_unordered(return_exceptions(sleep), [.2, 0, .1], 2):
+...     print(result)
+...
+division by zero
+0.1
+0.2
+```
+
+
+---
+
+Alternatively, we could just bubble up the Task to the user;
+then they're free to do whatever (either await it, or check the exception).
+
+```pycon
+>>> async for task in map_unordered(sleep, [.2, 0, .1], 2):
+...     print(await task)
+...
+Traceback (most recent call last):
+  ...
+ZeroDivisionError: division by zero
+>>> async for task in map_unordered(sleep, [.2, 0, .1], 2):
+...     print(task.exception() or task.result())
+...
+division by zero
+0.1
+0.2
+```
+
+This works, but it somehow feels too low level (and, unlike map).
+
+Also, the tasks are guaranteed to be done at this point,
 so aside from telling results apart from exceptions,
-they're not all that useful.</p>
-<hr />
-<p>It's probably safe to take some inspiration in terms of ergonomics
-from gather(), and its <code>return_exceptions</code> option:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">aws</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">sleep</span><span class="p">,</span> <span class="p">[</span><span class="mf">.2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">.1</span><span class="p">])</span>
-<span class="gp">... </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="n">aws</span><span class="p">,</span> <span class="n">return_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-<span class="gp">...</span>
-<span class="go">0.2</span>
-<span class="go">division by zero</span>
-<span class="go">0.1</span>
-</code></pre></div>
-<p>But, <code>return_exceptions</code> is not enough;
-the results yielded by map_unordered() won't be in args order,
-so how do you know which one failed?</p>
-<hr />
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">17</span>
-<span class="normal">18</span>
-<span class="normal">19</span>
-<span class="normal">20</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">_return_exceptions</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="k">await</span> <span class="n">func</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-</code></pre></div>
-</td></tr></table>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">24</span>
-<span class="normal">25</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">_return_args</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">arg</span><span class="p">,</span> <span class="k">await</span> <span class="n">func</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
-</code></pre></div>
-</td></tr></table>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
-<span class="normal"> 9</span>
-<span class="normal">10</span>
-<span class="normal">11</span>
-<span class="normal">12</span>
-<span class="normal">13</span>
-<span class="normal">14</span>
-<span class="normal">15</span>
-<span class="normal">16</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">map_unordered</span><span class="p">(</span>
-    <span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">return_exceptions</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">return_args</span><span class="o">=</span><span class="kc">False</span>
-<span class="p">):</span>
-    <span class="k">if</span> <span class="n">return_exceptions</span><span class="p">:</span>
-        <span class="n">func</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">_return_exceptions</span><span class="p">,</span> <span class="n">func</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">return_args</span><span class="p">:</span>
-        <span class="n">func</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">_return_args</span><span class="p">,</span> <span class="n">func</span><span class="p">)</span>
+they're not all that useful.
 
-    <span class="n">is_async</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">iterable</span><span class="p">,</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">AsyncIterator</span><span class="p">)</span>
-</code></pre></div>
-</td></tr></table>
-<table class="highlighttable code-container"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">72</span>
-<span class="normal">73</span>
-<span class="normal">74</span>
-<span class="normal">75</span></code></pre></div></td><td class="code"><div class="highlight"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">async</span> <span class="k">for</span> <span class="n">arg</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span>
-        <span class="n">sleep</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">return_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_args</span><span class="o">=</span><span class="kc">True</span>
-    <span class="p">):</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">arg</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">result</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</code></pre></div>
-</td></tr></table>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python map_unordered.py <span class="m">2</span> .1 .2 <span class="m">0</span> .2 .1
-<span class="go">0.1: 0.1 -&gt; 0.1</span>
-<span class="go">0.1: 0.0 -&gt; float division by zero</span>
-<span class="go">0.2: 0.2 -&gt; 0.2</span>
-<span class="go">0.3: 0.2 -&gt; 0.2</span>
-<span class="go">0.3: 0.1 -&gt; 0.1</span>
-<span class="go">iter end</span>
-<span class="go">0.3: done</span>
-</code></pre></div>
+
+---
+
+It's probably safe to take some inspiration in terms of ergonomics
+from gather(), and its `return_exceptions` option:
+
+```pycon
+>>> aws = map(sleep, [.2, 0, .1])
+... for result in await asyncio.gather(*aws, return_exceptions=True):
+...     print(result)
+...
+0.2
+division by zero
+0.1
+```
+
+But, `return_exceptions` is not enough;
+the results yielded by map_unordered() won't be in args order,
+so how do you know which one failed?
+
+
+---
+
+.. literalinclude:: mo_70_exceptions.py
+    :lines: 24-27
+    :lineno-start: 17
+
+.. literalinclude:: mo_70_exceptions.py
+    :lines: 31-32
+    :lineno-start: 24
+
+.. literalinclude:: mo_70_exceptions.py
+    :lines: 8-16
+
+.. literalinclude:: mo_70_exceptions.py
+    :lines: 72-75
+
+
+```console
+$ python map_unordered.py 2 .1 .2 0 .2 .1
+0.1: 0.1 -> 0.1
+0.1: 0.0 -> float division by zero
+0.2: 0.2 -> 0.2
+0.3: 0.2 -> 0.2
+0.3: 0.1 -> 0.1
+iter end
+0.3: done
+```
+
+-->
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>Does this have a fancy, academic name? <a href="/about#contact">Do let me know!</a> <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
