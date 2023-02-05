@@ -66,7 +66,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-01-23">January 2023</span>
-∙ 11 minute read
+∙ 12 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -929,7 +929,7 @@ and punch our way through the exceptions:</p>
 </code></pre></div>
 <p><a href="https://docs.python.org/3/library/functions.html#map">map()</a> doesn't work with async iterables,
 so we use a <a href="https://docs.python.org/3/glossary.html#term-generator-expression">generator expression</a> instead.</p>
-<!-- _map_async -->
+<!-- map_unordered -->
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
 <span class="normal"> 9</span>
 <span class="normal">10</span>
@@ -947,55 +947,64 @@ so we use a <a href="https://docs.python.org/3/glossary.html#term-generator-expr
         <span class="k">yield</span> <span class="k">await</span> <span class="n">task</span>
 </code></pre></div></td></tr></table></div>
 
-<p>TODO: we could change limit_concurrency to take only async iters, but it's useful on its own, so we dont</p>
+<p>Note that in true <a href="https://docs.python.org/3/glossary.html#term-EAFP">easier to ask for forgiveness than permission</a> fashion,
+we just handle the exception from <a href="https://docs.python.org/3/library/functions.html#map">map()</a> instead of, say,
+checking if <code>aws</code> is an instance of <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable">collections.​abc.​Iterable</a>.</p>
+<p>Also, we <em>could</em> pass only async iterables to <code>limit_concurrency()</code>,
+but it's useful on its own,
+so it's better to support both.</p>
 <hr />
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>map_unordered.py<span class="w"> </span><span class="m">2</span><span class="w"> </span>.1<span class="w"> </span>.2<span class="w"> </span>.2<span class="w"> </span>.1
 <span class="go">Traceback (most recent call last):</span>
 <span class="go">  ...</span>
-<span class="go">  File &quot;map_unordered.py&quot;, line 24, in limit_concurrency</span>
+<span class="go">  File &quot;map_unordered.py&quot;, line 19, in limit_concurrency</span>
 <span class="go">    aws = iter(aws)</span>
 <span class="go">TypeError: &#39;async_generator&#39; object is not iterable</span>
 </code></pre></div>
+<p>For async iterables, we need to use <a href="https://docs.python.org/3/library/functions.html#aiter">aiter()</a>:</p>
 <!-- aiter(aws) -->
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">23</span>
-<span class="normal">24</span>
-<span class="normal">25</span>
-<span class="normal">26</span>
-<span class="normal">27</span>
-<span class="normal">28</span>
-<span class="normal">29</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>        <span class="n">aws</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">aws</span> <span class="o">=</span> <span class="n">aiter</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
+        <span class="n">is_async</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+        <span class="n">aws</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
         <span class="n">is_async</span> <span class="o">=</span> <span class="kc">False</span>
-
-    <span class="n">aws_ended</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">pending</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-
-    <span class="k">while</span> <span class="n">pending</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">aws_ended</span><span class="p">:</span>
 </code></pre></div></td></tr></table></div>
 
 <hr />
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>map_unordered.py<span class="w"> </span><span class="m">2</span><span class="w"> </span>.1<span class="w"> </span>.2<span class="w"> </span>.2<span class="w"> </span>.1
 <span class="go">Traceback (most recent call last):</span>
 <span class="go">  ...</span>
-<span class="go">  File &quot;map_unordered.py&quot;, line 37, in limit_concurrency</span>
+<span class="go">  File &quot;map_unordered.py&quot;, line 32, in limit_concurrency</span>
 <span class="go">    aw = next(aws)</span>
 <span class="go">TypeError: &#39;async_generator&#39; object is not an iterator</span>
 </code></pre></div>
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">35</span>
-<span class="normal">36</span>
-<span class="normal">37</span>
-<span class="normal">38</span>
-<span class="normal">39</span>
-<span class="normal">40</span>
-<span class="normal">41</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>            <span class="k">else</span><span class="p">:</span>
+<p>... and <a href="https://docs.python.org/3/library/functions.html#anext">anext()</a>:</p>
+<!-- anext(aws) -->
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">pending</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">limit</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">aws_ended</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">aw</span> <span class="o">=</span> <span class="k">await</span> <span class="n">anext</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span> <span class="k">if</span> <span class="n">is_async</span> <span class="k">else</span> <span class="nb">next</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">StopAsyncIteration</span> <span class="k">if</span> <span class="n">is_async</span> <span class="k">else</span> <span class="ne">StopIteration</span><span class="p">:</span>
+                <span class="n">aws_ended</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">else</span><span class="p">:</span>
                 <span class="n">pending</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="n">aw</span><span class="p">))</span>
-
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">pending</span><span class="p">:</span>
-            <span class="k">return</span>
-
-        <span class="n">done</span><span class="p">,</span> <span class="n">pending</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span>
 </code></pre></div></td></tr></table></div>
 
-<p>It may not look pretty, but it gets the job done.</p>
+<p>... which unlike <a href="https://docs.python.org/3/library/functions.html#aiter">aiter()</a>, has to be awaited.</p>
+<p>It may not look 100% pretty, but it gets the job done:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>map_unordered.py<span class="w"> </span><span class="m">2</span><span class="w"> </span>.1<span class="w"> </span>.2<span class="w"> </span>.2<span class="w"> </span>.1
 <span class="go">0.1: 0.1</span>
 <span class="go">0.2: 0.2</span>
@@ -1004,6 +1013,132 @@ so we use a <a href="https://docs.python.org/3/glossary.html#term-generator-expr
 <span class="go">iter end</span>
 <span class="go">0.3: done</span>
 </code></pre></div>
+<details>
+<summary>Here's <code>limit_concurrency()</code> in its entire glory:</summary>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span>
+<span class="normal">39</span>
+<span class="normal">40</span>
+<span class="normal">41</span>
+<span class="normal">42</span>
+<span class="normal">43</span>
+<span class="normal">44</span>
+<span class="normal">45</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">aws</span> <span class="o">=</span> <span class="n">aiter</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
+        <span class="n">is_async</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+        <span class="n">aws</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
+        <span class="n">is_async</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="n">aws_ended</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">pending</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+    <span class="k">while</span> <span class="n">pending</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">aws_ended</span><span class="p">:</span>
+        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">pending</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">limit</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">aws_ended</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">aw</span> <span class="o">=</span> <span class="k">await</span> <span class="n">anext</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span> <span class="k">if</span> <span class="n">is_async</span> <span class="k">else</span> <span class="nb">next</span><span class="p">(</span><span class="n">aws</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">StopAsyncIteration</span> <span class="k">if</span> <span class="n">is_async</span> <span class="k">else</span> <span class="ne">StopIteration</span><span class="p">:</span>
+                <span class="n">aws_ended</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">pending</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="n">aw</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">pending</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">done</span><span class="p">,</span> <span class="n">pending</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span>
+            <span class="n">pending</span><span class="p">,</span> <span class="n">return_when</span><span class="o">=</span><span class="n">asyncio</span><span class="o">.</span><span class="n">FIRST_COMPLETED</span>
+        <span class="p">)</span>
+        <span class="k">while</span> <span class="n">done</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">done</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+</code></pre></div></td></tr></table></div>
+
+</details>
+<p>Anyway, that's it for now.</p>
+<p><strong>Learned something new today?</strong> Share this with others, it really helps! <span class="text-large">
+<span class="share-icons">
+<a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29&url=https%3A//death.andgravity.com/asyncio-map-unordered&via=_andgravity"
+>Twitter</a>
+<a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/asyncio-map-unordered&t=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29"
+>HN</a>
+<a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/asyncio-map-unordered&title=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29"
+>Reddit</a>
+</span>
+</span></p>
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=asyncio-map-unordered"
+    method="post"
+    id="embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 <!--
 
 # Exceptions
