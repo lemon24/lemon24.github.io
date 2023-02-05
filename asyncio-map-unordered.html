@@ -66,7 +66,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-01-23">January 2023</span>
-∙ 12 minute read
+∙ 13 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -142,6 +142,7 @@ to find out which is best.</p>
 <li><a href="#aside-backpressure">Aside: backpressure</a></li>
 <li><a href="#asyncio-wait">asyncio.wait()</a></li>
 <li><a href="#async-iterables">Async iterables</a></li>
+<li><a href="#bonus-exceptions">Bonus: exceptions</a></li>
 </ul>
 </section>
 </details>
@@ -662,7 +663,7 @@ or feed awaitables to workers through an input queue.</p>
 <p>Anyway, no need to worry about any that – a better solution awaits.</p>
 <h2 id="aside-backpressure">Aside: backpressure<span class="headerlink"> <a href="#aside-backpressure" title="permalink">#</a></span></h2>
 <p>At this point, we're technically done
-– the queue solution does everything <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">Pool.imap_unordered()</a> does.</p>
+– the queue solution does everything <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">Pool.​imap_unordered()</a> does.</p>
 <p>So much so, that, <a href="https://bugs.python.org/issue40110">like imap_unordered()</a>,
 it lacks <a href="https://medium.com/@jayphelps/backpressure-explained-the-flow-of-data-through-software-2350b3e77ce7">backpressure</a>:
 when the code retrieving results from the map iterable
@@ -1139,115 +1140,76 @@ so it's better to support both.</p>
     </div>
 
 </form>
-<!--
+<h2 id="bonus-exceptions">Bonus: exceptions<span class="headerlink"> <a href="#bonus-exceptions" title="permalink">#</a></span></h2>
+<p>OK, so what about exceptions?</p>
+<p>Most times,
+you still want to process the rest of the things even if one failed.
+Furthermore,
+the results yielded by <code>map_unordered()</code> won't be in order,
+so how do you know which one failed?</p>
+<p>We could just return the <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.Task">Task</a> to the user.
+This helps with the first thing,
+but not the second
+(there's no reliable way to get the arguments of a completed task),
+and breaks symmetry with <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">Pool.​imap_unordered()</a>.</p>
+<p>We could take inspiration from <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.gather">gather()</a>,
+and add a <code>return_exceptions</code> argument,
+but this also breaks symmetry with <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">Pool.​imap_unordered()</a>,
+and we'd still need to add a <code>return_args</code>,
+which <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.gather">gather()</a> doesn't have.</p>
+<p>Instead,
+we'll let the user handle this just like they would with <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">Pool.​imap_unordered()</a>,
+by wrapping their original function.
+Because we're not heartless, we can provide a handy decorator for it:</p>
+<p>TODO: note about decorator</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">48</span>
+<span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span>
+<span class="normal">52</span>
+<span class="normal">53</span>
+<span class="normal">54</span>
+<span class="normal">55</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">return_args_and_exceptions</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">_return_args_and_exceptions</span><span class="p">,</span> <span class="n">func</span><span class="p">)</span>
 
-# Exceptions
+<span class="k">async</span> <span class="k">def</span> <span class="nf">_return_args_and_exceptions</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="k">await</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">return</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">e</span>
+</code></pre></div></td></tr></table></div>
 
-OK, so what about exceptions?
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="n">wrapped</span> <span class="o">=</span> <span class="n">return_args_and_exceptions</span><span class="p">(</span><span class="n">sleep</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">arg</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">wrapped</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">start</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">arg</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">result</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
 
-Sometimes, you still want to process the rest of the things even if one failed.
-
----
-
-A cheap way is to have the user handle this by wrapping their function:
-
-```python
-def return_exceptions(func):
-    async def wrapper(*args):
-        try:
-            return await func(*args)
-        except Exception as e:
-            return e
-
-    return wrapper
-```
-
-```pycon
->>> async for result in map_unordered(return_exceptions(sleep), [.2, 0, .1], 2):
-...     print(result)
-...
-division by zero
-0.1
-0.2
-```
-
-
----
-
-Alternatively, we could just bubble up the Task to the user;
-then they're free to do whatever (either await it, or check the exception).
-
-```pycon
->>> async for task in map_unordered(sleep, [.2, 0, .1], 2):
-...     print(await task)
-...
-Traceback (most recent call last):
-  ...
-ZeroDivisionError: division by zero
->>> async for task in map_unordered(sleep, [.2, 0, .1], 2):
-...     print(task.exception() or task.result())
-...
-division by zero
-0.1
-0.2
-```
-
-This works, but it somehow feels too low level (and, unlike map).
-
-Also, the tasks are guaranteed to be done at this point,
-so aside from telling results apart from exceptions,
-they're not all that useful.
-
-
----
-
-It's probably safe to take some inspiration in terms of ergonomics
-from gather(), and its `return_exceptions` option:
-
-```pycon
->>> aws = map(sleep, [.2, 0, .1])
-... for result in await asyncio.gather(*aws, return_exceptions=True):
-...     print(result)
-...
-0.2
-division by zero
-0.1
-```
-
-But, `return_exceptions` is not enough;
-the results yielded by map_unordered() won't be in args order,
-so how do you know which one failed?
-
-
----
-
-.. literalinclude:: mo_70_exceptions.py
-    :lines: 24-27
-    :lineno-start: 17
-
-.. literalinclude:: mo_70_exceptions.py
-    :lines: 31-32
-    :lineno-start: 24
-
-.. literalinclude:: mo_70_exceptions.py
-    :lines: 8-16
-
-.. literalinclude:: mo_70_exceptions.py
-    :lines: 72-75
-
-
-```console
-$ python map_unordered.py 2 .1 .2 0 .2 .1
-0.1: 0.1 -> 0.1
-0.1: 0.0 -> float division by zero
-0.2: 0.2 -> 0.2
-0.3: 0.2 -> 0.2
-0.3: 0.1 -> 0.1
-iter end
-0.3: done
-```
-
--->
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>map_unordered.py<span class="w"> </span><span class="m">2</span><span class="w"> </span>.1<span class="w"> </span>.2<span class="w"> </span><span class="m">0</span><span class="w"> </span>.2<span class="w"> </span>.1
+<span class="go">0.1: 0.1 -&gt; 0.1</span>
+<span class="go">0.1: 0.0 -&gt; float division by zero</span>
+<span class="go">0.2: 0.2 -&gt; 0.2</span>
+<span class="go">0.3: 0.2 -&gt; 0.2</span>
+<span class="go">0.3: 0.1 -&gt; 0.1</span>
+<span class="go">iter end</span>
+<span class="go">0.3: done</span>
+</code></pre></div>
+<p>Finally, ... TODO</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">return_args_and_exceptions</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="k">await</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">e</span>
+    <span class="k">return</span> <span class="n">wrapper</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">return_args_and_exceptions</span><span class="p">(</span><span class="n">sleep</span><span class="p">)</span>
+<span class="go">&lt;function return_args_and_exceptions.&lt;locals&gt;.wrapper at 0x103993560&gt;</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">return_args_and_exceptions</span><span class="p">(</span><span class="n">sleep</span><span class="p">)</span>
+<span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="o">&lt;</span><span class="n">function</span> <span class="n">_return_args_and_exceptions</span> <span class="n">at</span> <span class="mh">0x10647fd80</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="n">function</span> <span class="n">sleep</span> <span class="n">at</span> <span class="mh">0x10647d8a0</span><span class="o">&gt;</span><span class="p">)</span>
+</code></pre></div>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>Does this have a fancy, academic name? <a href="/about#contact">Do let me know!</a> <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
