@@ -113,6 +113,7 @@ window.addEventListener('resize', set_vh);
 we'll assume we're using a client that looks like this;
 in practice, there would lots of other methods and attributes.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Client</span><span class="p">:</span>
+
     <span class="k">def</span> <span class="nf">method</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
         <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Client.method(</span><span class="si">{</span><span class="n">arg</span><span class="si">!r}</span><span class="s2">)&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">arg</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
@@ -120,8 +121,12 @@ in practice, there would lots of other methods and attributes.</p>
 
 <p>We'll use <a href="https://docs.python.org/3/library/functools.html#functools.lru_cache">functools.lru_cache()</a>.</p>
 <h2 id="subclassing">Subclassing<span class="headerlink"> <a href="#subclassing" title="permalink">#</a></span></h2>
-<p>TODO: ...</p>
+<p>If Client was our code,
+we could just slap a <code>@functools.lru_cache</code> on <code>method()</code>.</p>
+<p>The next best thing is to subclass it,
+extend <code>method()</code>, decorate that.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Subclass</span><span class="p">(</span><span class="n">Client</span><span class="p">):</span>
+
     <span class="nd">@functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">method</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">method</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
@@ -142,6 +147,7 @@ For more details, see <a href="https://rednafi.github.io/reflections/dont-wrap-i
 <p>One solution is to decorate the bound method
 <em>after</em> the object is created:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">SubclassOverwriteMethod</span><span class="p">(</span><span class="n">Client</span><span class="p">):</span>
+
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">method</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)(</span><span class="bp">self</span><span class="o">.</span><span class="n">method</span><span class="p">)</span>
@@ -169,8 +175,9 @@ if there's a lot of them,
 it might be a <em>bit</em> inconvenient.</p>
 <p>Thankfully, Python allows us to do it on the fly:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">SubclassProxy</span><span class="p">(</span><span class="n">Client</span><span class="p">):</span>
+
     <span class="k">def</span> <span class="fm">__getattribute__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
-        <span class="c1"># without this, we get infinite recursion</span>
+        <span class="c1"># conveniently, also prevents infinite recursion</span>
         <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">):</span>
             <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">super</span><span class="p">(),</span> <span class="n">name</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
@@ -270,7 +277,7 @@ sometimes code does <a href="https://docs.python.org/3/library/functions.html#is
 <span class="go">False</span>
 </code></pre></div>
 <p>We could fix this by implementing <a href="https://docs.python.org/3/reference/datamodel.html#class.__instancecheck__">__instancecheck__()</a>,
-but a more general approach is order –
+but a more general approach is in order –
 <a href="https://wrapt.readthedocs.io/en/latest/wrappers.html#object-proxy">wrapt</a> gives us an almost-perfect proxy:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">WraptProxy</span><span class="p">(</span><span class="n">wrapt</span><span class="o">.</span><span class="n">ObjectProxy</span><span class="p">):</span>
 
@@ -293,7 +300,7 @@ but a more general approach is order –
         <span class="k">return</span> <span class="n">cached</span>
 </code></pre></div>
 
-<p>It's not as pretty as our own,
+<p>It's not as elegant as our own,
 but think of all the things we didn't have to do:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">WraptProxy</span><span class="p">(</span><span class="n">Client</span><span class="p">())</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">client</span>
@@ -306,21 +313,97 @@ but think of all the things we didn't have to do:</p>
 <span class="go">True</span>
 </code></pre></div>
 <h2 id="but-i-only-need-to-cache-a-few-methods">But I only need to cache a few methods<span class="headerlink"> <a href="#but-i-only-need-to-cache-a-few-methods" title="permalink">#</a></span></h2>
-<p>We've come full circle, we're decorating the bound method again.</p>
-<p>But this time, it's from the outside.</p>
-<p>TODO: ...</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">cache_method_inplace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<p>OK, but all that seems a bit excessive if you only need to cache a couple of methods.
+We could add logic for that, but it doesn't help with the excessiveness.</p>
+<p>If we're the only ones using the client,
+we can just go back to decorating the bound method.
+... except, didn't we say the instance already exists?</p>
+<p>So what? It's not like we can only assing a method in <code>__init__()</code>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">cache_method_in_place</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="n">method</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
     <span class="n">cached</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)(</span><span class="n">method</span><span class="p">)</span>
     <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">cached</span><span class="p">)</span>
 
-
 <span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">()</span>
-<span class="n">cache_method_inplace</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s1">&#39;method&#39;</span><span class="p">)</span>
+<span class="n">cache_method_in_place</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s1">&#39;method&#39;</span><span class="p">,</span> <span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
 </code></pre></div>
 
-<p>TODO: Weird? Yes. Unholy? Maybe? But in the end, this is why we use Python!</p>
-<p>TODO: It's not actually that weird... (nothing changes) (does mypy complain?)</p>
+<p>Unexpected? A bit.
+Unholy? Maybe, depending where you're coming from.</p>
+<p>But actually, no,
+it's neither,
+it still <a href="https://docs.python.org/3/glossary.html#term-duck-typing">walks and quacks</a> like a Client.
+In the end, that's why people use Python
+–
+you can bring up the big guns of a full wrapper or metaprogramming,
+but you're not forced to.</p>
+<hr />
+<p>Anyway, that's it for now.</p>
+<p><strong>Learned something new today?</strong> Share this with others, it really helps! <span class="text-large">
+<span class="share-icons">
+<a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Caching%20methods&url=https%3A//death.andgravity.com/caching-methods&via=_andgravity"
+>Twitter</a>
+<a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/caching-methods&t=Caching%20methods"
+>HN</a>
+<a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/caching-methods&title=Caching%20methods"
+>Reddit</a>
+</span>
+</span></p>
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=caching-methods"
+    method="post"
+    id="embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 
 
 
