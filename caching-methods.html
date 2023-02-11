@@ -66,7 +66,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-02-23">February 2023</span>
-∙ three minute read
+∙ four minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -101,16 +101,19 @@ window.addEventListener('resize', set_vh);
 <section class="toc">
 <ul>
 <li><a href="#subclassing">Subclassing</a></li>
-<li><a href="#but-decorating-methods-keeps-instances-around-for-too-long">But, decorating methods keeps instances around for too long</a></li>
-<li><a href="#but-i-need-to-cache-a-lot-of-methods">But, I need to cache a lot of methods</a></li>
-<li><a href="#but-i-don-t-instantiate-the-object">But, I don't instantiate the object</a></li>
-<li><a href="#but-this-breaks-completion-fails-an-isinstance-check">But, this breaks completion / fails an isinstance() check</a></li>
-<li><a href="#but-i-only-need-to-cache-a-few-methods">But, I only need to cache a few methods</a></li>
+<li><a href="#but-decorating-methods-keeps-instances-around-for-too-long">But decorating methods keeps instances around for too long</a></li>
+<li><a href="#but-i-need-to-cache-a-lot-of-methods">But I need to cache a lot of methods</a></li>
+<li><a href="#but-the-object-is-already-instantiated">But the object is already instantiated</a></li>
+<li><a href="#but-this-breaks-completion-fails-an-isinstance-check">But this breaks completion / fails an isinstance() check</a></li>
+<li><a href="#but-i-only-need-to-cache-a-few-methods">But I only need to cache a few methods</a></li>
 </ul>
 </section>
+<p>For the sake of simplicity,
+we'll assume we're using a client that looks like this;
+in practice, there would lots of other methods and attributes.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Client</span><span class="p">:</span>
     <span class="k">def</span> <span class="nf">method</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Client.method&#39;</span><span class="p">,</span> <span class="n">arg</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Client.method(</span><span class="si">{</span><span class="n">arg</span><span class="si">!r}</span><span class="s2">)&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">arg</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
 </code></pre></div>
 
@@ -123,7 +126,7 @@ window.addEventListener('resize', set_vh);
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">method</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
 </code></pre></div>
 
-<h2 id="but-decorating-methods-keeps-instances-around-for-too-long">But, decorating methods keeps instances around for too long<span class="headerlink"> <a href="#but-decorating-methods-keeps-instances-around-for-too-long" title="permalink">#</a></span></h2>
+<h2 id="but-decorating-methods-keeps-instances-around-for-too-long">But decorating methods keeps instances around for too long<span class="headerlink"> <a href="#but-decorating-methods-keeps-instances-around-for-too-long" title="permalink">#</a></span></h2>
 <p>As the <a href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache()</a> docs say,</p>
 <blockquote>
 <p>If a method is cached, the <code>self</code> instance argument is included in the cache. See <a href="https://docs.python.org/3/faq/programming.html#faq-cache-method-calls">How do I cache method calls?</a></p>
@@ -150,7 +153,7 @@ and we have one cache per instance.</p>
 but the garbage collector will take care of that
 – normally, all three go away at the same time.
 Before, we had a cycle between the cache and the instance
-<em>via the class</em>, which never goes away.</p>
+<em>via the class</em>, which never goes away. TODO: wording</p>
 <section class="admonition important">
 <p class="admonition-title">Important</p>
 <p>You might be tempted to say,
@@ -158,8 +161,12 @@ Before, we had a cycle between the cache and the instance
  the underlying method will be called twice&quot;.</p>
 <p>This is true, but it is by design. TODO: explain why</p>
 </section>
-<h2 id="but-i-need-to-cache-a-lot-of-methods">But, I need to cache a lot of methods<span class="headerlink"> <a href="#but-i-need-to-cache-a-lot-of-methods" title="permalink">#</a></span></h2>
-<p>TODO: ...</p>
+<h2 id="but-i-need-to-cache-a-lot-of-methods">But I need to cache a lot of methods<span class="headerlink"> <a href="#but-i-need-to-cache-a-lot-of-methods" title="permalink">#</a></span></h2>
+<p>OK, the above works, but every time we want to cache a new method,
+we have to add it to <code>__init__()</code> ...
+if there's a lot of them,
+it might be a <em>bit</em> inconvenient.</p>
+<p>Thankfully, Python allows us to do it on the fly:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">SubclassProxy</span><span class="p">(</span><span class="n">Client</span><span class="p">):</span>
     <span class="k">def</span> <span class="fm">__getattribute__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
         <span class="c1"># without this, we get infinite recursion</span>
@@ -177,9 +184,41 @@ Before, we had a cycle between the cache and the instance
         <span class="k">return</span> <span class="n">cached</span>
 </code></pre></div>
 
-<p>TODO: note difference between getattr and getattribute</p>
-<h2 id="but-i-don-t-instantiate-the-object">But, I don't instantiate the object<span class="headerlink"> <a href="#but-i-don-t-instantiate-the-object" title="permalink">#</a></span></h2>
-<p>TODO: ... (example: boto?)</p>
+<p><a href="https://docs.python.org/3/reference/datamodel.html#object.__getattribute__">__getattribute__()</a> is called
+&quot;unconditionally to implement attribute accesses&quot;
+(including methods).
+When a method is requested,
+we get it from the parent class,
+decorate it,
+and store it in the instance dictionary;
+the second time around,
+we return the already decorated method.</p>
+<p>We don't decorate any method whose names start with an underscore;
+this includes any <a href="https://docs.python.org/3/glossary.html#term-magic-method"><code>__magic__</code> methods</a>,
+and any <code>_private</code> methods the parent may have.
+Special logic around the method name can also go here
+(e.g. only cache methods starting with <code>get_</code>, or
+cache all methods except those starting with <code>set_</code>).</p>
+<p>Note we cannot use <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a>
+(called only &quot;when the default attribute access fails&quot;),
+because looking up an attribute on the parent class
+<em>is</em> part of default attribute access
+(so <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a> won't be called if the method is found).</p>
+<p>We <em>could</em> just decorate the parent methods upfront, in  <code>__init__()</code>,
+but IMHO the <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattribute__">__getattribute__()</a> makes the intention clearer.
+Also, it might not work if the parent class does magic stuff
+and doesn't implement <a href="https://docs.python.org/3/reference/datamodel.html#object.__dir__">__dir__()</a> properly.</p>
+<h2 id="but-the-object-is-already-instantiated">But the object is already instantiated<span class="headerlink"> <a href="#but-the-object-is-already-instantiated" title="permalink">#</a></span></h2>
+<p>Sometimes, you might not be the one instantiating the object;
+they may be created through a <a href="https://python-patterns.guide/gang-of-four/abstract-factory/#the-pythonic-approach-callable-factories">callable factory</a>,
+or you might just get them passed to you by a framework.</p>
+<p>No worries, subclassing is not required for Python metaprogramming –
+instead of subclassing,
+we can wrap the instance in an object proxy
+(also known as <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/#implementing-dynamic-wrapper">dynamic wrapper</a>).</p>
+<p>The code looks more or less the same as before,
+but instead of delegating to the parent,
+we delegate to the <em>wrapped</em> instance:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Proxy</span><span class="p">:</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wrapped</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__wrapped__</span> <span class="o">=</span> <span class="n">wrapped</span>
@@ -195,32 +234,65 @@ Before, we had a cycle between the cache and the instance
         <span class="k">return</span> <span class="n">cached</span>
 </code></pre></div>
 
-<h2 id="but-this-breaks-completion-fails-an-isinstance-check">But, this breaks completion / fails an isinstance() check<span class="headerlink"> <a href="#but-this-breaks-completion-fails-an-isinstance-check" title="permalink">#</a></span></h2>
-<p>TODO: ...</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">WraptProxy</span><span class="p">(</span><span class="n">wrapt</span><span class="o">.</span><span class="n">ObjectProxy</span><span class="p">):</span>
+<p>Because the proxy is a separate object from the instance,
+now we <em>can</em> use <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a>,
+and we don't have to check the instance dictionary explicitly –
+on the second call, the decorated method is already there,
+and <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a> isn't called again.</p>
+<h2 id="but-this-breaks-completion-fails-an-isinstance-check">But this breaks completion / fails an isinstance() check<span class="headerlink"> <a href="#but-this-breaks-completion-fails-an-isinstance-check" title="permalink">#</a></span></h2>
+<p>As it turns out, <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/#caveat-wrapping-doesnt-actually-work">it's pretty difficult to get an object proxy right</a>.</p>
+<p>For one,
+we're guilty of the not implementing <a href="https://docs.python.org/3/reference/datamodel.html#object.__dir__">__dir__()</a> correctly mentioned before,
+which, among others, breaks completion:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">Proxy</span><span class="p">(</span><span class="n">Client</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client</span>
+<span class="go">&lt;__main__.Proxy object at 0x10c0fe450&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="s1">&#39;method&#39;</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="s1">&#39;method&#39;</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="n">__wrapped__</span><span class="p">)</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="o">.&lt;</span><span class="n">TAB</span><span class="o">&gt;</span>
+<span class="go">           ... crickets ...</span>
+</code></pre></div>
+<p>Also, although not recommended,
+sometimes code needs to do an <a href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a> check:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">Client</span><span class="p">)</span>
+<span class="go">False</span>
+</code></pre></div>
+<p>We <em>could</em> implement all the special methods needed to make that happen ourselves,
+but we don't have to, <a href="https://wrapt.readthedocs.io/en/latest/wrappers.html#object-proxy">wrapt</a> already does it for us:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">assert</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">Client</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">WraptProxy</span><span class="p">(</span><span class="n">wrapt</span><span class="o">.</span><span class="n">ObjectProxy</span><span class="p">):</span>
     <span class="k">def</span> <span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
         <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__wrapped__</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">value</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">callable</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">value</span>
-        <span class="n">cached</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)(</span><span class="n">value</span><span class="p">)</span>
-        <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">cached</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">cached</span>
 </code></pre></div>
 
-<h2 id="but-i-only-need-to-cache-a-few-methods">But, I only need to cache a few methods<span class="headerlink"> <a href="#but-i-only-need-to-cache-a-few-methods" title="permalink">#</a></span></h2>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">WraptProxy</span><span class="p">(</span><span class="n">Client</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client</span>
+<span class="go">&lt;WraptProxy at 0x10c3a54c0 for Client at 0x10c3a5510&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="s1">&#39;method&#39;</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">Client</span><span class="p">)</span>
+<span class="go">True</span>
+</code></pre></div>
+<h2 id="but-i-only-need-to-cache-a-few-methods">But I only need to cache a few methods<span class="headerlink"> <a href="#but-i-only-need-to-cache-a-few-methods" title="permalink">#</a></span></h2>
 <p>We've come full circle, we're decorating the bound method again.</p>
 <p>But this time, it's from the outside.</p>
 <p>TODO: ...</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">cache_method_inplace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">assert</span> <span class="n">client</span><span class="o">.</span><span class="n">method</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">client</span><span class="o">.</span><span class="n">__wrapped__</span><span class="o">.</span><span class="n">method</span><span class="p">,</span> <span class="n">client</span><span class="o">.</span><span class="n">method</span>
+
+
+<span class="c1"># but, I only want one method</span>
+
+
+<span class="k">def</span> <span class="nf">cache_method_inplace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="n">method</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
-    <span class="n">cached</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)(</span><span class="n">method</span><span class="p">)</span>
-    <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">cached</span><span class="p">)</span>
-
-
-<span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">()</span>
-<span class="n">cache_method_inplace</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s1">&#39;method&#39;</span><span class="p">)</span>
 </code></pre></div>
 
 <p>TODO: Weird? Yes. Unholy? Maybe? But in the end, this is why we use Python!</p>
