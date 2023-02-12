@@ -66,7 +66,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-02-23">February 2023</span>
-∙ five minute read
+∙ six minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -97,41 +97,63 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>TODO: intro</p>
+<p>So,
+you're using a <strong>Python API client</strong> to get a bunch of data,
+and you need to <strong>cache results</strong> and <strong>retry on errors</strong>.</p>
+<p>You could write a wrapper class,
+but that's just <strong>one more thing to test and maintain</strong>.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
+<p>Thankfully, this is Python,
+and more often than not,
+<strong>there must be a better way</strong>.</p>
 <section class="toc">
 <ul>
-<li><a href="#subclassing">Subclassing</a></li>
+<li><a href="#but-i-don-t-own-the-client-code">But I don't own the client code</a></li>
 <li><a href="#but-decorating-methods-keeps-instances-around-for-too-long">But decorating methods keeps instances around for too long</a></li>
 <li><a href="#but-i-need-to-cache-a-lot-of-methods">But I need to cache a lot of methods</a></li>
-<li><a href="#but-the-object-is-already-instantiated">But the object is already instantiated</a></li>
-<li><a href="#but-proxy-breaks-completion">But Proxy breaks completion</a></li>
-<li><a href="#but-proxy-fails-isinstance-checks">But Proxy fails isinstance() checks</a></li>
+<li><a href="#but-the-client-is-already-instantiated">But the client is already instantiated</a></li>
+<li><a href="#but-the-proxy-breaks-completion">But the proxy breaks completion</a></li>
+<li><a href="#but-the-proxy-fails-isinstance-checks">But the proxy fails isinstance() checks</a></li>
 <li><a href="#but-i-only-need-to-cache-a-few-methods">But I only need to cache a few methods</a></li>
 </ul>
 </section>
-<p>For the sake of simplicity,
-we'll assume we're using a client that looks like this;
-in practice, there would lots of other methods and attributes.</p>
+<section class="admonition note">
+<p class="admonition-title">Note</p>
+<p>In this article, I will focus on adding caching
+ using <a href="https://docs.python.org/3/library/functools.html#functools.lru_cache">functools.lru_cache()</a>.
+ Adding retrying with a library like <a href="https://tenacity.readthedocs.io/">tenacity</a>
+ would work more or less the same.</p>
+</section>
+<h2 id="but-i-don-t-own-the-client-code">But I don't own the client code<span class="headerlink"> <a href="#but-i-don-t-own-the-client-code" title="permalink">#</a></span></h2>
+<p>We'll assume a client class that looks something like this
+– but keep in mind it's not our code, we can only use it, not change it:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Client</span><span class="p">:</span>
 
-    <span class="k">def</span> <span class="nf">method</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Client.method(</span><span class="si">{</span><span class="n">arg</span><span class="si">!r}</span><span class="s2">)&quot;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">one</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Client.one(</span><span class="si">{</span><span class="n">arg</span><span class="si">!r}</span><span class="s2">)&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">arg</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">two</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Client.two(</span><span class="si">{</span><span class="n">arg</span><span class="si">!r}</span><span class="s2">)&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">arg</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
 </code></pre></div>
 
-<p>We'll use <a href="https://docs.python.org/3/library/functools.html#functools.lru_cache">functools.lru_cache()</a>.</p>
-<h2 id="subclassing">Subclassing<span class="headerlink"> <a href="#subclassing" title="permalink">#</a></span></h2>
 <p>If Client was our code,
-we could just slap a <code>@functools.lru_cache</code> on <code>method()</code>.</p>
+we could just slap a <code>@functools.lru_cache</code> on the methods.</p>
 <p>The next best thing is to subclass it,
-extend <code>method()</code>, decorate that.</p>
+override each method, and decorate that.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Subclass</span><span class="p">(</span><span class="n">Client</span><span class="p">):</span>
 
     <span class="nd">@functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">method</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">method</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">one</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">one</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">two</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">two</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
 </code></pre></div>
 
+<p>Of course, this doesn't really address the maintainability issue,
+but it does allow us to look at a potential issue with <a href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache()</a>.</p>
 <h2 id="but-decorating-methods-keeps-instances-around-for-too-long">But decorating methods keeps instances around for too long<span class="headerlink"> <a href="#but-decorating-methods-keeps-instances-around-for-too-long" title="permalink">#</a></span></h2>
 <p>As the <a href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache()</a> docs say,</p>
 <blockquote>
@@ -150,7 +172,8 @@ For more details, see <a href="https://rednafi.github.io/reflections/dont-wrap-i
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">method</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)(</span><span class="bp">self</span><span class="o">.</span><span class="n">method</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">one</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)(</span><span class="bp">self</span><span class="o">.</span><span class="n">one</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">two</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)(</span><span class="bp">self</span><span class="o">.</span><span class="n">two</span><span class="p">)</span>
 </code></pre></div>
 
 <p>This way, the instance is not in the cache keys,
@@ -164,7 +187,7 @@ Before, we had a cycle between the cache and the instance
 <section class="admonition important">
 <p class="admonition-title">Important</p>
 <p>You might be tempted to say,
- &quot;but if I call <code>method(arg)</code> on two different instances,
+ &quot;but if I call <code>one(arg)</code> on two different instances,
  the underlying method will be called twice&quot;.</p>
 <p>This is true, but it is by design. TODO: explain why</p>
 </section>
@@ -216,7 +239,7 @@ because looking up an attribute on the parent class
 but IMHO the <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattribute__">__getattribute__()</a> makes the intention clearer.
 Also, it might not work if the parent class does magic stuff
 and doesn't implement <a href="https://docs.python.org/3/reference/datamodel.html#object.__dir__">__dir__()</a> properly.</p>
-<h2 id="but-the-object-is-already-instantiated">But the object is already instantiated<span class="headerlink"> <a href="#but-the-object-is-already-instantiated" title="permalink">#</a></span></h2>
+<h2 id="but-the-client-is-already-instantiated">But the client is already instantiated<span class="headerlink"> <a href="#but-the-client-is-already-instantiated" title="permalink">#</a></span></h2>
 <p>Sometimes, you might not be the one instantiating the object;
 they may be created through a <a href="https://python-patterns.guide/gang-of-four/abstract-factory/#the-pythonic-approach-callable-factories">callable factory</a>,
 or you might just get them passed to you by a framework.</p>
@@ -248,14 +271,14 @@ now we <em>can</em> use <a href="https://docs.python.org/3/reference/datamodel.h
 and we don't have to check the instance dictionary explicitly –
 on the second call, the decorated method is already there,
 and <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a> isn't called again.</p>
-<h2 id="but-proxy-breaks-completion">But Proxy breaks completion<span class="headerlink"> <a href="#but-proxy-breaks-completion" title="permalink">#</a></span></h2>
+<h2 id="but-the-proxy-breaks-completion">But the proxy breaks completion<span class="headerlink"> <a href="#but-the-proxy-breaks-completion" title="permalink">#</a></span></h2>
 <p>Oops,
 we're guilty of the not implementing <a href="https://docs.python.org/3/reference/datamodel.html#object.__dir__">__dir__()</a> correctly mentioned before,
 which, among others, breaks completion:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">Proxy</span><span class="p">(</span><span class="n">Client</span><span class="p">())</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="s1">&#39;method&#39;</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="s1">&#39;one&#39;</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
 <span class="go">False</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="s1">&#39;method&#39;</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="n">__wrapped__</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="s1">&#39;one&#39;</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="n">__wrapped__</span><span class="p">)</span>
 <span class="go">True</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="o">.&lt;</span><span class="n">TAB</span><span class="o">&gt;</span>
 <span class="go">           ... crickets ...</span>
@@ -266,10 +289,11 @@ which, among others, breaks completion:</p>
 </code></pre></div>
 
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">Proxy</span><span class="p">(</span><span class="n">Client</span><span class="p">())</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="s1">&#39;method&#39;</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="s1">&#39;one&#39;</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
 <span class="go">True</span>
 </code></pre></div>
-<h2 id="but-proxy-fails-isinstance-checks">But Proxy fails isinstance() checks<span class="headerlink"> <a href="#but-proxy-fails-isinstance-checks" title="permalink">#</a></span></h2>
+<p>TODO: mostly covers everything I've met in practice</p>
+<h2 id="but-the-proxy-fails-isinstance-checks">But the proxy fails isinstance() checks<span class="headerlink"> <a href="#but-the-proxy-fails-isinstance-checks" title="permalink">#</a></span></h2>
 <p>As it turns out, <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/#caveat-wrapping-doesnt-actually-work">it's pretty difficult to get an object proxy right</a>.</p>
 <p>For example, although not recommended,
 sometimes code does <a href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a> checks:</p>
@@ -283,11 +307,11 @@ but a more general approach is in order –
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wrapped</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">wrapped</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_self_cached_methods</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_self_cached_ones</span> <span class="o">=</span> <span class="p">{}</span>
 
     <span class="k">def</span> <span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_self_cached_methods</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_self_cached_ones</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
         <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
             <span class="k">pass</span>
         <span class="n">value</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getattr__</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
@@ -296,7 +320,7 @@ but a more general approach is in order –
         <span class="k">if</span> <span class="ow">not</span> <span class="n">callable</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">value</span>
         <span class="n">cached</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)(</span><span class="n">value</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_self_cached_methods</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">cached</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_self_cached_ones</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">cached</span>
         <span class="k">return</span> <span class="n">cached</span>
 </code></pre></div>
 
@@ -309,7 +333,7 @@ but think of all the things we didn't have to do:</p>
 <span class="go">&lt;class &#39;__main__.Client&#39;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">Client</span><span class="p">)</span>
 <span class="go">True</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="s1">&#39;method&#39;</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="s1">&#39;one&#39;</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
 <span class="go">True</span>
 </code></pre></div>
 <h2 id="but-i-only-need-to-cache-a-few-methods">But I only need to cache a few methods<span class="headerlink"> <a href="#but-i-only-need-to-cache-a-few-methods" title="permalink">#</a></span></h2>
@@ -319,13 +343,15 @@ We could add logic for that, but it doesn't help with the excessiveness.</p>
 we can just go back to decorating the bound method.
 ... except, didn't we say the instance already exists?</p>
 <p>So what? It's not like we can only assing a method in <code>__init__()</code>:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">cache_method_in_place</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-    <span class="n">method</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
-    <span class="n">cached</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)(</span><span class="n">method</span><span class="p">)</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">()</span>
+
+<span class="k">def</span> <span class="nf">cache_method_in_place</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">one</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+    <span class="n">cached</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)(</span><span class="n">one</span><span class="p">)</span>
     <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">cached</span><span class="p">)</span>
 
-<span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">()</span>
-<span class="n">cache_method_in_place</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s1">&#39;method&#39;</span><span class="p">,</span> <span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+<span class="n">cache_method_in_place</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s1">&#39;one&#39;</span><span class="p">,</span> <span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+<span class="n">cache_method_in_place</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s1">&#39;two&#39;</span><span class="p">,</span> <span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
 </code></pre></div>
 
 <p>Unexpected? A bit.
@@ -337,6 +363,7 @@ In the end, that's why people use Python
 –
 you can bring up the big guns of a full wrapper or metaprogramming,
 but you're not forced to.</p>
+<p>TODO: example from andgravity-generator</p>
 <hr />
 <p>Anyway, that's it for now.</p>
 <p><strong>Learned something new today?</strong> Share this with others, it really helps! <span class="text-large">
@@ -404,6 +431,16 @@ but you're not forced to.</p>
     </div>
 
 </form>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>I'm only dissing 1:1 wrappers here.
+Wrappers at a higher level of abstraction can be <em>very</em> useful,
+both from a maintainability and readability perspective;
+for a great example of this,
+check out Raymond Hettinger's talk
+<a href="https://www.youtube.com/watch?v=wf-BqAjZb8M">Beyond PEP 8 – Best practices for beautiful intelligible code</a>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
 
 
 
