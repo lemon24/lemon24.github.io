@@ -24,8 +24,10 @@
 
 
 
-<title>Caching methods - death and gravity</title>
+<title>Caching methods in Python - death and gravity</title>
 
+
+<meta name="description" content="... in which you&#39;ll learn how to cache a lot of methods in Python, even for objects created by someone else. Did you know that, contrary to popular belief, Python programmers can have a little monkey patching as a treat?" />
 
 
 
@@ -41,6 +43,15 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
 
 
 
@@ -58,28 +69,28 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">Caching methods</h1>
+<h1 class="heading-noindex">Caching methods in Python</h1>
 
 <p class="text-gray text-nowrap">
 
 
 
 <small>
-<span class="tooltip" data-tooltip="published on 2023-02-23">February 2023</span>
+<span class="tooltip" data-tooltip="published on 2023-02-13">February 2023</span>
 ∙ six minute read
 ∙
 </small><span class="share-icons">
 <a
     class="share-icon twitter"
-    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Caching%20methods&url=https%3A//death.andgravity.com/caching-methods&via=_andgravity"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Caching%20methods%20in%20Python&url=https%3A//death.andgravity.com/caching-methods&via=_andgravity"
 >Twitter</a>
 <a
     class="share-icon hacker-news"
-    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/caching-methods&t=Caching%20methods"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/caching-methods&t=Caching%20methods%20in%20Python"
 >HN</a>
 <a
     class="share-icon reddit"
-    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/caching-methods&title=Caching%20methods"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/caching-methods&title=Caching%20methods%20in%20Python"
 >Reddit</a>
 </span>
 
@@ -110,7 +121,7 @@ and more often than not,
 <li><a href="#but-i-don-t-own-the-client-code">But I don't own the client code</a></li>
 <li><a href="#but-decorating-methods-keeps-instances-around-for-too-long">But decorating methods keeps instances around for too long</a></li>
 <li><a href="#but-i-need-to-cache-a-lot-of-methods">But I need to cache a lot of methods</a></li>
-<li><a href="#but-the-client-is-already-instantiated">But the client is already instantiated</a></li>
+<li><a href="#but-i-don-t-instantiate-the-client">But I don't instantiate the client</a></li>
 <li><a href="#but-the-proxy-breaks-completion">But the proxy breaks completion</a></li>
 <li><a href="#but-the-proxy-fails-isinstance-checks">But the proxy fails isinstance() checks</a></li>
 <li><a href="#but-i-only-need-to-cache-a-few-methods">But I only need to cache a few methods</a></li>
@@ -118,14 +129,14 @@ and more often than not,
 </section>
 <section class="admonition note">
 <p class="admonition-title">Note</p>
-<p>In this article, I will focus on adding caching
+<p>In this article, I will focus on caching
  using <a href="https://docs.python.org/3/library/functools.html#functools.lru_cache">functools.lru_cache()</a>.
- Adding retrying with a library like <a href="https://tenacity.readthedocs.io/">tenacity</a>
+ Retrying with a library like <a href="https://tenacity.readthedocs.io/">tenacity</a>
  would work more or less the same.</p>
 </section>
 <h2 id="but-i-don-t-own-the-client-code">But I don't own the client code<span class="headerlink"> <a href="#but-i-don-t-own-the-client-code" title="permalink">#</a></span></h2>
-<p>We'll assume a client class that looks something like this
-– but keep in mind it's not our code, we can only use it, not change it:</p>
+<p>We'll assume a client that looks like this
+(but keep in mind it's not our code – we can only use it, not change it):</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Client</span><span class="p">:</span>
 
     <span class="k">def</span> <span class="nf">one</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
@@ -137,11 +148,11 @@ and more often than not,
         <span class="k">return</span> <span class="n">arg</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
 </code></pre></div>
 
-<p>If Client was our code,
-we could just slap a <code>@functools.lru_cache</code> on the methods.</p>
-<p>The next best thing is to subclass it,
-override each method, and decorate that.</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Subclass</span><span class="p">(</span><span class="n">Client</span><span class="p">):</span>
+<p>If Client were our code,
+we could just slap <code>@functools.lru_cache</code> on the methods.</p>
+<p>As is, we can subclass it,
+override each method, and decorate the overrides:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">SubclassOverride</span><span class="p">(</span><span class="n">Client</span><span class="p">):</span>
 
     <span class="nd">@functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">one</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
@@ -152,23 +163,23 @@ override each method, and decorate that.</p>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">two</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
 </code></pre></div>
 
-<p>Of course, this doesn't really address the maintainability issue,
-but it does allow us to look at a potential issue with <a href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache()</a>.</p>
+<p>Of course, this doesn't really help with maintainability,
+but it does give us an excuse to look at a potential issue with <a href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache()</a>.</p>
 <h2 id="but-decorating-methods-keeps-instances-around-for-too-long">But decorating methods keeps instances around for too long<span class="headerlink"> <a href="#but-decorating-methods-keeps-instances-around-for-too-long" title="permalink">#</a></span></h2>
-<p>As the <a href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache()</a> docs say,</p>
+<p>The <a href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache()</a> docs say,</p>
 <blockquote>
 <p>If a method is cached, the <code>self</code> instance argument is included in the cache. See <a href="https://docs.python.org/3/faq/programming.html#faq-cache-method-calls">How do I cache method calls?</a></p>
 </blockquote>
-<p>... which in turn says:</p>
+<p>... in turn:</p>
 <blockquote>
-<p>The <em>lru_cache</em> approach [...] creates a reference to the instance unless special efforts are made to pass in weak references. [...] The disadvantage is that instances are kept alive until they age out of the cache or until the cache is cleared.</p>
+<p>The <em>lru_cache</em> approach [...] creates a reference to the instance [...] The disadvantage is that instances are kept alive until they age out of the cache or until the cache is cleared.</p>
 </blockquote>
 <p>Depending on how often Client is instantiated,
 this <em>might</em> count as a memory and/or resource leak.
-For more details, see <a href="https://rednafi.github.io/reflections/dont-wrap-instance-methods-with-functoolslru_cache-decorator-in-python.html" title="Don't wrap instance methods with 'functools.lru_cache' decorator in Python">this article</a>.</p>
-<p>One solution is to decorate the bound method
+For a more detailed explanation, see <a href="https://rednafi.github.io/reflections/dont-wrap-instance-methods-with-functoolslru_cache-decorator-in-python.html" title="Don't wrap instance methods with 'functools.lru_cache' decorator in Python">this article</a>.</p>
+<p>One solution is to decorate the <em>bound</em> method,
 <em>after</em> the object is created:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">SubclassOverwriteMethod</span><span class="p">(</span><span class="n">Client</span><span class="p">):</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">SubclassShadow</span><span class="p">(</span><span class="n">Client</span><span class="p">):</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -182,22 +193,27 @@ and we have one cache per instance.</p>
 (via the bound method),
 but the garbage collector will take care of that
 – normally, all three go away at the same time.
-Before, we had a cycle between the cache and the instance
-<em>via the class</em>, which never goes away. TODO: wording</p>
+Before, the cache had the same lifetime as the <em>unbound</em> method
+(that is, the same lifetime as the class).</p>
 <section class="admonition important">
 <p class="admonition-title">Important</p>
 <p>You might be tempted to say,
  &quot;but if I call <code>one(arg)</code> on two different instances,
  the underlying method will be called twice&quot;.</p>
-<p>This is true, but it is by design. TODO: explain why</p>
+<p>True, but this is the opposite of a problem,
+ it's likely <em>the correct behavior</em>.
+ Because each instance has different state,
+ the results of the calls may be different
+ (it helps to think of instance attributes
+ as <a href="/same-arguments">implicit arguments passed to each method</a>);
+ for example, clients instantiated with different users
+ should not return the same thing.</p>
 </section>
 <h2 id="but-i-need-to-cache-a-lot-of-methods">But I need to cache a lot of methods<span class="headerlink"> <a href="#but-i-need-to-cache-a-lot-of-methods" title="permalink">#</a></span></h2>
-<p>OK, the above works, but every time we want to cache a new method,
-we have to add it to <code>__init__()</code> ...
-if there's a lot of them,
-it might be a <em>bit</em> inconvenient.</p>
-<p>Thankfully, Python allows us to do it on the fly:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">SubclassProxy</span><span class="p">(</span><span class="n">Client</span><span class="p">):</span>
+<p>OK, the above is a bit less verbose,
+but we still have to decorate methods one by one.</p>
+<p>Thankfully, we can do it on the fly:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">SubclassDynamic</span><span class="p">(</span><span class="n">Client</span><span class="p">):</span>
 
     <span class="k">def</span> <span class="fm">__getattribute__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
         <span class="c1"># conveniently, also prevents infinite recursion</span>
@@ -211,43 +227,40 @@ it might be a <em>bit</em> inconvenient.</p>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">callable</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">value</span>
         <span class="n">cached</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1000</span><span class="p">)(</span><span class="n">value</span><span class="p">)</span>
-        <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">cached</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">cached</span>
         <span class="k">return</span> <span class="n">cached</span>
 </code></pre></div>
 
-<p><a href="https://docs.python.org/3/reference/datamodel.html#object.__getattribute__">__getattribute__()</a> is called
-&quot;unconditionally to implement attribute accesses&quot;
-(including methods).
+<p><a href="https://docs.python.org/3/reference/datamodel.html#object.__getattribute__">__getattribute__()</a> allows us to intercept
+all attribute accesses (including methods).
 When a method is requested,
-we get it from the parent class,
+we get it from the parent,
 decorate it,
 and store it in the instance dictionary;
 the second time around,
 we return the already decorated method.</p>
-<p>We don't decorate any method whose names start with an underscore;
-this includes any <a href="https://docs.python.org/3/glossary.html#term-magic-method"><code>__magic__</code> methods</a>,
-and any <code>_private</code> methods the parent may have.
-Special logic around the method name can also go here
-(e.g. only cache methods starting with <code>get_</code>, or
-cache all methods except those starting with <code>set_</code>).</p>
-<p>Note we cannot use <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a>
-(called only &quot;when the default attribute access fails&quot;),
-because looking up an attribute on the parent class
-<em>is</em> part of default attribute access
-(so <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a> won't be called if the method is found).</p>
-<p>We <em>could</em> just decorate the parent methods upfront, in  <code>__init__()</code>,
-but IMHO the <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattribute__">__getattribute__()</a> makes the intention clearer.
-Also, it might not work if the parent class does magic stuff
-and doesn't implement <a href="https://docs.python.org/3/reference/datamodel.html#object.__dir__">__dir__()</a> properly.</p>
-<h2 id="but-the-client-is-already-instantiated">But the client is already instantiated<span class="headerlink"> <a href="#but-the-client-is-already-instantiated" title="permalink">#</a></span></h2>
-<p>Sometimes, you might not be the one instantiating the object;
-they may be created through a <a href="https://python-patterns.guide/gang-of-four/abstract-factory/#the-pythonic-approach-callable-factories">callable factory</a>,
-or you might just get them passed to you by a framework.</p>
-<p>No worries, subclassing is not required for Python metaprogramming –
-instead of subclassing,
+<p>We don't decorate methods whose names start with an underscore,
+including any <a href="https://docs.python.org/3/glossary.html#term-magic-method"><code>__magic__</code></a> or <code>_private</code> ones;
+additional filtering logic
+(e.g. only cache methods starting with <code>get_</code>)
+would go here as well.</p>
+<p>Note we can't use <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a>,
+because it's only called
+if the attribute is not found through the normal mechanism –
+and looking up the class tree <em>is</em> part of the normal mechanism.</p>
+<p>We could just decorate all the methods upfront, in  <code>__init__()</code>,
+but that might not work if the parent does magic stuff
+without implementing <a href="https://docs.python.org/3/reference/datamodel.html#object.__dir__">__dir__()</a> properly.</p>
+<h2 id="but-i-don-t-instantiate-the-client">But I don't instantiate the client<span class="headerlink"> <a href="#but-i-don-t-instantiate-the-client" title="permalink">#</a></span></h2>
+<p>Sometimes, you're not the one instantiating the client;
+it may be created by a <a href="https://python-patterns.guide/gang-of-four/abstract-factory/#the-pythonic-approach-callable-factories">callable factory</a>
+that doesn't allow passing in a different class,<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
+or you might just get it from a framework.</p>
+<p>No worries, subclassing is not required for Python meta­programming –
+instead,
 we can wrap the instance in an object proxy
 (also known as <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/#implementing-dynamic-wrapper">dynamic wrapper</a>).</p>
-<p>The code looks more or less the same as before,
+<p>The code looks pretty much the same,
 but instead of delegating to the parent,
 we delegate to the <em>wrapped</em> instance:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Proxy</span><span class="p">:</span>
@@ -266,15 +279,14 @@ we delegate to the <em>wrapped</em> instance:</p>
         <span class="k">return</span> <span class="n">cached</span>
 </code></pre></div>
 
-<p>Because the proxy is a separate object from the instance,
+<p>Because the proxy is a separate object,
 now we <em>can</em> use <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a>,
 and we don't have to check the instance dictionary explicitly –
 on the second call, the decorated method is already there,
-and <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a> isn't called again.</p>
+so <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a> isn't called anymore.</p>
 <h2 id="but-the-proxy-breaks-completion">But the proxy breaks completion<span class="headerlink"> <a href="#but-the-proxy-breaks-completion" title="permalink">#</a></span></h2>
-<p>Oops,
-we're guilty of the not implementing <a href="https://docs.python.org/3/reference/datamodel.html#object.__dir__">__dir__()</a> correctly mentioned before,
-which, among others, breaks completion:</p>
+<p>Oops, we're guilty of the not implementing <a href="https://docs.python.org/3/reference/datamodel.html#object.__dir__">__dir__()</a> mentioned before.</p>
+<p>Among others, this breaks completion:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">Proxy</span><span class="p">(</span><span class="n">Client</span><span class="p">())</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="s1">&#39;one&#39;</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
 <span class="go">False</span>
@@ -283,7 +295,7 @@ which, among others, breaks completion:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="o">.&lt;</span><span class="n">TAB</span><span class="o">&gt;</span>
 <span class="go">           ... crickets ...</span>
 </code></pre></div>
-<p>This is easily fixed:</p>
+<p>... but it's pretty easy to fix:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="fm">__dir__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">dir</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__wrapped__</span><span class="p">)</span>
 </code></pre></div>
@@ -292,16 +304,16 @@ which, among others, breaks completion:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="s1">&#39;one&#39;</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
 <span class="go">True</span>
 </code></pre></div>
-<p>TODO: mostly covers everything I've met in practice</p>
+<p>With this, we have a solution that covers almost everything I've met in practice.</p>
 <h2 id="but-the-proxy-fails-isinstance-checks">But the proxy fails isinstance() checks<span class="headerlink"> <a href="#but-the-proxy-fails-isinstance-checks" title="permalink">#</a></span></h2>
-<p>As it turns out, <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/#caveat-wrapping-doesnt-actually-work">it's pretty difficult to get an object proxy right</a>.</p>
+<p>Turns out, <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/#caveat-wrapping-doesnt-actually-work">writing a perfect proxy is pretty difficult</a>.</p>
 <p>For example, although not recommended,
-sometimes code does <a href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a> checks:</p>
+code may need to do <a href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a> checks:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">Client</span><span class="p">)</span>
 <span class="go">False</span>
 </code></pre></div>
 <p>We could fix this by implementing <a href="https://docs.python.org/3/reference/datamodel.html#class.__instancecheck__">__instancecheck__()</a>,
-but a more general approach is in order –
+but I thought we were past wrapping things one by one.
 <a href="https://wrapt.readthedocs.io/en/latest/wrappers.html#object-proxy">wrapt</a> gives us an almost-perfect proxy:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">WraptProxy</span><span class="p">(</span><span class="n">wrapt</span><span class="o">.</span><span class="n">ObjectProxy</span><span class="p">):</span>
 
@@ -324,11 +336,13 @@ but a more general approach is in order –
         <span class="k">return</span> <span class="n">cached</span>
 </code></pre></div>
 
-<p>It's not as elegant as our own,
-but think of all the things we didn't have to do:</p>
+<p>It's not as elegant as ours,
+but check this out:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">WraptProxy</span><span class="p">(</span><span class="n">Client</span><span class="p">())</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">client</span>
 <span class="go">&lt;WraptProxy at 0x106c2f5c0 for Client at 0x106c2ec10&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
+<span class="go">&lt;__main__.Client object at 0x10d71ad90&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="o">.</span><span class="vm">__class__</span>
 <span class="go">&lt;class &#39;__main__.Client&#39;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">Client</span><span class="p">)</span>
@@ -337,12 +351,11 @@ but think of all the things we didn't have to do:</p>
 <span class="go">True</span>
 </code></pre></div>
 <h2 id="but-i-only-need-to-cache-a-few-methods">But I only need to cache a few methods<span class="headerlink"> <a href="#but-i-only-need-to-cache-a-few-methods" title="permalink">#</a></span></h2>
-<p>OK, but all that seems a bit excessive if you only need to cache a couple of methods.
-We could add logic for that, but it doesn't help with the excessiveness.</p>
+<p>OK, all that seems a bit excessive if you only need to cache a couple of methods.</p>
 <p>If we're the only ones using the client,
-we can just go back to decorating the bound method.
-... except, didn't we say the instance already exists?</p>
-<p>So what? It's not like we can only assing a method in <code>__init__()</code>:</p>
+we could go back to decorating the bound methods
+...except, didn't we say the instance already exists?</p>
+<p>So what? It's not like you can only set attributes in <code>__init__()</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">()</span>
 
 <span class="k">def</span> <span class="nf">cache_method_in_place</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -355,30 +368,31 @@ we can just go back to decorating the bound method.
 </code></pre></div>
 
 <p>Unexpected? A bit.
-Unholy? Maybe, depending where you're coming from.</p>
-<p>But actually, no,
-it's neither,
-it still <a href="https://docs.python.org/3/glossary.html#term-duck-typing">walks and quacks</a> like a Client.
-In the end, that's why people use Python
+Unholy? Maybe, depending where you're coming from.
+But actually, no, not really –
+after all, it still <a href="https://docs.python.org/3/glossary.html#term-duck-typing">walks and quacks</a> like a Client,
+and we've only changed <em>our</em> instance.</p>
+<p>In the end, that's one of the reasons people like Python
 –
-you can bring up the big guns of a full wrapper or metaprogramming,
-but you're not forced to.</p>
-<p>TODO: example from andgravity-generator</p>
+you're free to bring in the big guns of meta­programming if you need to,
+but sometimes a tiny bit of <a href="https://en.wikipedia.org/wiki/Monkey_patch">monkey patching</a>
+will do just as well.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
+<!-- TODO: example from andgravity-generator -->
 <hr />
 <p>Anyway, that's it for now.</p>
 <p><strong>Learned something new today?</strong> Share this with others, it really helps! <span class="text-large">
 <span class="share-icons">
 <a
     class="share-icon twitter color"
-    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Caching%20methods&url=https%3A//death.andgravity.com/caching-methods&via=_andgravity"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Caching%20methods%20in%20Python&url=https%3A//death.andgravity.com/caching-methods&via=_andgravity"
 >Twitter</a>
 <a
     class="share-icon hacker-news color"
-    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/caching-methods&t=Caching%20methods"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/caching-methods&t=Caching%20methods%20in%20Python"
 >HN</a>
 <a
     class="share-icon reddit color"
-    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/caching-methods&title=Caching%20methods"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/caching-methods&title=Caching%20methods%20in%20Python"
 >Reddit</a>
 </span>
 </span></p>
@@ -433,12 +447,18 @@ but you're not forced to.</p>
 </form>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>I'm only dissing 1:1 wrappers here.
-Wrappers at a higher level of abstraction can be <em>very</em> useful,
-both from a maintainability and readability perspective;
-for a great example of this,
-check out Raymond Hettinger's talk
-<a href="https://www.youtube.com/watch?v=wf-BqAjZb8M">Beyond PEP 8 – Best practices for beautiful intelligible code</a>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-1"><p>I'm mainly dissing <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/#implementing-static-wrapper">static</a> (1:1) wrappers here.
+As a higher level of abstraction,
+wrappers can be <em>very</em> useful,
+both maintainability and readability-wise;
+for a great example of this, check out Raymond Hettinger's
+<a href="https://www.youtube.com/watch?v=wf-BqAjZb8M">Beyond PEP 8 – Best practices for beautiful intelligible code</a>
+talk. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>For example, <a href="https://docs.python.org/3/library/sqlite3.html#sqlite3.connect">sqlite3.connect()</a> does, via the <em>factory</em> parameter;
+<a href="https://reader.readthedocs.io/en/stable/api.html#reader.make_reader">reader.​make_reader()</a> doesn't (at least, not yet). <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>Just like cats and salami,
+a very small amount of monkey patching is probably fine,
+though you definitely shouldn't make it a staple of your diet. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
