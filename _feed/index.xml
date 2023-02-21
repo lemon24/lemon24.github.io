@@ -2,13 +2,251 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity</title>
-  <updated>2023-02-13T20:00:00+00:00</updated>
+  <updated>2023-02-21T23:02:21+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
   </author>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/yaml-unhashable-key">
+    <id>https://death.andgravity.com/yaml-unhashable-key</id>
+    <title>yaml: while constructing a mapping found unhashable key</title>
+    <updated>2023-02-21T23:02:21+00:00</updated>
+    <content type="html">&lt;p&gt;So you're trying to read some YAML using &lt;a href="https://github.com/yaml/pyyaml"&gt;PyYAML&lt;/a&gt;,
+and get an exception like this:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;safe_load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="se"&gt;\&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;[0, 0]: top-left&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;[1, 1]: bottom-right&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="gr"&gt;yaml.constructor.ConstructorError&lt;/span&gt;: &lt;span class="n"&gt;while constructing a mapping&lt;/span&gt;
+&lt;span class="go"&gt;found unhashable key&lt;/span&gt;
+&lt;span class="go"&gt;  in &amp;quot;&amp;lt;unicode string&amp;gt;&amp;quot;, line 1, column 1:&lt;/span&gt;
+&lt;span class="go"&gt;    [0, 0]: top-left&lt;/span&gt;
+&lt;span class="go"&gt;    ^&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;!-- https://github.com/yaml/pyyaml/issues/339 --&gt;
+&lt;h2 id="what-does-it-mean"&gt;What does it mean?&lt;span class="headerlink"&gt; &lt;a href="#what-does-it-mean" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;The error message is pretty self-explanatory, but let's unpack it a bit.&lt;/p&gt;
+&lt;p&gt;First, it happened during construction –
+that is,
+while converting
+the generic representation of the YAML document
+to native data structures;
+in this case, converting a mapping
+to a Python &lt;a href="https://docs.python.org/3/library/stdtypes.html#dict"&gt;dict&lt;/a&gt;.&lt;/p&gt;
+&lt;figure class="figure" id="yaml-processing-overview-diagram"&gt;
+&lt;img class="img-responsive" src="/_file/any-yaml/overview2.svg" alt="YAML Processing Overview Diagram" /&gt;&lt;figcaption class="figure-caption text-center text-small"&gt;
+&lt;a href="https://yaml.org/spec/1.2.2/#31-processes"&gt;YAML Processing Overview&lt;/a&gt;
+&lt;/figcaption&gt;
+&lt;/figure&gt;
+
+&lt;p&gt;The problem is that a key of the mapping,
+&lt;code&gt;[0, 0]&lt;/code&gt;, is not &lt;a href="https://docs.python.org/3/glossary.html#term-hashable"&gt;hashable&lt;/a&gt;:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;An object is hashable if it has a hash value which never changes during its lifetime (it needs a &lt;code&gt;__hash__()&lt;/code&gt; method), and can be compared to other objects (it needs an &lt;code&gt;__eq__()&lt;/code&gt; method). Hashable objects which compare equal must have the same hash value.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Most &lt;a href="https://docs.python.org/3/glossary.html#term-immutable"&gt;immutable&lt;/a&gt; built-ins are hashable;
+&lt;a href="https://docs.python.org/3/glossary.html#term-mutable"&gt;mutable&lt;/a&gt; containers (such as lists) are not;
+immutable containers (such as tuples) are hashable only if their elements are.&lt;/p&gt;
+&lt;h2 id="why-does-this-happen"&gt;Why does this happen?&lt;span class="headerlink"&gt; &lt;a href="#why-does-this-happen" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;This is not a limitation of YAML itself;
+quoting the &lt;a href="https://yaml.org/spec/1.2.2/#mapping"&gt;spec&lt;/a&gt;:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;The content of a mapping node is an unordered set of key/value node pairs, with the restriction that each of the keys is unique. &lt;strong&gt;YAML places no further restrictions on the nodes.&lt;/strong&gt; In particular, &lt;strong&gt;keys may be arbitrary nodes&lt;/strong&gt;, the same node may be used as the value of several key/value pairs and a mapping could even contain itself as a key or a value.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;We can load everything up to the representation:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;compose&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;[0, 0]: top-left&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;MappingNode(&lt;/span&gt;
+&lt;span class="go"&gt;    tag=&amp;#39;tag:yaml.org,2002:map&amp;#39;,&lt;/span&gt;
+&lt;span class="go"&gt;    value=[&lt;/span&gt;
+&lt;span class="go"&gt;        (&lt;/span&gt;
+&lt;span class="go"&gt;            SequenceNode(&lt;/span&gt;
+&lt;span class="go"&gt;                tag=&amp;#39;tag:yaml.org,2002:seq&amp;#39;,&lt;/span&gt;
+&lt;span class="go"&gt;                value=[&lt;/span&gt;
+&lt;span class="go"&gt;                    ScalarNode(tag=&amp;#39;tag:yaml.org,2002:int&amp;#39;, value=&amp;#39;0&amp;#39;),&lt;/span&gt;
+&lt;span class="go"&gt;                    ScalarNode(tag=&amp;#39;tag:yaml.org,2002:int&amp;#39;, value=&amp;#39;0&amp;#39;),&lt;/span&gt;
+&lt;span class="go"&gt;                ],&lt;/span&gt;
+&lt;span class="go"&gt;            ),&lt;/span&gt;
+&lt;span class="go"&gt;            ScalarNode(tag=&amp;#39;tag:yaml.org,2002:str&amp;#39;, value=&amp;#39;top-left&amp;#39;),&lt;/span&gt;
+&lt;span class="go"&gt;        )&lt;/span&gt;
+&lt;span class="go"&gt;    ],&lt;/span&gt;
+&lt;span class="go"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The limitation comes from how dicts are implemented, &lt;a href="https://docs.python.org/3/glossary.html#term-hashable"&gt;specifically&lt;/a&gt;:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Hashability makes an object usable as a dictionary key and a set member, because these data structures use the hash value internally.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="p"&gt;{[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]:&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;top-left&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+  File &lt;span class="nb"&gt;&amp;quot;&amp;lt;stdin&amp;gt;&amp;quot;&lt;/span&gt;, line &lt;span class="m"&gt;1&lt;/span&gt;, in &lt;span class="n"&gt;&amp;lt;module&amp;gt;&lt;/span&gt;
+&lt;span class="gr"&gt;TypeError&lt;/span&gt;: &lt;span class="n"&gt;unhashable type: &amp;#39;list&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;If we use a (hashable) tuple instead, it works:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="p"&gt;{(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;top-left&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;span class="go"&gt;{(0, 0): &amp;#39;top-left&amp;#39;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id="what-now"&gt;What now?&lt;span class="headerlink"&gt; &lt;a href="#what-now" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;h3 id="use-the-representation"&gt;Use the representation&lt;span class="headerlink"&gt; &lt;a href="#use-the-representation" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Depending on your needs, the representation might be enough.
+But probably not...&lt;/p&gt;
+&lt;h3 id="use-full-load-and-python-specific-tags"&gt;Use full_load() and Python-specific tags&lt;span class="headerlink"&gt; &lt;a href="#use-full-load-and-python-specific-tags" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;If you control the input,
+and you're OK with language-specific tags,
+use &lt;code&gt;full_load()&lt;/code&gt;;
+it resolves all tags &lt;em&gt;except&lt;/em&gt; those known to be unsafe,
+including all the Python-specific tags listed
+&lt;a href="https://pyyaml.org/wiki/PyYAMLDocumentation#yaml-tags-and-python-types"&gt;here&lt;/a&gt;.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;full_load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="se"&gt;\&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;!!python/tuple [0, 0]: top-left&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;!!python/tuple [1, 1]: bottom-right&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;{(0, 0): &amp;#39;top-left&amp;#39;, (1, 1): &amp;#39;bottom-right&amp;#39;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;You could also use &lt;code&gt;unsafe_load()&lt;/code&gt;,
+but most of the time it's not what you want:&lt;/p&gt;
+&lt;section class="admonition warning"&gt;
+&lt;p class="admonition-title"&gt;Warning&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;yaml.unsafe_load()&lt;/code&gt; is &lt;strong&gt;unsafe&lt;/strong&gt; for &lt;strong&gt;untrusted data&lt;/strong&gt;,
+ because it allows &lt;strong&gt;running arbitrary code&lt;/strong&gt;.
+ Consider using &lt;code&gt;safe_load()&lt;/code&gt; or &lt;code&gt;full_load()&lt;/code&gt; instead.&lt;/p&gt;
+&lt;p&gt;For example, you can do this:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unsafe_load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;!!python/object/new:os.system [echo WOOSH. YOU HAVE been compromised]&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;WOOSH. YOU HAVE been compromised&lt;/span&gt;
+&lt;span class="go"&gt;0&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;There were a bunch of &lt;a href="https://www.cvedetails.com/vulnerability-list/vendor_id-13115/Pyyaml.html"&gt;CVEs&lt;/a&gt; about it.&lt;/p&gt;
+&lt;/section&gt;
+&lt;h3 id="but-i-don-t-control-the-input"&gt;But, I don't control the input&lt;span class="headerlink"&gt; &lt;a href="#but-i-don-t-control-the-input" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;If you don't control the input,
+you can use a custom constructor
+to convert the keys to something hashable.
+Here, we convert list keys to tuples:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Loader&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;SafeLoader&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;pass&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;construct_mapping&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;node&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;pairs&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;construct_pairs&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;node&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;deep&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;pairs&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="ne"&gt;TypeError&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="n"&gt;rv&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{}&lt;/span&gt;
+        &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;key&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;pairs&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;isinstance&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;key&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+                &lt;span class="n"&gt;key&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;tuple&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;key&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+            &lt;span class="n"&gt;rv&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;key&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;rv&lt;/span&gt;
+
+&lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;construct_mapping&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;construct_mapping&lt;/span&gt;
+&lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;add_constructor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;tag:yaml.org,2002:map&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;construct_mapping&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;!--
+yaml.load("""\
+[0, 0]: top-left
+[1, 1]: bottom-right
+""", Loader=Loader)
+--&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="se"&gt;\&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;[0, 0]: top-left&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;[1, 1]: bottom-right&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;{(0, 0): &amp;#39;top-left&amp;#39;, (1, 1): &amp;#39;bottom-right&amp;#39;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;We subclass SafeLoader to account for
+&lt;a href="/any-yaml#a-note-on-pyyaml-extensibility"&gt;a PyYAML quirk&lt;/a&gt;
+– calling &lt;code&gt;add_constructor()&lt;/code&gt; directly
+would modify it in-place, for &lt;em&gt;everyone&lt;/em&gt;, which isn't necessarily great.
+We still override &lt;code&gt;construct_mapping&lt;/code&gt; so that other constructors
+wanting to make a mapping get to use our version.&lt;/p&gt;
+&lt;p&gt;Alas, this is quite limited,
+because new key types need to be handled explicitly;
+for example, we might be able to convert dicts to a &lt;a href="https://docs.python.org/3/library/stdtypes.html#set-types-set-frozenset"&gt;frozenset&lt;/a&gt; of &lt;a href="https://docs.python.org/3/library/stdtypes.html#dict.items"&gt;items()&lt;/a&gt;.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="si"&gt;{0: 1}&lt;/span&gt;&lt;span class="s2"&gt;: top-left&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;rv&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;key&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt;
+&lt;span class="gr"&gt;TypeError&lt;/span&gt;: &lt;span class="n"&gt;unhashable type: &amp;#39;dict&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;But nested keys don't work either,
+we need to convert them recursively ourselves:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;[[0]]: top-left&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;rv&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;key&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt;
+&lt;span class="gr"&gt;TypeError&lt;/span&gt;: &lt;span class="n"&gt;unhashable type: &amp;#39;list&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h3 id="but-i-don-t-know-the-key-types-in-advance"&gt;But, I don't know the key types in advance&lt;span class="headerlink"&gt; &lt;a href="#but-i-don-t-know-the-key-types-in-advance" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;A decent trade-off is to just let the mapping devolve into a list of pairs:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;construct_mapping&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;node&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;pairs&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;construct_pairs&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;node&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;pairs&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="ne"&gt;TypeError&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;pairs&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="se"&gt;\&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;[0, 0]: top-left&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;[1, 1]: bottom-right&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;[([0, 0], &amp;#39;top-left&amp;#39;), ([1, 1], &amp;#39;bottom-right&amp;#39;)]&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="si"&gt;{0: 1}&lt;/span&gt;&lt;span class="s2"&gt;: top-left&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;[({0: 1}, &amp;#39;top-left&amp;#39;)]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h3 id="but-i-need-to-round-trip-the-data"&gt;But, I need to round-trip the data&lt;span class="headerlink"&gt; &lt;a href="#but-i-need-to-round-trip-the-data" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;This works, until you need to round-trip the data,
+or emit this kind of YAML yourself.&lt;/p&gt;
+&lt;p&gt;Luckily, I've already written &lt;strong&gt;&lt;a href="/any-yaml"&gt;a whole article&lt;/a&gt;&lt;/strong&gt;
+on how to do that, complete with code;
+the trick is to mark the list of pairs in some way:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="se"&gt;\&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;[0, 0]: top-left&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;[1, 1]: bottom-right&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;
+&lt;span class="go"&gt;Pairs([([0, 0], &amp;#39;top-left&amp;#39;), ([1, 1], &amp;#39;bottom-right&amp;#39;)])&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;... so you can represent it back into a mapping:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;dump&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Dumper&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Dumper&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+&lt;span class="go"&gt;? - 0&lt;/span&gt;
+&lt;span class="go"&gt;  - 0&lt;/span&gt;
+&lt;span class="go"&gt;: top-left&lt;/span&gt;
+&lt;span class="go"&gt;? - 1&lt;/span&gt;
+&lt;span class="go"&gt;  - 1&lt;/span&gt;
+&lt;span class="go"&gt;: bottom-right&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;(The fancy &lt;code&gt;? &lt;/code&gt; syntax indicates a
+&lt;a href="https://yaml.org/spec/1.2.2/#example-mapping-between-sequences"&gt;complex mapping key&lt;/a&gt;,
+but that's just another way of writing the original input.)&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;That's it for now.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Learned something new today?&lt;/strong&gt; Share this with others, it really helps! &lt;span class="text-large"&gt;
+&lt;span class="share-icons"&gt;
+&lt;a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=yaml%3A%20while%20constructing%20a%20mapping%20found%20unhashable%20key&amp;url=https%3A//death.andgravity.com/yaml-unhashable-key&amp;via=_andgravity"
+&gt;Twitter&lt;/a&gt;
+&lt;a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/yaml-unhashable-key&amp;t=yaml%3A%20while%20constructing%20a%20mapping%20found%20unhashable%20key"
+&gt;HN&lt;/a&gt;
+&lt;a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/yaml-unhashable-key&amp;title=yaml%3A%20while%20constructing%20a%20mapping%20found%20unhashable%20key"
+&gt;Reddit&lt;/a&gt;
+&lt;/span&gt;
+&lt;/span&gt;&lt;/p&gt;
+
+
+</content>
+    <link href="https://death.andgravity.com/yaml-unhashable-key" rel="alternate"/>
+    <summary>... in which you'll find out what "while constructing a mapping found unhashable key" PyYAML errors mean, why do they happen, and what you can do about it.</summary>
+    <published>2023-02-21T23:02:21+00:00</published>
+  </entry>
   <entry xml:base="https://death.andgravity.com/caching-methods">
     <id>https://death.andgravity.com/caching-methods</id>
     <title>Caching a lot of methods in Python</title>
@@ -2905,7 +3143,7 @@ or you just want to access the data, without caring what it means
 (for example, because you just want to change a little thing and write it back out).&lt;/p&gt;
 &lt;p&gt;YAML allows you to register a catch-all constructor for unknown tags
 ...but you still need to implement some sort of generic wrapper to go with it.&lt;/p&gt;
-&lt;p&gt;Luckily, I've already written &lt;a href="/any-yaml"&gt;a whole article&lt;/a&gt; on how to do that,
+&lt;p&gt;Luckily, I've already written &lt;strong&gt;&lt;a href="/any-yaml"&gt;a whole article&lt;/a&gt;&lt;/strong&gt; on how to do that,
 complete with code:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;yaml&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;!GetAZs us-east-1&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Loader&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;span class="go"&gt;Tagged(&amp;#39;!GetAZs&amp;#39;, &amp;#39;us-east-1&amp;#39;)&lt;/span&gt;

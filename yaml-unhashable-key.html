@@ -43,6 +43,15 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
 
 
 
@@ -67,8 +76,8 @@ window.addEventListener('resize', set_vh);
 
 
 <small>
-<span class="tooltip" data-tooltip="published on 2022-02-02">February 2022</span>
-∙ five minute read
+<span class="tooltip" data-tooltip="published on 2023-02-21">February 2023</span>
+∙ four minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -115,33 +124,35 @@ and get an exception like this:</p>
 </code></pre></div>
 <!-- https://github.com/yaml/pyyaml/issues/339 -->
 <h2 id="what-does-it-mean">What does it mean?<span class="headerlink"> <a href="#what-does-it-mean" title="permalink">#</a></span></h2>
-<p>While the error message is pretty self-explanatory, let's unpack it a bit.</p>
-<p>First, it happened during construction,
+<p>The error message is pretty self-explanatory, but let's unpack it a bit.</p>
+<p>First, it happened during construction –
 that is,
-while <code>safe_load()</code> was trying to convert
+while converting
 the generic representation of the YAML document
-to native data structures:</p>
+to native data structures;
+in this case, converting a mapping
+to a Python <a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>.</p>
 <figure class="figure" id="yaml-processing-overview-diagram">
 <img class="img-responsive" src="/_file/any-yaml/overview2.svg" alt="YAML Processing Overview Diagram" /><figcaption class="figure-caption text-center text-small">
 <a href="https://yaml.org/spec/1.2.2/#31-processes">YAML Processing Overview</a>
 </figcaption>
 </figure>
 
-<p>In this case, it was trying to convert a YAML mapping
-into a Python <a href="https://docs.python.org/3/glossary.html#term-mapping">mapping</a> (specifically, a <a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>).</p>
-<p>The problem it found was that a key of the mapping,
+<p>The problem is that a key of the mapping,
 <code>[0, 0]</code>, is not <a href="https://docs.python.org/3/glossary.html#term-hashable">hashable</a>:</p>
 <blockquote>
 <p>An object is hashable if it has a hash value which never changes during its lifetime (it needs a <code>__hash__()</code> method), and can be compared to other objects (it needs an <code>__eq__()</code> method). Hashable objects which compare equal must have the same hash value.</p>
 </blockquote>
-<p>It's probably worth noting that most of Python’s <a href="https://docs.python.org/3/glossary.html#term-immutable">immutable</a> built-in objects are hashable; conversely, most <a href="https://docs.python.org/3/glossary.html#term-mutable">mutable</a> containers (such as lists) are not.</p>
+<p>Most <a href="https://docs.python.org/3/glossary.html#term-immutable">immutable</a> built-ins are hashable;
+<a href="https://docs.python.org/3/glossary.html#term-mutable">mutable</a> containers (such as lists) are not;
+immutable containers (such as tuples) are hashable only if their elements are.</p>
 <h2 id="why-does-this-happen">Why does this happen?<span class="headerlink"> <a href="#why-does-this-happen" title="permalink">#</a></span></h2>
-<p>This limitation does not come from YAML itself;
-quoting from the <a href="https://yaml.org/spec/1.2.2/#mapping">spec</a>:</p>
+<p>This is not a limitation of YAML itself;
+quoting the <a href="https://yaml.org/spec/1.2.2/#mapping">spec</a>:</p>
 <blockquote>
 <p>The content of a mapping node is an unordered set of key/value node pairs, with the restriction that each of the keys is unique. <strong>YAML places no further restrictions on the nodes.</strong> In particular, <strong>keys may be arbitrary nodes</strong>, the same node may be used as the value of several key/value pairs and a mapping could even contain itself as a key or a value.</p>
 </blockquote>
-<p>Indeed, it's possible to load the YAML up to the representation:</p>
+<p>We can load everything up to the representation:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">compose</span><span class="p">(</span><span class="s2">&quot;[0, 0]: top-left&quot;</span><span class="p">)</span>
 <span class="go">MappingNode(</span>
 <span class="go">    tag=&#39;tag:yaml.org,2002:map&#39;,</span>
@@ -159,11 +170,10 @@ quoting from the <a href="https://yaml.org/spec/1.2.2/#mapping">spec</a>:</p>
 <span class="go">    ],</span>
 <span class="go">)</span>
 </code></pre></div>
-<p>Instead, it comes from how dicts are implemented; <a href="https://docs.python.org/3/glossary.html#term-hashable">specifically</a>:</p>
+<p>The limitation comes from how dicts are implemented, <a href="https://docs.python.org/3/glossary.html#term-hashable">specifically</a>:</p>
 <blockquote>
 <p>Hashability makes an object usable as a dictionary key and a set member, because these data structures use the hash value internally.</p>
 </blockquote>
-<p>Indeed:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="p">{[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]:</span> <span class="s2">&quot;top-left&quot;</span><span class="p">}</span>
 <span class="gt">Traceback (most recent call last):</span>
   File <span class="nb">&quot;&lt;stdin&gt;&quot;</span>, line <span class="m">1</span>, in <span class="n">&lt;module&gt;</span>
@@ -175,14 +185,14 @@ quoting from the <a href="https://yaml.org/spec/1.2.2/#mapping">spec</a>:</p>
 </code></pre></div>
 <h2 id="what-now">What now?<span class="headerlink"> <a href="#what-now" title="permalink">#</a></span></h2>
 <h3 id="use-the-representation">Use the representation<span class="headerlink"> <a href="#use-the-representation" title="permalink">#</a></span></h3>
-<p>Depending on your needs, maybe the representation is enough?</p>
-<p>But probably not...</p>
+<p>Depending on your needs, the representation might be enough.
+But probably not...</p>
 <h3 id="use-full-load-and-python-specific-tags">Use full_load() and Python-specific tags<span class="headerlink"> <a href="#use-full-load-and-python-specific-tags" title="permalink">#</a></span></h3>
-<p>If you are controlling the input,
-and you're ok with using native Python types,
-use <code>full_load()</code>,
-which resolves all tags <em>except</em> those known to be unsafe;
-this includes all the  tags listed
+<p>If you control the input,
+and you're OK with language-specific tags,
+use <code>full_load()</code>;
+it resolves all tags <em>except</em> those known to be unsafe,
+including all the Python-specific tags listed
 <a href="https://pyyaml.org/wiki/PyYAMLDocumentation#yaml-tags-and-python-types">here</a>.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">full_load</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
 <span class="gp">... </span><span class="s2">!!python/tuple [0, 0]: top-left</span>
@@ -190,7 +200,8 @@ this includes all the  tags listed
 <span class="gp">... </span><span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
 <span class="go">{(0, 0): &#39;top-left&#39;, (1, 1): &#39;bottom-right&#39;}</span>
 </code></pre></div>
-<p>You could also use <code>unsafe_load()</code>, but most of the time it's not what you want:</p>
+<p>You could also use <code>unsafe_load()</code>,
+but most of the time it's not what you want:</p>
 <section class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p><code>yaml.unsafe_load()</code> is <strong>unsafe</strong> for <strong>untrusted data</strong>,
@@ -203,10 +214,11 @@ this includes all the  tags listed
 </code></pre></div>
 <p>There were a bunch of <a href="https://www.cvedetails.com/vulnerability-list/vendor_id-13115/Pyyaml.html">CVEs</a> about it.</p>
 </section>
-<h3 id="convert-the-keys-to-something-hashable">Convert the keys to something hashable<span class="headerlink"> <a href="#convert-the-keys-to-something-hashable" title="permalink">#</a></span></h3>
-<p>If you're not controlling the input,
-you can try converting the keys to something hashable
-by adding a custom contructor.</p>
+<h3 id="but-i-don-t-control-the-input">But, I don't control the input<span class="headerlink"> <a href="#but-i-don-t-control-the-input" title="permalink">#</a></span></h3>
+<p>If you don't control the input,
+you can use a custom constructor
+to convert the keys to something hashable.
+Here, we convert list keys to tuples:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Loader</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">SafeLoader</span><span class="p">):</span>
     <span class="k">pass</span>
 
@@ -227,7 +239,6 @@ by adding a custom contructor.</p>
 
 </code></pre></div>
 
-<p>Here, we convert list keys to tuples.</p>
 <!--
 yaml.load("""\
 [0, 0]: top-left
@@ -240,27 +251,23 @@ yaml.load("""\
 <span class="gp">... </span><span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
 <span class="go">{(0, 0): &#39;top-left&#39;, (1, 1): &#39;bottom-right&#39;}</span>
 </code></pre></div>
-<section class="admonition note">
-<p class="admonition-title">Note</p>
 <p>We subclass SafeLoader to account for
- <a href="/any-yaml#a-note-on-pyyaml-extensibility">a PyYAML quirk</a>
- – calling <code>add_constructor()</code> directly
- would modify it in-place, for <em>everyone</em>, which isn't necessarily great.
- We still override <code>construct_mapping</code> so that other constructors
- wanting to make a mapping get to use our version.</p>
-</section>
-<p>Alas, this is solution quite limited;
-for example, to support dicts as keys,
-we'd need to convert them to something else
-(a <a href="https://docs.python.org/3/library/stdtypes.html#set-types-set-frozenset">frozenset</a> of <a href="https://docs.python.org/3/library/stdtypes.html#dict.items">items()</a>, maybe?):</p>
+<a href="/any-yaml#a-note-on-pyyaml-extensibility">a PyYAML quirk</a>
+– calling <code>add_constructor()</code> directly
+would modify it in-place, for <em>everyone</em>, which isn't necessarily great.
+We still override <code>construct_mapping</code> so that other constructors
+wanting to make a mapping get to use our version.</p>
+<p>Alas, this is quite limited,
+because new key types need to be handled explicitly;
+for example, we might be able to convert dicts to a <a href="https://docs.python.org/3/library/stdtypes.html#set-types-set-frozenset">frozenset</a> of <a href="https://docs.python.org/3/library/stdtypes.html#dict.items">items()</a>.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{0: 1}</span><span class="s2">: top-left&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
 <span class="gt">Traceback (most recent call last):</span>
 <span class="w">  </span><span class="c">...</span>
 <span class="w">    </span><span class="n">rv</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
 <span class="gr">TypeError</span>: <span class="n">unhashable type: &#39;dict&#39;</span>
 </code></pre></div>
-<p>Nested keys don't work either,
-we'd need to convert them recursively ourselves:</p>
+<p>But nested keys don't work either,
+we need to convert them recursively ourselves:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;[[0]]: top-left&quot;</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">Loader</span><span class="p">)</span>
 <span class="gt">Traceback (most recent call last):</span>
 <span class="w">  </span><span class="c">...</span>
@@ -288,9 +295,9 @@ we'd need to convert them recursively ourselves:</p>
 <h3 id="but-i-need-to-round-trip-the-data">But, I need to round-trip the data<span class="headerlink"> <a href="#but-i-need-to-round-trip-the-data" title="permalink">#</a></span></h3>
 <p>This works, until you need to round-trip the data,
 or emit this kind of YAML yourself.</p>
-<p>Luckily, I've already written <a href="/any-yaml">a whole article</a>
-on how to do that, complete with code.</p>
-<p>The trick is to mark the &quot;devolved&quot; list of pairs in some way:</p>
+<p>Luckily, I've already written <strong><a href="/any-yaml">a whole article</a></strong>
+on how to do that, complete with code;
+the trick is to mark the list of pairs in some way:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">value</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
 <span class="gp">... </span><span class="s2">[0, 0]: top-left</span>
 <span class="gp">... </span><span class="s2">[1, 1]: bottom-right</span>
@@ -298,7 +305,7 @@ on how to do that, complete with code.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">value</span>
 <span class="go">Pairs([([0, 0], &#39;top-left&#39;), ([1, 1], &#39;bottom-right&#39;)])</span>
 </code></pre></div>
-<p>... so you can register a custom representer for it:</p>
+<p>... so you can represent it back into a mapping:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Dumper</span><span class="o">=</span><span class="n">Dumper</span><span class="p">))</span>
 <span class="go">? - 0</span>
 <span class="go">  - 0</span>
@@ -307,6 +314,9 @@ on how to do that, complete with code.</p>
 <span class="go">  - 1</span>
 <span class="go">: bottom-right</span>
 </code></pre></div>
+<p>(The fancy <code>? </code> syntax indicates a
+<a href="https://yaml.org/spec/1.2.2/#example-mapping-between-sequences">complex mapping key</a>,
+but that's just another way of writing the original input.)</p>
 <hr />
 <p>That's it for now.</p>
 <p><strong>Learned something new today?</strong> Share this with others, it really helps! <span class="text-large">
