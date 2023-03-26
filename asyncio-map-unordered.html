@@ -98,15 +98,15 @@ window.addEventListener('resize', set_vh);
 <div class="column col-sm-12 col-md-10 col-8">
 
 <!-- TODO: rename this to limit-concurrency -->
-<p>So, you're doing some async stuff, repeatedly. Many times.</p>
+<p>So, you're doing some async stuff, repeatedly, many times.</p>
 <p>Like, <strong>hundreds of thousands of times</strong>.</p>
-<p>Maybe you're just scraping some data.</p>
-<p>Maybe it's more complicated than that
-– you're calling API one,
-passing the result to API two,
+<p>Maybe you're scraping some data.</p>
+<p>Maybe it's more complicated
+– you're calling an API,
+and then passing the result to another one,
 and then saving the result of that.</p>
-<p>Either way, it's probably a good idea to <em>not</em> do it all at once.
-For one, it's not polite to the APIs you're calling.
+<p>Either way, it's a good idea to <em>not</em> do it all at once.
+For one, it's not polite to the services you're calling.
 For another, it'll load everything in memory, <em>all at once</em>.</p>
 <p>In <strong>sync</strong> code,
 you might use a <a href="https://docs.python.org/3/library/multiprocessing.html#module-multiprocessing.dummy">thread pool</a> and <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>:</p>
@@ -116,11 +116,10 @@ you might use a <a href="https://docs.python.org/3/library/multiprocessing.html#
 </code></pre></div>
 
 <p>Here, concurrency is limited by the fixed number of threads.</p>
-<p>How about <strong>async</strong> code?
+<p>But what about <strong>async</strong> code?
 In this article,
-we'll examine a few different solutions,
-comparing them along the way,
-to find out which is best.</p>
+we'll look at a few ways of limiting concurrency in asycio,
+and find out which one is best.</p>
 <section class="admonition tip">
 <p class="admonition-title">Tip</p>
 <p>No, it's not <a href="#asyncio-semaphore">Semaphore</a>,
@@ -147,8 +146,8 @@ to find out which is best.</p>
 </section>
 </details>
 <h2 id="setup">Setup<span class="headerlink"> <a href="#setup" title="permalink">#</a></span></h2>
-<p>To try things out more easily,
-let's write a test harness of sorts.</p>
+<p>In order to try things out more easily,
+we'll start with a test harness of sorts.</p>
 <!--
 <details>
 <summary>Imports:</summary>
@@ -158,19 +157,19 @@ let's write a test harness of sorts.</p>
 
 </details>
 -->
-<p>We start with a <code>map_unordered()</code>
-that relies on a <code>limit_concurrency()</code> generator
-to run awaitables from an iterable in parallel,
-<code>limit</code> at a time:</p>
+<p>Our <code>async map_unordered()</code> behaves pretty much like <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>
+– it takes a coroutine function and an iterable of arguments,
+and runs the resulting awaitables <code>limit</code> at a time:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
 <span class="normal"> 9</span>
-<span class="normal">10</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">map_unordered</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
+<span class="normal">10</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">map_unordered</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
     <span class="n">aws</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
-<p>... except right now it does them one by one
-(we'll get back to this later on):</p>
+<p>The actual running is done by <code>limit_concurrency()</code>.
+For now, running them one by one should be fine,
+we'll get back to this later on:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
@@ -189,19 +188,20 @@ to run awaitables from an iterable in parallel,
 </code></pre></div></td></tr></table></div>
 
 <p>To simulate work being done,
-we use something that's almost like <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.sleep">asyncio.sleep()</a>:</p>
+we just <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.sleep">sleep()</a>,
+maybe raising a ZeroDivisionError:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">23</span>
 <span class="normal">24</span>
 <span class="normal">25</span>
-<span class="normal">26</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">sleep</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
+<span class="normal">26</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">do_stuff</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
     <span class="mi">1</span> <span class="o">/</span> <span class="n">i</span>
     <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">i</span>
 </code></pre></div></td></tr></table></div>
 
-<p>We then use map_unordered() to sleep() concurrently
-as directed by the script arguments,
-printing timings along the way:</p>
+<p>Putting it all together,
+we get a <code>map_unordered.py LIMIT TIME...</code> script that does stuff in parallel,
+printing timings as we get each result:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">29</span>
 <span class="normal">30</span>
 <span class="normal">31</span>
@@ -219,7 +219,7 @@ printing timings along the way:</p>
 <span class="normal">43</span>
 <span class="normal">44</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">async_main</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
     <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
-    <span class="k">async</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">sleep</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">):</span>
         <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">start</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">result</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">start</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">: done&quot;</span><span class="p">)</span>
 
@@ -235,7 +235,7 @@ printing timings along the way:</p>
     <span class="n">main</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
 
-<p>We invoke the script with <code>python map_unordered.py LIMIT TIME...</code>, like so:</p>
+<p>... like so:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>map_unordered.py<span class="w"> </span><span class="m">2</span>
 <span class="go">0.0: done</span>
 <span class="gp">$ </span>python<span class="w"> </span>map_unordered.py<span class="w"> </span><span class="m">2</span><span class="w"> </span>.1<span class="w"> </span>.2
@@ -861,7 +861,7 @@ but it does make it more self-documenting.</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
 <span class="normal"> 9</span>
 <span class="normal">10</span>
-<span class="normal">11</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">map_unordered</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
+<span class="normal">11</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">map_unordered</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
     <span class="n">aws</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">)</span>
     <span class="k">async</span> <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">limit_concurrency</span><span class="p">(</span><span class="n">aws</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
         <span class="k">yield</span> <span class="k">await</span> <span class="n">task</span>
@@ -938,7 +938,7 @@ so we use a <a href="https://docs.python.org/3/glossary.html#term-generator-expr
 <span class="normal">12</span>
 <span class="normal">13</span>
 <span class="normal">14</span>
-<span class="normal">15</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">map_unordered</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
+<span class="normal">15</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">map_unordered</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">aws</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">iterable</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
@@ -1180,8 +1180,8 @@ Because we're not heartless, we can provide a handy decorator<sup class="footnot
 
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">66</span>
 <span class="normal">67</span>
-<span class="normal">68</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="n">wrapped</span> <span class="o">=</span> <span class="n">return_args_and_exceptions</span><span class="p">(</span><span class="n">sleep</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">for</span> <span class="n">arg</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">wrapped</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">limit</span><span class="p">):</span>
+<span class="normal">68</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="n">wrapped</span> <span class="o">=</span> <span class="n">return_args_and_exceptions</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">arg</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">wrapped</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">):</span>
         <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">start</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">arg</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">result</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
