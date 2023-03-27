@@ -168,8 +168,8 @@ and runs the resulting awaitables <code>limit</code> at a time:</p>
 </code></pre></div></td></tr></table></div>
 
 <p>The actual running is done by <code>limit_concurrency()</code>.
-For now, running them one by one should be fine,
-we'll get back to this later on:</p>
+For now, we run them one by one
+(we'll get back to this later on):</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
@@ -188,13 +188,12 @@ we'll get back to this later on:</p>
 </code></pre></div></td></tr></table></div>
 
 <p>To simulate work being done,
-we just <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.sleep">sleep()</a>,
-maybe raising a ZeroDivisionError:</p>
+we just <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.sleep">sleep()</a>:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">23</span>
 <span class="normal">24</span>
 <span class="normal">25</span>
 <span class="normal">26</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">do_stuff</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
-    <span class="mi">1</span> <span class="o">/</span> <span class="n">i</span>
+    <span class="mi">1</span> <span class="o">/</span> <span class="n">i</span>  <span class="c1"># raises ZeroDivisionError for i == 0</span>
     <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">i</span>
 </code></pre></div></td></tr></table></div>
@@ -245,16 +244,15 @@ printing timings as we get each result:</p>
 </code></pre></div>
 <section class="admonition tip">
 <p class="admonition-title">Tip</p>
-<p>If you need a refresher on the lower level <a href="https://docs.python.org/3/library/asyncio.html">asyncio</a> stuff we'll use,
+<p>If you need a refresher on lower level <a href="https://docs.python.org/3/library/asyncio.html">asyncio</a> stuff related to waiting,
  check out Hynek Schlawack's excellent
  <a href="https://hynek.me/articles/waiting-in-asyncio/">Waiting in asyncio</a>.</p>
 </section>
 <h2 id="asyncio-gather">asyncio.gather()<span class="headerlink"> <a href="#asyncio-gather" title="permalink">#</a></span></h2>
 <p>In the <a href="https://docs.python.org/3/library/asyncio-task.html#running-tasks-concurrently">Running Tasks Concurrently</a> section of the asyncio docs,
 we find <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.gather">asyncio.gather()</a>,
-which runs multiple awaitables,
-and returns a list of results.</p>
-<p>We can use it to run <code>limit</code>-sized chunks of awaitables:</p>
+which runs awaitables concurrently and returns their results.</p>
+<p>We can use it to run <code>limit</code>-sized batches:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
@@ -290,25 +288,29 @@ and returns a list of results.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Text only"><span></span><code>| sleep(.1) |       sleep(.2)       |
 |       sleep(.2)       | sleep(.1) |
 </code></pre></div>
-<p>It looks like we're waiting for all tasks in a batch to finish,
-instead of allowing any of the next tasks to run:</p>
+<p>... but we're waiting for the entire batch to finish,
+even if some tasks finish earlier:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Text only"><span></span><code>| sleep(.1) |...........|       sleep(.2)       |
 |       sleep(.2)       | sleep(.1) |...........|
 </code></pre></div>
 <h2 id="asyncio-semaphore">asyncio.Semaphore<span class="headerlink"> <a href="#asyncio-semaphore" title="permalink">#</a></span></h2>
-<p>Screw the docs, too much to read.</p>
-<p>We do some googling,
-and the first few Stack Overflow answers point us to <a href="https://docs.python.org/3/library/asyncio-sync.html#asyncio.Semaphore">asyncio.Semaphore</a>.</p>
-<p>Like its <a href="https://docs.python.org/3/library/threading.html#threading.Semaphore">threading cousin</a>,
+<p>Screw the docs, too much to read;
+after some googling,
+the first few Stack Overflow answers all point to <a href="https://docs.python.org/3/library/asyncio-sync.html#asyncio.Semaphore">asyncio.Semaphore</a>.</p>
+<p>Like its <a href="https://docs.python.org/3/library/threading.html#threading.Semaphore">threading counterpart</a>,
 we can use it to limit
-how many times the body of a <code>with</code> block can be entered in parallel:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">sem</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+how many times the body of a <code>with</code> block is entered in parallel:</p>
+<!--
+```python
+sem = asyncio.Semaphore(10)
 
-<span class="c1"># ... later</span>
-<span class="k">async</span> <span class="k">with</span> <span class="n">sem</span><span class="p">:</span>
-    <span class="c1"># this can run no more than 10 times in parallel</span>
-</code></pre></div>
-<p>Sounds about what we're looking for:</p>
+# ... later
+async with sem:
+    # no more than 10 times in parallel
+```
+
+Sounds about what we're looking for:
+-->
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
@@ -328,6 +330,7 @@ how many times the body of a <code>with</code> block can be entered in parallel:
         <span class="k">yield</span> <span class="n">result</span>
 </code></pre></div></td></tr></table></div>
 
+<p>This works:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>map_unordered.py<span class="w"> </span><span class="m">2</span><span class="w"> </span>.1<span class="w"> </span>.2<span class="w"> </span>.2<span class="w"> </span>.1
 <span class="go">0.3: 0.1</span>
 <span class="go">0.3: 0.2</span>
@@ -336,7 +339,7 @@ how many times the body of a <code>with</code> block can be entered in parallel:
 <span class="go">0.3: done</span>
 </code></pre></div>
 <p>... except, because <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.gather">gather()</a> takes a sequence,
-we end up consuming the entire <code>aws</code> iterable right away,
+we end up consuming the entire <code>aws</code> iterable
 before <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.gather">gather()</a> is even called.
 Let's highlight this:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">37</span>
@@ -364,38 +367,35 @@ Let's highlight this:</p>
 <span class="go">0.3: 0.1</span>
 <span class="go">0.3: done</span>
 </code></pre></div>
-<p>This may be OK for small iterables, but it has two issues:</p>
-<ul>
-<li>for big iterables, we create thousands upon thousands of tasks,
-without actually running them (yet);
-that has to cause some memory issues</li>
-<li>if the iterable is lazy (say, a paginated API),
-we have to wait for all of it to be consumed,
-instead of starting to do work as soon as we can</li>
-</ul>
+<p>For small iterables, this is fine, 
+but for bigger ones,
+creating all the tasks upfront without running them
+might cause memory issues.
+Also, if the iterable is lazy (e.g. it comes from a paginated API),
+we only start work after it's all consumed in memory,
+instead processing it in a streaming fashion.</p>
 <h2 id="asyncio-as-completed">asyncio.as_completed()<span class="headerlink"> <a href="#asyncio-as-completed" title="permalink">#</a></span></h2>
-<p>At a quick glance, <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.as_completed">asyncio.as_completed()</a> might do what we need
+<p>At a glance, <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.as_completed">asyncio.as_completed()</a> might do what we need
 – it takes an iterable of awaitables, runs them concurrently,
 and returns an iterator of coroutines that
 &quot;can be awaited to get the earliest next result
 from the iterable of the remaining awaitables&quot;.</p>
-<p>But, it has two issues.</p>
-<p>First, <a href="https://github.com/python/cpython/blob/3.11/Lib/asyncio/tasks.py#L557">it consumes the iterable right away</a>:</p>
+<p>Sadly, <a href="https://github.com/python/cpython/blob/3.11/Lib/asyncio/tasks.py#L557">it still consumes the iterable right away</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">as_completed</span><span class="p">(</span><span class="n">fs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="o">...</span>  <span class="c1"># set-up</span>
     <span class="n">todo</span> <span class="o">=</span> <span class="p">{</span><span class="n">ensure_future</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">loop</span><span class="o">=</span><span class="n">loop</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">fs</span><span class="p">)}</span>
     <span class="o">...</span>  <span class="c1"># actual logic</span>
 </code></pre></div>
-<p>The second is more subtle, but just as fundamental.</p>
+<p>But there's another, subtler issue.</p>
 <p><a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.as_completed">as_completed()</a> has no limits of its own
 – it's up to us to limit how fast we feed it awaitables.
 Presumably, we could wrap the input iterable
 into a generator that yields awaitables
 only if enough results came out the other end,
-and otherwise waits in some way.</p>
-<p>However, due to historical reasons,
-<a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.as_completed">as_completed()</a> takes a plain-old-<em>sync</em>-iterator
-– we cannot <code>await</code> anything in its (sync) <a href="https://docs.python.org/3/library/stdtypes.html#iterator.__next__">__next__()</a> method,
+and waits otherwise.</p>
+<p>However, due to <a href="https://peps.python.org/pep-3156/#waiting-for-multiple-coroutines">historical</a> <a href="https://peps.python.org/pep-0525/#support-for-asynchronous-iteration-protocol">reasons</a>,
+as_completed() takes a plain-old-<em>sync</em>-iterator
+– we cannot <code>await</code> anything in its (sync) <a href="https://docs.python.org/3/library/stdtypes.html#iterator.__next__">__next__()</a>,
 and sync waiting of any kind would block (and possibly deadlock)
 the entire event loop.</p>
 <p>So, no <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.as_completed">as_completed()</a> for you.</p>
@@ -416,13 +416,13 @@ iter end
 
 -->
 <h2 id="asyncio-queue">asyncio.Queue<span class="headerlink"> <a href="#asyncio-queue" title="permalink">#</a></span></h2>
-<p>Speaking of threading cousins,
-how would you implement the (sync) <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>
+<p>Speaking of threading counterparts,
+how would you implement <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>
 if there was no Pool? Queues, of course!</p>
 <p>And <a href="https://docs.python.org/3/library/asyncio.html">asyncio</a> has its own <a href="https://docs.python.org/3/library/asyncio-queue.html#asyncio.Queue">Queue</a>,
 which you use in pretty much the same way:
 start <code>limit</code> worker tasks that loop forever,
-pulling awaitables, awaiting them,
+each pulling awaitables, awaiting them,
 and putting the results into a queue.</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
@@ -496,11 +496,11 @@ and putting the results into a queue.</p>
 </code></pre></div>
 <p>I was going to work up to this in a few steps,
 but I'll just point out three common bugs
-this type of code might have (and these apply to threads too).</p>
+this type of code might have (that apply to threads too).</p>
 <details>
 <summary>
 First,
-we could increment <code>ndone</code> from the worker
+we could increment <code>ndone</code> from the worker,
 but this makes <code>await queue.get()</code> hang forever for empty iterables,
 since workers never get to run by the time we get to it;
 because there's no other await, it's not even a race condition.
@@ -557,8 +557,8 @@ because there's no other await, it's not even a race condition.
 </details>
 <p>The solution is to signal the worker is done in-band,
 by putting a <a href="/sentinels#what-s-a-sentinel-and-why-do-i-need-one">sentinel</a> on the queue.
-I guess a good rule of thumb for this kind of thing
-is that for each get() without a timeout, you want to have a put().<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
+I guess a good rule of thumb
+is that you want a put() for each get() without a timeout.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
 <!--
 ```console
 $ python map_unordered.py 2
@@ -569,12 +569,10 @@ iter end
 <details>
 <summary>
 Second,
-you have to catch exceptions raised by awaitables
-and send them through the queue as well;
+you have to catch all exceptions;
 otherwise,
 the worker gets killed,
-and even though the remaining ones keep going,
-that's one more get() waiting for a put() that will never come.
+and <code>get()</code> waits forever for a sentinel that will never come.
 </summary>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
@@ -653,23 +651,23 @@ ZeroDivisionError: float division by zero
 ```
 -->
 <p>Finally, our input iterator is synchronous (for now),
-so no other task can run while we do <code>next(aws)</code>.
-But if it were asynchronous,
-any number of tasks could <code>await anext(aws)</code> at any given time,
-leading to potential <a href="https://stackoverflow.com/a/46858792">concurrency issues</a>.
+so no other task can run during <code>next(aws)</code>.
+But if it were async,
+any number of tasks could <code>await anext(aws)</code> in parallel,
+leading to <a href="https://stackoverflow.com/a/46858792">concurrency issues</a>.
 The fix is the same as with threads:
 either protect that call with a <a href="https://docs.python.org/3/library/asyncio-sync.html#asyncio.Lock">Lock</a>,
 or feed awaitables to workers through an input queue.</p>
 <p>Anyway, no need to worry about any that – a better solution awaits.</p>
 <h2 id="aside-backpressure">Aside: backpressure<span class="headerlink"> <a href="#aside-backpressure" title="permalink">#</a></span></h2>
 <p>At this point, we're technically done
-– the queue solution does everything <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">Pool.​imap_unordered()</a> does.</p>
+– the queue solution does everything
+<a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">Pool.​imap_unordered()</a> does.</p>
 <p>So much so, that, <a href="https://bugs.python.org/issue40110">like imap_unordered()</a>,
 it lacks <a href="https://medium.com/@jayphelps/backpressure-explained-the-flow-of-data-through-software-2350b3e77ce7">backpressure</a>:
-when the code retrieving results from the map iterable
-can't keep up with the tasks producing results,
-the workers keep going regardless,
-and the results accumulate in the internal queue,
+when code consuming results from <code>map_unordered()</code>
+cannot keep up with the tasks producing them,
+the results accumulate in the internal queue,
 with potentially infinite memory usage.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">pool</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">dummy</span><span class="o">.</span><span class="n">Pool</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span><span class="nb">print</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)):</span>
@@ -702,10 +700,8 @@ with potentially infinite memory usage.</p>
 <span class="go">got result</span>
 <span class="go">got result</span>
 </code></pre></div>
-<p>This can be fixed by making the queue bounded,
-so that when the queue gets full,
-workers can't put() new data until
-the consumer get()s some old data.</p>
+<p>To fix this, we make the queue bounded,
+so that workers block while the queue is full.</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">15</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="n">queue</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="n">limit</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">async</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">async_print</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">),</span> <span class="mi">1</span><span class="p">):</span>
@@ -723,7 +719,9 @@ the consumer get()s some old data.</p>
 <span class="go">got result</span>
 <span class="go">got result</span>
 </code></pre></div>
-<p>Alas, we don't have access to the queue <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a> uses,
+<p>Alas, we can't do the same thing for
+<a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">Pool.​imap_unordered()</a>
+because don't have access to its queue,
 but that's a story for another time.</p>
 <!--
 
@@ -792,13 +790,13 @@ iter end
 
 -->
 <h2 id="asyncio-wait">asyncio.wait()<span class="headerlink"> <a href="#asyncio-wait" title="permalink">#</a></span></h2>
-<p>This whole pretend-we're-using-threads thing works,
+<p>Pretending we're using threads works,
 but it's not all that idiomatic.</p>
 <p>If only there was some sort of low level, <a href="https://linux.die.net/man/2/select">select()</a>-like primitive
-that takes a set of tasks
-and blocks until at least one of them finishes.
+taking a set of tasks
+and blocking until at least one of them finishes.
 And of course there is
-– I've been purposefully avoiding it this entire time –
+– we've been purposefully avoiding it this entire time –
 it's <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.wait">asyncio.wait()</a>, and it does exactly that.</p>
 <p>By default, it waits until all tasks are completed,
 which isn't much better than <a href="#asyncio-gather">gather()</a>.</p>
@@ -851,13 +849,12 @@ updated with new tasks as soon as the old ones finish:</p>
             <span class="k">yield</span> <span class="n">done</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
 
-<p>We take this opportunity
-to change <code>limit_concurrency()</code> to yield awaitables instead of results
-– awaitables in, awaitables out.</p>
-<p><code>map_unordered()</code> becomes an async generator function,
+<p>We change <code>limit_concurrency()</code> to yield awaitables instead of results,
+so it's more symmetric – awaitables in, awaitables out.
+<code>map_unordered()</code> then becomes an async generator function,
 instead of a sync function returning an async generator.
-This doesn't really change how you use it,
-but it does make it more self-documenting.</p>
+This is functionally the same,
+but does make it a bit more self-documenting.</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
 <span class="normal"> 9</span>
 <span class="normal">10</span>
