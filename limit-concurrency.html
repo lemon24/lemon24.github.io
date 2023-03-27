@@ -24,8 +24,10 @@
 
 
 
-<title>Limiting concurrency in Python asyncio; or, the story of async imap_unordered() - death and gravity</title>
+<title>Limiting concurrency in Python asyncio – the story of async imap_unordered() - death and gravity</title>
 
+
+<meta name="description" content="So, you&#39;re doing some async stuff, repeatedly, hundreds of thousands of times. How do you *not* do it all at once? Hint: asyncio.Semaphore is not the best way, despite what Stack Overflow may tell you." />
 
 
 
@@ -41,6 +43,15 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
 
 
 
@@ -58,28 +69,28 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">Limiting concurrency in Python asyncio; or, the story of async imap_unordered()</h1>
+<h1 class="heading-noindex">Limiting concurrency in Python asyncio – the story of async imap_unordered()</h1>
 
 <p class="text-gray text-nowrap">
 
 
 
 <small>
-<span class="tooltip" data-tooltip="published on 2023-01-23">January 2023</span>
-∙ 13 minute read
+<span class="tooltip" data-tooltip="published on 2023-03-27">March 2023</span>
+∙ 11 minute read
 ∙
 </small><span class="share-icons">
 <a
     class="share-icon twitter"
-    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29&url=https%3A//death.andgravity.com/asyncio-map-unordered&via=_andgravity"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Limiting%20concurrency%20in%20Python%20asyncio%20%E2%80%93%20the%20story%20of%20async%20imap_unordered%28%29&url=https%3A//death.andgravity.com/limit-concurrency&via=_andgravity"
 >Twitter</a>
 <a
     class="share-icon hacker-news"
-    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/asyncio-map-unordered&t=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/limit-concurrency&t=Limiting%20concurrency%20in%20Python%20asyncio%20%E2%80%93%20the%20story%20of%20async%20imap_unordered%28%29"
 >HN</a>
 <a
     class="share-icon reddit"
-    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/asyncio-map-unordered&title=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/limit-concurrency&title=Limiting%20concurrency%20in%20Python%20asyncio%20%E2%80%93%20the%20story%20of%20async%20imap_unordered%28%29"
 >Reddit</a>
 </span>
 
@@ -97,7 +108,6 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<!-- TODO: rename this to limit-concurrency -->
 <p>So, you're doing some async stuff, repeatedly, many times.</p>
 <p>Like, <strong>hundreds of thousands of times</strong>.</p>
 <p>Maybe you're scraping some data.</p>
@@ -141,7 +151,6 @@ and find out which one is best.</p>
 <li><a href="#aside-backpressure">Aside: backpressure</a></li>
 <li><a href="#asyncio-wait">asyncio.wait()</a></li>
 <li><a href="#async-iterables">Async iterables</a></li>
-<li><a href="#bonus-exceptions">Bonus: exceptions</a></li>
 </ul>
 </section>
 </details>
@@ -367,7 +376,7 @@ Let's highlight this:</p>
 <span class="go">0.3: 0.1</span>
 <span class="go">0.3: done</span>
 </code></pre></div>
-<p>For small iterables, this is fine, 
+<p>For small iterables, this is fine,
 but for bigger ones,
 creating all the tasks upfront without running them
 might cause memory issues.
@@ -888,20 +897,20 @@ but does make it a bit more self-documenting.</p>
 <span class="go">got result</span>
 </code></pre></div>
 <h2 id="async-iterables">Async iterables<span class="headerlink"> <a href="#async-iterables" title="permalink">#</a></span></h2>
-<p>OK, so what if the arguments iterable we pass to <code>map_unordered()</code>
-is <a href="https://docs.python.org/3/glossary.html#term-asynchronous-iterable">asynchronous</a>?
-This is async code, after all.</p>
-<p>This opens us up to a whole looking-glass world of async iteration
-– instead of <a href="https://docs.python.org/3/library/functions.html#iter">iter()</a> you have <a href="https://docs.python.org/3/library/functions.html#aiter">aiter()</a>,
+<p>OK, but what if we pass <code>map_unordered()</code>
+an <a href="https://docs.python.org/3/glossary.html#term-asynchronous-iterable">asynchronous iterable</a>?
+We are talking about async stuff, after all.</p>
+<p>This opens up a whole looking-glass world of async iteration:
+instead of <a href="https://docs.python.org/3/library/functions.html#iter">iter()</a> you have <a href="https://docs.python.org/3/library/functions.html#aiter">aiter()</a>,
 instead of <a href="https://docs.python.org/3/library/functions.html#next">next()</a> you have <a href="https://docs.python.org/3/library/functions.html#anext">anext()</a>,
-some of them you await, some of them you don't...</p>
-<p>Thankfully,
-we can support both without having two versions of the code,
-and without making the one version much worse.</p>
-<p>And we don't need to be particularly smart either about it either;
+some of them you await, some you don't...
+Thankfully,
+we can support both
+without making things much worse.</p>
+<p>And we don't need to be particularly smart about it either;
 we can just feed the current code an async iterable from <code>main()</code>,
 and punch our way through the exceptions:</p>
-<!-- on_iter_end -->
+<!-- as_async_iter -->
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">57</span>
 <span class="normal">58</span>
 <span class="normal">59</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">as_async_iter</span><span class="p">(</span><span class="n">it</span><span class="p">):</span>
@@ -945,11 +954,11 @@ so we use a <a href="https://docs.python.org/3/glossary.html#term-generator-expr
         <span class="k">yield</span> <span class="k">await</span> <span class="n">task</span>
 </code></pre></div></td></tr></table></div>
 
-<p>Note that in true <a href="https://docs.python.org/3/glossary.html#term-EAFP">easier to ask for forgiveness than permission</a> fashion,
-we just handle the exception from <a href="https://docs.python.org/3/library/functions.html#map">map()</a> instead of, say,
+<p>In true <a href="https://docs.python.org/3/glossary.html#term-EAFP">easier to ask for forgiveness than permission</a> style,
+we handle the exception from <a href="https://docs.python.org/3/library/functions.html#map">map()</a> instead of, say,
 checking if <code>aws</code> is an instance of <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable">collections.​abc.​Iterable</a>.</p>
-<p>Also, we <em>could</em> pass only async iterables to <code>limit_concurrency()</code>,
-but it's useful on its own,
+<p>We could wrap <code>aws</code> to always be an async iterable,
+but <code>limit_concurrency()</code> is useful on it its own,
 so it's better to support both.</p>
 <hr />
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>map_unordered.py<span class="w"> </span><span class="m">2</span><span class="w"> </span>.1<span class="w"> </span>.2<span class="w"> </span>.2<span class="w"> </span>.1
@@ -1002,15 +1011,7 @@ so it's better to support both.</p>
 </code></pre></div></td></tr></table></div>
 
 <p>... which unlike <a href="https://docs.python.org/3/library/functions.html#aiter">aiter()</a>, has to be awaited.</p>
-<p>It may not look 100% pretty, but it gets the job done:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>map_unordered.py<span class="w"> </span><span class="m">2</span><span class="w"> </span>.1<span class="w"> </span>.2<span class="w"> </span>.2<span class="w"> </span>.1
-<span class="go">0.1: 0.1</span>
-<span class="go">0.2: 0.2</span>
-<span class="go">0.3: 0.1</span>
-<span class="go">0.3: 0.2</span>
-<span class="go">iter end</span>
-<span class="go">0.3: done</span>
-</code></pre></div>
+<hr />
 <details>
 <summary>Here's <code>limit_concurrency()</code> in its entire glory:</summary>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span>
@@ -1071,26 +1072,35 @@ so it's better to support both.</p>
 </code></pre></div></td></tr></table></div>
 
 </details>
+<p>Not as clean as before, but it gets the job done:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>map_unordered.py<span class="w"> </span><span class="m">2</span><span class="w"> </span>.1<span class="w"> </span>.2<span class="w"> </span>.2<span class="w"> </span>.1
+<span class="go">0.1: 0.1</span>
+<span class="go">0.2: 0.2</span>
+<span class="go">0.3: 0.1</span>
+<span class="go">0.3: 0.2</span>
+<span class="go">iter end</span>
+<span class="go">0.3: done</span>
+</code></pre></div>
 <p>Anyway, that's it for now.</p>
 <p><strong>Learned something new today?</strong> Share this with others, it really helps! <span class="text-large">
 <span class="share-icons">
 <a
     class="share-icon twitter color"
-    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29&url=https%3A//death.andgravity.com/asyncio-map-unordered&via=_andgravity"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Limiting%20concurrency%20in%20Python%20asyncio%20%E2%80%93%20the%20story%20of%20async%20imap_unordered%28%29&url=https%3A//death.andgravity.com/limit-concurrency&via=_andgravity"
 >Twitter</a>
 <a
     class="share-icon hacker-news color"
-    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/asyncio-map-unordered&t=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/limit-concurrency&t=Limiting%20concurrency%20in%20Python%20asyncio%20%E2%80%93%20the%20story%20of%20async%20imap_unordered%28%29"
 >HN</a>
 <a
     class="share-icon reddit color"
-    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/asyncio-map-unordered&title=Limiting%20concurrency%20in%20Python%20asyncio%3B%20or%2C%20the%20story%20of%20async%20imap_unordered%28%29"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/limit-concurrency&title=Limiting%20concurrency%20in%20Python%20asyncio%20%E2%80%93%20the%20story%20of%20async%20imap_unordered%28%29"
 >Reddit</a>
 </span>
 </span></p>
 
 <form
-    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=asyncio-map-unordered"
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=limit-concurrency"
     method="post"
     id="embedded-subscribe-form"
     name="mc-embedded-subscribe-form"
@@ -1137,81 +1147,96 @@ so it's better to support both.</p>
     </div>
 
 </form>
-<h2 id="bonus-exceptions">Bonus: exceptions<span class="headerlink"> <a href="#bonus-exceptions" title="permalink">#</a></span></h2>
-<p>OK, so what about exceptions?</p>
-<p>Most times,
+<!--
+
+# Bonus: exceptions
+
+OK, so what about exceptions?
+
+Most times,
 you still want to process the rest of the things even if one failed.
 Furthermore,
-the results yielded by <code>map_unordered()</code> won't be in order,
-so how do you know which one failed?</p>
-<p>We could just return the <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.Task">Task</a> to the user.
+the results yielded by `map_unordered()` won't be in order,
+so how do you know which one failed?
+
+
+We could just return the [Task] to the user.
 This helps with the first thing,
 but not the second
 (there's no reliable way to get the arguments of a completed task),
-and breaks symmetry with <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">Pool.​imap_unordered()</a>.</p>
-<p>We could take inspiration from <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.gather">gather()</a>,
-and add a <code>return_exceptions</code> argument,
-but this also breaks symmetry with <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">Pool.​imap_unordered()</a>,
-and we'd still need to add a <code>return_args</code>,
-which <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.gather">gather()</a> doesn't have.</p>
-<p>Instead,
-we'll let the user handle this just like they would with <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">Pool.​imap_unordered()</a> –
+and breaks symmetry with [Pool.&ZeroWidthSpace;imap_unordered()][imap_unordered()].
+
+We could take inspiration from [gather()],
+and add a `return_exceptions` argument,
+but this also breaks symmetry with [Pool.&ZeroWidthSpace;imap_unordered()][imap_unordered()],
+and we'd still need to add a `return_args`,
+which [gather()] doesn't have.
+
+
+Instead,
+we'll let the user handle this just like they would with [Pool.&ZeroWidthSpace;imap_unordered()][imap_unordered()] –
 by wrapping their original function.
-Because we're not heartless, we can provide a handy decorator<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup> for it:</p>
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">48</span>
-<span class="normal">49</span>
-<span class="normal">50</span>
-<span class="normal">51</span>
-<span class="normal">52</span>
-<span class="normal">53</span>
-<span class="normal">54</span>
-<span class="normal">55</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">return_args_and_exceptions</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">_return_args_and_exceptions</span><span class="p">,</span> <span class="n">func</span><span class="p">)</span>
+Because we're not heartless, we can provide a handy decorator[^deco] for it:
 
-<span class="k">async</span> <span class="k">def</span> <span class="nf">_return_args_and_exceptions</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="k">await</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="k">return</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">e</span>
-</code></pre></div></td></tr></table></div>
+[^deco]: Even though we're not using it with with the `@wrapper` syntax,
+  it's still a [decorator]
+  – a function that takes a function and returns a function.
 
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">66</span>
-<span class="normal">67</span>
-<span class="normal">68</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="n">wrapped</span> <span class="o">=</span> <span class="n">return_args_and_exceptions</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">for</span> <span class="n">arg</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">map_unordered</span><span class="p">(</span><span class="n">wrapped</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">):</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">start</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">arg</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">result</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</code></pre></div></td></tr></table></div>
+[decorator]: https://docs.python.org/3/glossary.html#term-decorator
 
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>map_unordered.py<span class="w"> </span><span class="m">2</span><span class="w"> </span>.1<span class="w"> </span>.2<span class="w"> </span><span class="m">0</span><span class="w"> </span>.2<span class="w"> </span>.1
-<span class="go">0.1: 0.1 -&gt; 0.1</span>
-<span class="go">0.1: 0.0 -&gt; float division by zero</span>
-<span class="go">0.2: 0.2 -&gt; 0.2</span>
-<span class="go">0.3: 0.2 -&gt; 0.2</span>
-<span class="go">0.3: 0.1 -&gt; 0.1</span>
-<span class="go">iter end</span>
-<span class="go">0.3: done</span>
-</code></pre></div>
-<p>Finally, here's a cool thing I learned from the <a href="https://docs.python.org/3/library/asyncio-eventloop.html#asyncio-pass-keywords">asyncio docs</a>:
-by returning a <a href="https://docs.python.org/3/library/functools.html#functools.partial">partial()</a> instead of defining and returning a wrapper function,
-you get a more descriptive (although a bit more verbose) representation for it:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">return_args_and_exceptions</span><span class="p">(</span><span class="n">sleep</span><span class="p">)</span>
-<span class="go">functools.partial(&lt;function _return_args_and_exceptions at 0x10647fd80&gt;, &lt;function sleep at 0x10647d8a0&gt;)</span>
-</code></pre></div>
-<p>Compare with the more traditional version:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">return_args_and_exceptions</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
-        <span class="o">...</span>
-    <span class="k">return</span> <span class="n">wrapper</span>
-</code></pre></div>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">return_args_and_exceptions</span><span class="p">(</span><span class="n">sleep</span><span class="p">)</span>
-<span class="go">&lt;function return_args_and_exceptions.&lt;locals&gt;.wrapper at 0x103993560&gt;</span>
-</code></pre></div>
+
+.. literalinclude:: mo_70_exceptions.py
+    :lines: 48-55
+
+.. literalinclude:: mo_70_exceptions.py
+    :lines: 66-68
+
+
+```console
+$ python map_unordered.py 2 .1 .2 0 .2 .1
+0.1: 0.1 -> 0.1
+0.1: 0.0 -> float division by zero
+0.2: 0.2 -> 0.2
+0.3: 0.2 -> 0.2
+0.3: 0.1 -> 0.1
+iter end
+0.3: done
+```
+
+
+Finally, here's a cool thing I learned from the [asyncio docs][pass-keywords]:
+by returning a [partial()] instead of defining and returning a wrapper function,
+you get a more descriptive (although a bit more verbose) representation for it:
+
+```pycon
+>>> return_args_and_exceptions(sleep)
+functools.partial(<function _return_args_and_exceptions at 0x10647fd80>, <function sleep at 0x10647d8a0>)
+```
+
+Compare with the more traditional version:
+
+```python
+def return_args_and_exceptions(func):
+    async def wrapper(*args):
+        ...
+    return wrapper
+```
+
+```pycon
+>>> return_args_and_exceptions(sleep)
+<function return_args_and_exceptions.<locals>.wrapper at 0x103993560>
+```
+
+
+[Task]: https://docs.python.org/3/library/asyncio-task.html#asyncio.Task
+[pass-keywords]: https://docs.python.org/3/library/asyncio-eventloop.html#asyncio-pass-keywords
+[partial()]: https://docs.python.org/3/library/functools.html#functools.partial
+[repr()]: https://docs.python.org/3/library/functions.html#repr
+
+-->
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>Does this have a fancy, academic name? <a href="/about#contact">Do let me know!</a> <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>Even though we're not using it with with the <code>@wrapper</code> syntax,
-it's still a <a href="https://docs.python.org/3/glossary.html#term-decorator">decorator</a>
-– a function that takes a function and returns a function. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
