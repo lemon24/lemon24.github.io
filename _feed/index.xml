@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity</title>
-  <updated>2023-03-27T18:00:00+00:00</updated>
+  <updated>2023-03-28T18:00:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
@@ -12,7 +12,7 @@
   <entry xml:base="https://death.andgravity.com/limit-concurrency">
     <id>https://death.andgravity.com/limit-concurrency</id>
     <title>Limiting concurrency in Python asyncio: the story of async imap_unordered()</title>
-    <updated>2023-03-27T18:00:00+00:00</updated>
+    <updated>2023-03-28T18:00:00+00:00</updated>
     <content type="html">&lt;p&gt;So, you're doing some async stuff, repeatedly, many times.&lt;/p&gt;
 &lt;p&gt;Like, &lt;strong&gt;hundreds of thousands of times&lt;/strong&gt;.&lt;/p&gt;
 &lt;p&gt;Maybe you're scraping some data.&lt;/p&gt;
@@ -44,8 +44,6 @@ and find out which one is best.&lt;/p&gt;
 &lt;p class="admonition-title"&gt;Tip&lt;/p&gt;
 &lt;p&gt;If you're in a hurry – it's &lt;a href="#asyncio-wait"&gt;wait()&lt;/a&gt;.&lt;/p&gt;
 &lt;/section&gt;
-&lt;!-- &lt;details open&gt; --&gt;
-&lt;!-- &lt;summary&gt;Contents&lt;/summary&gt; --&gt;
 &lt;section class="toc"&gt;
 &lt;ul&gt;
 &lt;li&gt;&lt;a href="#getting-started"&gt;Getting started&lt;/a&gt;&lt;/li&gt;
@@ -56,9 +54,10 @@ and find out which one is best.&lt;/p&gt;
 &lt;li&gt;&lt;a href="#aside-backpressure"&gt;Aside: backpressure&lt;/a&gt;&lt;/li&gt;
 &lt;li&gt;&lt;a href="#asyncio-wait"&gt;asyncio.wait()&lt;/a&gt;&lt;/li&gt;
 &lt;li&gt;&lt;a href="#async-iterables"&gt;Async iterables&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#bonus-exceptions"&gt;Bonus: exceptions&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#bonus-better-decorators"&gt;Bonus: better decorators?&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 &lt;/section&gt;
-&lt;!-- &lt;/details&gt; --&gt;
 &lt;h2 id="getting-started"&gt;Getting started&lt;span class="headerlink"&gt; &lt;a href="#getting-started" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
 &lt;p&gt;In order to try things out more easily,
 we'll start with a test harness of sorts.&lt;/p&gt;
@@ -1005,93 +1004,70 @@ so it's better to support both.&lt;/p&gt;
 &lt;/span&gt;&lt;/p&gt;
 
 
-&lt;!--
+&lt;h2 id="bonus-exceptions"&gt;Bonus: exceptions&lt;span class="headerlink"&gt; &lt;a href="#bonus-exceptions" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;OK, so what about exceptions?&lt;/p&gt;
+&lt;p&gt;A lot of times,
+you still want to do the rest of the things,
+even if one fails.
+Also, you probably want to know &lt;em&gt;which&lt;/em&gt; one failed,
+but the &lt;code&gt;map_unordered()&lt;/code&gt; results are not in order,
+so how could you tell?&lt;/p&gt;
+&lt;p&gt;The most flexible solution is to let the user handle it
+just like they would with
+&lt;a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered"&gt;Pool.​imap_unordered()&lt;/a&gt; –
+by decorating the original function.
+Here's one way of doing it:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;table class="highlighttable"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;48&lt;/span&gt;
+&lt;span class="normal"&gt;49&lt;/span&gt;
+&lt;span class="normal"&gt;50&lt;/span&gt;
+&lt;span class="normal"&gt;51&lt;/span&gt;
+&lt;span class="normal"&gt;52&lt;/span&gt;
+&lt;span class="normal"&gt;53&lt;/span&gt;
+&lt;span class="normal"&gt;54&lt;/span&gt;
+&lt;span class="normal"&gt;55&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;return_args_and_exceptions&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;func&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;functools&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;partial&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_return_args_and_exceptions&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;func&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 
-# Bonus: exceptions
+&lt;span class="k"&gt;async&lt;/span&gt; &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;_return_args_and_exceptions&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;func&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="k"&gt;await&lt;/span&gt; &lt;span class="n"&gt;func&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="ne"&gt;Exception&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;e&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;
 
-OK, so what about exceptions?
+&lt;div class="highlight code-container"&gt;&lt;table class="highlighttable"&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;66&lt;/span&gt;
+&lt;span class="normal"&gt;67&lt;/span&gt;
+&lt;span class="normal"&gt;68&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="n"&gt;wrapped&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;return_args_and_exceptions&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;do_stuff&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;async&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;arg&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;result&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;map_unordered&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;wrapped&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;limit&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;limit&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;time&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;monotonic&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;start&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="si"&gt;:&lt;/span&gt;&lt;span class="s2"&gt;.1f&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;: &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;arg&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; -&amp;gt; &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;
 
-Most times,
-you still want to process the rest of the things even if one failed.
-Furthermore,
-the results yielded by `map_unordered()` won't be in order,
-so how do you know which one failed?
-
-
-We could just return the [Task] to the user.
-This helps with the first thing,
-but not the second
-(there's no reliable way to get the arguments of a completed task),
-and breaks symmetry with [Pool.&amp;ZeroWidthSpace;imap_unordered()][imap_unordered()].
-
-We could take inspiration from [gather()],
-and add a `return_exceptions` argument,
-but this also breaks symmetry with [Pool.&amp;ZeroWidthSpace;imap_unordered()][imap_unordered()],
-and we'd still need to add a `return_args`,
-which [gather()] doesn't have.
-
-
-Instead,
-we'll let the user handle this just like they would with [Pool.&amp;ZeroWidthSpace;imap_unordered()][imap_unordered()] –
-by wrapping their original function.
-Because we're not heartless, we can provide a handy decorator[^deco] for it:
-
-[^deco]: Even though we're not using it with with the `@wrapper` syntax,
-  it's still a [decorator]
-  – a function that takes a function and returns a function.
-
-[decorator]: https://docs.python.org/3/glossary.html#term-decorator
-
-
-.. literalinclude:: mo_70_exceptions.py
-    :lines: 48-55
-
-.. literalinclude:: mo_70_exceptions.py
-    :lines: 66-68
-
-
-```console
-$ python map_unordered.py 2 .1 .2 0 .2 .1
-0.1: 0.1 -&gt; 0.1
-0.1: 0.0 -&gt; float division by zero
-0.2: 0.2 -&gt; 0.2
-0.3: 0.2 -&gt; 0.2
-0.3: 0.1 -&gt; 0.1
-iter end
-0.3: done
-```
-
-
-Finally, here's a cool thing I learned from the [asyncio docs][pass-keywords]:
-by returning a [partial()] instead of defining and returning a wrapper function,
-you get a more descriptive (although a bit more verbose) representation for it:
-
-```pycon
-&gt;&gt;&gt; return_args_and_exceptions(sleep)
-functools.partial(&lt;function _return_args_and_exceptions at 0x10647fd80&gt;, &lt;function sleep at 0x10647d8a0&gt;)
-```
-
-Compare with the more traditional version:
-
-```python
-def return_args_and_exceptions(func):
-    async def wrapper(*args):
-        ...
-    return wrapper
-```
-
-```pycon
-&gt;&gt;&gt; return_args_and_exceptions(sleep)
-&lt;function return_args_and_exceptions.&lt;locals&gt;.wrapper at 0x103993560&gt;
-```
-
-
-[Task]: https://docs.python.org/3/library/asyncio-task.html#asyncio.Task
-[pass-keywords]: https://docs.python.org/3/library/asyncio-eventloop.html#asyncio-pass-keywords
-[partial()]: https://docs.python.org/3/library/functools.html#functools.partial
-[repr()]: https://docs.python.org/3/library/functions.html#repr
-
---&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;python&lt;span class="w"&gt; &lt;/span&gt;map_unordered.py&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="m"&gt;2&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;.1&lt;span class="w"&gt; &lt;/span&gt;.2&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="m"&gt;0&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;.2&lt;span class="w"&gt; &lt;/span&gt;.1
+&lt;span class="go"&gt;0.1: 0.1 -&amp;gt; 0.1&lt;/span&gt;
+&lt;span class="go"&gt;0.1: 0.0 -&amp;gt; float division by zero&lt;/span&gt;
+&lt;span class="go"&gt;0.2: 0.2 -&amp;gt; 0.2&lt;/span&gt;
+&lt;span class="go"&gt;0.3: 0.2 -&amp;gt; 0.2&lt;/span&gt;
+&lt;span class="go"&gt;0.3: 0.1 -&amp;gt; 0.1&lt;/span&gt;
+&lt;span class="go"&gt;iter end&lt;/span&gt;
+&lt;span class="go"&gt;0.3: done&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id="bonus-better-decorators"&gt;Bonus: better decorators?&lt;span class="headerlink"&gt; &lt;a href="#bonus-better-decorators" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Finally, here's a cool thing I learned from the &lt;a href="https://docs.python.org/3/library/asyncio-eventloop.html#asyncio-pass-keywords"&gt;asyncio docs&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;When writing decorators,
+you can use &lt;a href="https://docs.python.org/3/library/functools.html#functools.partial"&gt;partial()&lt;/a&gt; to bind the decorated function to an existing wrapper,
+instead of always returning a new one.
+The result is a more descriptive &lt;a href="https://docs.python.org/3/library/functions.html#repr"&gt;representation&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;return_args_and_exceptions&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;do_stuff&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;functools.partial(&amp;lt;function _return_args_and_exceptions at 0x10647fd80&amp;gt;, &amp;lt;function do_stuff at 0x10647d8a0&amp;gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Compare with the traditional version:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;return_args_and_exceptions&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;func&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;async&lt;/span&gt; &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;wrapper&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="o"&gt;...&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;wrapper&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;return_args_and_exceptions&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;do_stuff&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;&amp;lt;function return_args_and_exceptions.&amp;lt;locals&amp;gt;.wrapper at 0x103993560&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;section class="footnotes"&gt;
 &lt;ol&gt;
 &lt;li id="fn-1"&gt;&lt;p&gt;Does this have a fancy, academic name? &lt;a href="/about#contact"&gt;Do let me know!&lt;/a&gt; &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
