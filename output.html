@@ -73,7 +73,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-03-23">March 2023</span>
-∙ six minute read
+∙ eight minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -122,11 +122,11 @@ But as always, there must be a better way.</p>
 </ul>
 <p>tl;dr:</p>
 <ul>
-<li>watch Brandon Rhodes' talk <a href="https://rhodesmill.org/brandon/talks/#clean-architecture-python">The Clean Architecture in Python</a></li>
-<li>if you're building a CLI, check out <a href="https://clig.dev/">Command Line Interface Guidelines</a></li>
 <li><strong>most <em>good</em> documentation won't show up in your IDE</strong> –
 rather, it is about <em>how</em> to use the library,
 and the <em>problem</em> the library is solving</li>
+<li>watch Brandon Rhodes' talk <a href="https://rhodesmill.org/brandon/talks/#clean-architecture-python">The Clean Architecture in Python</a></li>
+<li>if you're building a CLI, check out <a href="https://clig.dev/">Command Line Interface Guidelines</a></li>
 </ul>
 <h2 id="setup">Setup<span class="headerlink"> <a href="#setup" title="permalink">#</a></span></h2>
 <p>Say you're writing a CLI tool
@@ -187,26 +187,13 @@ because you've heard
 it’s highly configurable but comes with sensible defaults out of the box.</p>
 <p>There is some complexity with getting the data and generating the CSV file,
 but you've hidden it neatly in <code>get_data()</code> and <code>write_csv()</code>.</p>
+<p>TODO: Note we've already avoided a potential mistake/clunkiness here</p>
 <p>Note we're passing the result of <code>get_data()</code> to <code>write_csv()</code>
 instead of calling it from <code>write_csv()</code> for two reasons:</p>
 <ul>
 <li>so we don't have to pass any potential <code>get_data()</code> arguments through</li>
 <li>so we can test <code>write_csv()</code> without having to monkeypatch <code>get_data()</code></li>
 </ul>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">seasons</span>
-
-<span class="n">DATA</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;one&quot;</span><span class="p">,</span> <span class="s2">&quot;short_name&quot;</span><span class="p">:</span> <span class="s2">&quot;1&quot;</span><span class="p">},</span>
-    <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;two&quot;</span><span class="p">,</span> <span class="s2">&quot;short_name&quot;</span><span class="p">:</span> <span class="s2">&quot;2&quot;</span><span class="p">},</span>
-<span class="p">]</span>
-<span class="n">CSV_BYTES</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;name,short_name</span><span class="se">\r\n</span><span class="s2">&quot;</span> <span class="sa">b</span><span class="s2">&quot;one,1</span><span class="se">\r\n</span><span class="s2">&quot;</span> <span class="sa">b</span><span class="s2">&quot;two,2</span><span class="se">\r\n</span><span class="s2">&quot;</span>
-
-<span class="k">def</span> <span class="nf">test_write_csv</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">,</span> <span class="n">monkeypatch</span><span class="p">):</span>
-    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">chdir</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">)</span>
-    <span class="n">seasons</span><span class="o">.</span><span class="n">write_csv</span><span class="p">(</span><span class="n">DATA</span><span class="p">)</span>
-    <span class="k">assert</span> <span class="n">tmp_path</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="s1">&#39;calendar.csv&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">read_bytes</span><span class="p">()</span> <span class="o">==</span> <span class="n">CSV_BYTES</span>
-</code></pre></div>
-
 <p>In other words, instead of <em>hiding</em> I/O,
 we're <em>decoupling</em> it by moving it outside.</p>
 <section class="admonition tip">
@@ -217,6 +204,21 @@ we're <em>decoupling</em> it by moving it outside.</p>
  check out Brandon Rhodes' great talk
  <a href="https://rhodesmill.org/brandon/talks/#clean-architecture-python">The Clean Architecture in Python</a>.</p>
 </section>
+<p>We also have a test for <code>write_csv()</code>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">seasons</span>
+
+<span class="n">DATA</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;one&quot;</span><span class="p">,</span> <span class="s2">&quot;short_name&quot;</span><span class="p">:</span> <span class="s2">&quot;1&quot;</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;two&quot;</span><span class="p">,</span> <span class="s2">&quot;short_name&quot;</span><span class="p">:</span> <span class="s2">&quot;2&quot;</span><span class="p">},</span>
+<span class="p">]</span>
+<span class="n">CSV_BYTES</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;name,short_name</span><span class="se">\r\n</span><span class="s2">one,1</span><span class="se">\r\n</span><span class="s2">two,2</span><span class="se">\r\n</span><span class="s2">&quot;</span>
+
+<span class="k">def</span> <span class="nf">test_write_csv</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">,</span> <span class="n">monkeypatch</span><span class="p">):</span>
+    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">chdir</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">)</span>
+    <span class="n">seasons</span><span class="o">.</span><span class="n">write_csv</span><span class="p">(</span><span class="n">DATA</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">tmp_path</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="s1">&#39;calendar.csv&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">read_bytes</span><span class="p">()</span> <span class="o">==</span> <span class="n">CSV_BYTES</span>
+</code></pre></div>
+
 <!--
 
 # Too much monkey patching
@@ -398,7 +400,7 @@ the output in I/O is finally also decoupled:</p>
 </code></pre></div>
 
 <p>Interestingly enough, <a href="https://docs.python.org/3/library/csv.html#csv.writer">csv.writer</a> already takes an open file
-...was this a hint to do the same thing from the start?</p>
+...was this a hint to do the same thing from the start? TODO: emphasize / expand?</p>
 <p>Once again, the test gets simpler too –
 instead of writing anything to disk,
 we can use an <a href="https://docs.python.org/3/library/io.html#io.BytesIO">in-memory stream</a>:</p>
@@ -408,17 +410,76 @@ we can use an <a href="https://docs.python.org/3/library/io.html#io.BytesIO">in-
     <span class="k">assert</span> <span class="n">file</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span> <span class="o">==</span> <span class="n">CSV_BYTES</span>
 </code></pre></div>
 
+<p>As expected, it also works with <code>-</code>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>seasons.py<span class="w"> </span>--output<span class="w"> </span>-
+<span class="go">name,short_name</span>
+<span class="go">Chaos,Chs</span>
+<span class="go">Discord,Dsc</span>
+<span class="go">Confusion,Cfn</span>
+<span class="go">Bureaucracy,Bcy</span>
+<span class="go">The Aftermath,Afm</span>
+</code></pre></div>
 <h2 id="standard-output">Standard output<span class="headerlink"> <a href="#standard-output" title="permalink">#</a></span></h2>
-<p>&quot;instead of stdout&quot;</p>
-<p>TODO: example: we already go this</p>
-<p>The Basics
-https://clig.dev/#the-basics</p>
+<p>Some of the help texts above say &quot;write to file <em>instead</em> of stdout&quot;.</p>
+<p>Why <em>instead</em>?</p>
+<p>Because, most Unix commands <em>write to stdout by default</em>,
+which is pretty neat when you use them in a pipeline:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>grep<span class="w"> </span>-v<span class="w"> </span>^name<span class="w"> </span>calendar.csv<span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-n2
+<span class="go">Bureaucracy,Bcy</span>
+<span class="go">Chaos,Chs</span>
+</code></pre></div>
+<p>Some commands don't even bother with an <code>--output</code> option,
+because you can always redirect the output to a file:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>grep<span class="w"> </span>-v<span class="w"> </span>^name<span class="w"> </span>calendar.csv<span class="w"> </span>&gt;<span class="w"> </span>calendar-no-heading.csv
+<span class="gp">$ </span>cat<span class="w"> </span>calendar-no-heading.csv
+<span class="go">Chaos,Chs</span>
+<span class="go">Discord,Dsc</span>
+<span class="go">Confusion,Cfn</span>
+<span class="go">Bureaucracy,Bcy</span>
+<span class="go">The Aftermath,Afm</span>
+</code></pre></div>
+<p>Indeed, going back to the <a href="https://clig.dev/">CLI Guidelines</a>,
+as part of <a href="https://clig.dev/#the-basics">The Basics</a>,
+we find:</p>
 <blockquote>
 <p><strong>Send output to <code>stdout</code>.</strong> The primary output for your command should go to <code>stdout</code>. Anything that is machine readable should also go to <code>stdout</code>—this is where piping sends things by default.</p>
 </blockquote>
+<p>Because we're already using <a href="https://click.palletsprojects.com/en/latest/api/#click.File">File</a>, this is trivially easy:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@click</span><span class="o">.</span><span class="n">option</span><span class="p">(</span><span class="s1">&#39;-o&#39;</span><span class="p">,</span> <span class="s1">&#39;--output&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">click</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">atomic</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">)</span>
 </code></pre></div>
 
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>seasons.py
+<span class="go">name,short_name</span>
+<span class="go">Chaos,Chs</span>
+<span class="go">Discord,Dsc</span>
+<span class="go">Confusion,Cfn</span>
+<span class="go">Bureaucracy,Bcy</span>
+<span class="go">The Aftermath,Afm</span>
+</code></pre></div>
+<h2 id="conclusion">Conclusion<span class="headerlink"> <a href="#conclusion" title="permalink">#</a></span></h2>
+<p>TODO: reword / clean up / expand</p>
+<p>Interesting details:</p>
+<ul>
+<li>click discusses file arguments <em>before</em> file path arguments</li>
+<li>click already mentions <code>-</code> for stdout</li>
+<li>csv takes an open file</li>
+</ul>
+<p>These all hint that it may be a good idea to structure code a certain way.</p>
+<p>So:</p>
+<ul>
+<li>Good libraries educate on subject matter; click, feedparser, requests(?), mockito?</li>
+<li>Read the documentation of the things you are using; look at the examples, skim reference at least once (helps you know what's available, you might remember &quot;hey, there was some thing in the docs about this&quot;)<ul>
+<li>Sometimes (maybe even a lot of time), the docs are poor, but you won't know until you read them</li>
+<li>Sometimes, you're using lots of libraries. Nevertheless, for the ones you use often, going through the docs once has a huge return on investment, and pays out quite quickly</li>
+</ul>
+</li>
+<li>If you feel you are fighting your tools, maybe you are using them wrong (read the docs!), Or maybe you should find better tools</li>
+</ul>
+<p>Also:</p>
+<ul>
+<li>Imperative shell over functional core</li>
+<li>Look at what others are doing in a similar situation; ask why (CSV writer, curl, ...)</li>
+</ul>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>Is it not written, &quot;A few hours of trial and error can save you five minutes of reading the docs&quot;? <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
