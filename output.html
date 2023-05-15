@@ -73,7 +73,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-03-23">March 2023</span>
-∙ seven minute read
+∙ nine minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -116,28 +116,36 @@ not even fully aware they're struggling in the first place.</p>
 <p>This is a story about:</p>
 <ul>
 <li>why you should still read the docs</li>
-<li>finding the right way to do something</li>
-<li>paying attention to everyday things</li>
+<li>finding the right way of doing things</li>
+<li>command-line interfaces</li>
 </ul>
 <p>tl;dr: <strong>Most <em>good</em> documentation won't show up in your IDE</strong> –
   rather, it is about <em>how</em> to use the library,
   and the <em>problem</em> the library is solving.</p>
 <section class="toc">
 <ul>
-<li><a href="#a-worked-example">A worked example</a>
+<li><a href="#an-example">An example</a>
 <ul>
 <li><a href="#the-path-is-hardcoded">The path is hardcoded</a></li>
 <li><a href="#the-path-might-not-be-valid">The path might not be valid</a></li>
 <li><a href="#the-path-to-what-exactly">The path to what, exactly?</a></li>
-<li><a href="#standard-output">Standard output ...</a></li>
+<li><a href="#standard-output">Standard output</a></li>
 <li><a href="#by-default">... by default</a></li>
+<li><a href="#discussion">Discussion</a></li>
+</ul>
+</li>
+<li><a href="#good-libraries-educate">Good libraries educate</a></li>
+<li><a href="#read-the-docs">Read the docs</a>
+<ul>
+<li><a href="#but-the-docs-suck">But the docs suck</a></li>
+<li><a href="#but-i-m-using-lots-of-libraries">But I'm using lots of libraries</a></li>
 </ul>
 </li>
 <li><a href="#conclusion">Conclusion</a></li>
 </ul>
 </section>
-<h2 id="a-worked-example">A worked example<span class="headerlink"> <a href="#a-worked-example" title="permalink">#</a></span></h2>
-<p>OK, now that I've told you, let me show you –
+<h2 id="an-example">An example<span class="headerlink"> <a href="#an-example" title="permalink">#</a></span></h2>
+<p>OK, instead of telling you, let me show you –
 we'll go through <em>one possible path</em> of developing something,
 and stop along the way to point out how we're doing things.</p>
 <hr />
@@ -285,7 +293,7 @@ anymore:</p>
 <span class="go">python seasons.py --path .  0.07s user 0.02s system 4% cpu 2.104 total</span>
 </code></pre></div>
 <p>OK, it fails with a traceback.
-Worse, you had to wait for the API calls
+Worse, we waited for the API calls
 only to throw the output away.
 Thankfully, Click has fancy <a href="https://click.palletsprojects.com/en/latest/parameters/#parameter-types">parameter types</a> that can take care of that:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@click</span><span class="o">.</span><span class="n">command</span><span class="p">()</span>
@@ -337,7 +345,7 @@ we find this:</p>
 <li><code>-o</code>, <code>--output</code>: Output file. For example, <code>sort</code>, <code>gcc</code>.</li>
 </ul>
 </blockquote>
-<h3 id="standard-output">Standard output ...<span class="headerlink"> <a href="#standard-output" title="permalink">#</a></span></h3>
+<h3 id="standard-output">Standard output<span class="headerlink"> <a href="#standard-output" title="permalink">#</a></span></h3>
 <p>Further down below, there's another guideline:</p>
 <blockquote>
 <p><strong>If input or output is a file, support <code>-</code> to read from <code>stdin</code> or write to <code>stdout</code>.</strong> This lets the output of another command be the input of your command and vice versa, without using a temporary file. [...]</p>
@@ -382,9 +390,8 @@ the <em>output</em> part of I/O is also decoupled:</p>
         <span class="n">writer</span><span class="o">.</span><span class="n">writerow</span><span class="p">([</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;short_name&#39;</span><span class="p">]])</span>
 </code></pre></div>
 
-<p>Interestingly enough, <a href="https://docs.python.org/3/library/csv.html#csv.writer">csv.writer</a> already takes an open file
-...was this a hint to do the same thing all along?</p>
-<p>It works:</p>
+<p>(Interestingly enough, <a href="https://docs.python.org/3/library/csv.html#csv.writer">csv.writer</a> <em>already</em> takes an open file.)</p>
+<p>Anyway, it works:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>seasons.py<span class="w"> </span>--output<span class="w"> </span>-
 <span class="go">name,short_name</span>
 <span class="go">Chaos,Chs</span>
@@ -403,71 +410,131 @@ we can use an <a href="https://docs.python.org/3/library/io.html#io.BytesIO">in-
 </code></pre></div>
 
 <h3 id="by-default">... by default<span class="headerlink"> <a href="#by-default" title="permalink">#</a></span></h3>
-<p>Some of the help texts <a href="#the-path-to-what-exactly">above</a>
-say &quot;write to file <em>instead</em> of stdout&quot;.</p>
-<p>Why <em>instead</em>?</p>
-<p>Because, most Unix commands <em>write to stdout by default</em>,
-which is pretty neat when you use them in a pipeline:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>tail<span class="w"> </span>-n+2<span class="w"> </span>calendar.csv<span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-n2
-<span class="go">Bureaucracy,Bcy</span>
-<span class="go">Chaos,Chs</span>
-</code></pre></div>
-<p>Some commands don't even bother with an <code>--output</code> option,
-because you can always redirect the output to a file:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>tail<span class="w"> </span>-n+2<span class="w"> </span>calendar.csv<span class="w"> </span>&gt;<span class="w"> </span>calendar-no-heading.csv
-<span class="gp">$ </span>cat<span class="w"> </span>calendar-no-heading.csv
+<p>Some of the help texts <a href="#the-path-to-what-exactly">we looked at</a>
+say &quot;write to FILE instead of stdout&quot;...</p>
+<p>Why <em>instead?</em></p>
+<p>Using commands in a pipeline is common enough that
+most Unix commands write to stdout <em>by default</em>;
+some don't even bother with an <code>--output</code> option,
+since you can always redirect stdout to a file:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>tail<span class="w"> </span>-n+2<span class="w"> </span>calendar.csv<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-n2
 <span class="go">Chaos,Chs</span>
 <span class="go">Discord,Dsc</span>
-<span class="go">Confusion,Cfn</span>
-<span class="go">Bureaucracy,Bcy</span>
-<span class="go">The Aftermath,Afm</span>
+<span class="gp">$ </span>tail<span class="w"> </span>-n+2<span class="w"> </span>calendar.csv<span class="w"> </span>&gt;<span class="w"> </span>calendar-no-heading.csv
+<span class="gp">$ </span>head<span class="w"> </span>-n2<span class="w"> </span>calendar-no-heading.csv
+<span class="go">Chaos,Chs</span>
+<span class="go">Discord,Dsc</span>
 </code></pre></div>
-<p>Indeed, going back to the <a href="https://clig.dev/">CLI Guidelines</a>,
-as part of <a href="https://clig.dev/#the-basics">The Basics</a>,
-we find:</p>
+<p>Indeed, it is so common that <a href="https://clig.dev/">CLI Guidelines</a>
+makes it the third thing in <a href="https://clig.dev/#the-basics">The Basics</a>:</p>
 <blockquote>
 <p><strong>Send output to <code>stdout</code>.</strong> The primary output for your command should go to <code>stdout</code>. Anything that is machine readable should also go to <code>stdout</code>—this is where piping sends things by default.</p>
 </blockquote>
-<p>So, which one?</p>
-<p><img class="img-responsive" src="/_file/output/both.gif" alt="Both is good." /></p>
-<p>With Click, it's trivially easy:</p>
+<p>We could remove <code>--output</code>, but with Click, doing both is trivially easy:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@click</span><span class="o">.</span><span class="n">option</span><span class="p">(</span><span class="s1">&#39;-o&#39;</span><span class="p">,</span> <span class="s1">&#39;--output&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">click</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">)</span>
 </code></pre></div>
 
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>seasons.py
-<span class="go">name,short_name</span>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>seasons.py<span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-n+2<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-n2
 <span class="go">Chaos,Chs</span>
 <span class="go">Discord,Dsc</span>
-<span class="go">Confusion,Cfn</span>
-<span class="go">Bureaucracy,Bcy</span>
-<span class="go">The Aftermath,Afm</span>
 </code></pre></div>
+<h3 id="discussion">Discussion<span class="headerlink"> <a href="#discussion" title="permalink">#</a></span></h3>
+<p>Looking at our journey, I can't help but notice a few things:</p>
+<ul>
+<li>The Click <a href="https://click.palletsprojects.com/en/latest/api/">API reference</a> seems to constantly funnel readers
+to the <a href="https://click.palletsprojects.com/en/latest/#documentation">user guide</a> part of the documentation,
+the part that tells you <em>how</em> and <em>why</em> to use stuff.</li>
+<li>Click mentions supporting <code>-</code> for stdout, and more than once.</li>
+<li>The Click user guide discusses <a href="https://click.palletsprojects.com/en/latest/api/#click.File">File</a> arguments <em>before</em> <a href="https://click.palletsprojects.com/en/latest/api/#click.Path">Path</a>
+(in part, because it's more commonly used,
+but also because it's more useful out of the box).</li>
+<li><a href="https://docs.python.org/3/library/csv.html#csv.writer">csv.writer</a> takes an open file,
+just like our own <code>write_csv()</code> does at the end.</li>
+</ul>
+<p>These all hint that it may be a good idea to structure code a certain way;
+the more we use things the way they &quot;want&quot; to be used,
+the cleaner the code and the tests get.</p>
+<h2 id="good-libraries-educate">Good libraries educate<span class="headerlink"> <a href="#good-libraries-educate" title="permalink">#</a></span></h2>
+<p>I am tempted to call <a href="https://click.palletsprojects.com/">Click</a> a <em>great library</em>.</p>
+<p>Yes, it does its job more than well, and has lots of features.</p>
+<p>But, more importantly, its documentation
+educates the reader about the subject matter
+– it goes beyond API docs into how to use it,
+how to get specific things done with it,
+and the underlying problem it is solving.</p>
+<p>Here are a few more examples:</p>
+<ul>
+<li>Classics – other libraries in the <a href="https://flask.palletsprojects.com">Flask</a>/Pallets ecosystem
+(like <a href="https://werkzeug.palletsprojects.com">Werkzeug</a> and <a href="https://jinja.palletsprojects.com">Jinja</a>), <a href="https://requests.readthedocs.io">Requests</a>, <a href="https://docs.pytest.org">pytest</a>, and many others –
+popular <em>and</em> old enough libraries usually have great documentation.</li>
+<li>Python itself – you would be amazed at how many developers
+use Python every day without having gone through <a href="https://docs.python.org/3/tutorial/">the tutorial</a> even once.</li>
+<li><a href="https://feedparser.readthedocs.io">feedparser</a> teaches you about
+<a href="https://feedparser.readthedocs.io/en/latest/advanced.html">all kinds of Atom and RSS quirks</a>,
+<a href="https://feedparser.readthedocs.io/en/latest/character-encoding.html">encodings on the web</a>,
+<a href="https://feedparser.readthedocs.io/en/latest/http.html">HTTP</a>,
+and how to be nice to servers you're making requests to.<ul>
+<li>feedparser is close to my heart because I'm using it
+for my feed reader library, <a href="https://reader.readthedocs.io/">reader</a>,
+where I too am doing my best to have <a href="https://reader.readthedocs.io/en/latest/guide.html">docs worth reading</a>.</li>
+</ul>
+</li>
+<li>Stepping away from Python a bit,
+I've learned a lot from both <a href="https://dagger.dev/dev-guide/">Dagger</a> and <a href="https://site.mockito.org/">Mockito</a>
+(and for the latter, the API docs for the
+<a href="https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html">&quot;main&quot; class</a>
+pack way more than just API,
+and that <em>will</em> show up in your IDE).</li>
+<li><a href="https://beancount.github.io/docs/">Beancount</a>, a command-line accounting tool,
+does a great job of teaching double-entry bookkeeping
+(indeed, it taught me almost all I know about the topic).</li>
+</ul>
+<h2 id="read-the-docs">Read the docs<span class="headerlink"> <a href="#read-the-docs" title="permalink">#</a></span></h2>
+<p>In a way, this whole article is a ruse to tell you to <a href="https://en.wikipedia.org/wiki/RTFM">RTFM</a>,
+but with a bit of nuance.</p>
+<p>Read the documentation to find out <em>how</em>,
+and more importantly, <em>why</em> –
+a proper mental model of the thing you're using
+will make you more productive,
+and will improve any guesses you do make.</p>
+<p>Aside from the user guide part,
+I also like to skim the entire reference for libraries I use a lot;
+this gives me an idea of what's available,
+and often I remember later that
+&quot;hey, there was something in the docs about X&quot;.</p>
+<h3 id="but-the-docs-suck">But the docs suck<span class="headerlink"> <a href="#but-the-docs-suck" title="permalink">#</a></span></h3>
+<p>Sometimes, documentation sucks or is missing altogether
+(and doubly so for internal code bases).
+It's easy to get used to not bother looking
+when most of the time they're not there.</p>
+<p>Nevertheless, give it a try?
+You won't know until you look,
+and worst case, you'll have wasted a minute.</p>
+<p>On the other hand, documentation should be one of the criteria when picking a library.</p>
+<h3 id="but-i-m-using-lots-of-libraries">But I'm using lots of libraries<span class="headerlink"> <a href="#but-i-m-using-lots-of-libraries" title="permalink">#</a></span></h3>
+<p>Quoting a friend of mine:</p>
+<blockquote>
+<p>Well, for you, it might be &quot;a library&quot;,
+but for them it's 10 new libraries,
+and a 2-day deadline.</p>
+</blockquote>
+<p>This can be the case, and often is.</p>
+<p>Nevertheless, for the ones you use often
+(stdlib, test framework, web framework),
+going through the docs once has a huge return on investment,
+and starts paying out quite quickly.</p>
+<p>(TODO: reword the above)</p>
 <h2 id="conclusion">Conclusion<span class="headerlink"> <a href="#conclusion" title="permalink">#</a></span></h2>
 <p>TODO: reword / clean up / expand</p>
-<p>Interesting details:</p>
-<ul>
-<li>click discusses file arguments <em>before</em> file path arguments</li>
-<li>click already mentions <code>-</code> for stdout</li>
-<li>csv takes an open file</li>
-</ul>
-<p>These all hint that it may be a good idea to structure code a certain way.</p>
 <p>So:</p>
 <ul>
-<li>Good libraries educate on subject matter; click, feedparser, requests(?), mockito?</li>
+<li>Good libraries educate on subject matter.</li>
 <li>Read the documentation of the things you are using; look at the examples, skim reference at least once (helps you know what's available, you might remember &quot;hey, there was some thing in the docs about this&quot;)<ul>
 <li>Sometimes (maybe even a lot of time), the docs are poor, but you won't know until you read them</li>
 <li>Sometimes, you're using lots of libraries. Nevertheless, for the ones you use often, going through the docs once has a huge return on investment, and pays out quite quickly</li>
 </ul>
 </li>
 <li>If you feel you are fighting your tools, maybe you are using them wrong (read the docs!), Or maybe you should find better tools</li>
-</ul>
-<p>XXX frameworks</p>
-<p>XXX examples: python tutorial, stdlib re, pytest</p>
-<p>XXX RFTM</p>
-<p>Also:</p>
-<ul>
-<li>Imperative shell over functional core</li>
-<li>Look at what others are doing in a similar situation; ask why (CSV writer, curl, ...)</li>
 </ul>
 <section class="footnotes">
 <ol>
