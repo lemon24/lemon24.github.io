@@ -5,6 +5,12 @@
 
 
 
+
+
+
+
+
+
 <!doctype html>
 
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -73,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-06-22">June 2023</span>
-∙ five minute read
+∙ six minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -104,16 +110,18 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>TODO: add an example</p>
+<p>So, you're doing some sync stuff.</p>
+<p>But you also need to do <a href="/limit-concurrency">some async stuff</a>,
+<strong>without</strong> making <strong>everything async</strong>.</p>
+<p>Maybe the sync stuff is an existing application.</p>
+<p>Maybe you still want to use your favorite CLI library.</p>
+<p>Or maybe you need just a little async, and don't want to pay the full price.</p>
+<p>TODO: in this article, add an example, maybe mention asyncio.to_thread(), asyncio.run() etc.</p>
 <section class="toc">
 <ul>
-<li><a href="#getting-started">Getting started</a></li>
-<li><a href="#same-loop">Same loop</a>
-<ul>
-<li><a href="#runner">Runner</a></li>
-</ul>
-</li>
-<li><a href="#same-session">Same session</a></li>
+<li><a href="#but-i-need-to-do-the-thing-more-than-once">But I need to do the thing more than once</a></li>
+<li><a href="#but-i-want-a-long-lived-event-loop">But I want a long-lived event loop</a></li>
+<li><a href="#but-i-want-a-long-lived-session">But I want a long-lived session</a></li>
 <li><a href="#threads">Threads</a>
 <ul>
 <li><a href="#one-thread">One thread</a></li>
@@ -129,31 +137,37 @@ window.addEventListener('resize', set_vh);
 <li><a href="#iterables">Iterables</a></li>
 </ul>
 </section>
-<h2 id="getting-started">Getting started<span class="headerlink"> <a href="#getting-started" title="permalink">#</a></span></h2>
+<!-- # Getting started -->
+<h2 id="but-i-need-to-do-the-thing-more-than-once">But I need to do the thing more than once<span class="headerlink"> <a href="#but-i-need-to-do-the-thing-more-than-once" title="permalink">#</a></span></h2>
+<p>We'll make a few requests using an <a href="https://docs.aiohttp.org/">aiohttp</a> session,
+with a bit of extra logging;
+you can imagine any other async code in its place,
+no matter how complicated.</p>
+<p>I've split creating the session and making the request
+in two different functions, for reasons that will become obivous soon.</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 9</span>
 <span class="normal">10</span>
 <span class="normal">11</span>
-<span class="normal">12</span>
-<span class="normal">13</span>
-<span class="normal">14</span>
-<span class="normal">15</span>
-<span class="normal">16</span>
-<span class="normal">17</span>
-<span class="normal">18</span>
-<span class="normal">19</span>
-<span class="normal">20</span>
-<span class="normal">21</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">do_stuff_async</span><span class="p">(</span><span class="n">session</span><span class="p">):</span>
+<span class="normal">12</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">do_stuff_async</span><span class="p">(</span><span class="n">session</span><span class="p">):</span>
     <span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;https://death.andgravity.com/&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
         <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span>
         <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;got&#39;</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">status</span><span class="p">,</span> <span class="s1">&#39;in loop&#39;</span><span class="p">,</span> <span class="nb">id</span><span class="p">(</span><span class="n">loop</span><span class="p">))</span>
+</code></pre></div></td></tr></table></div>
 
-
-<span class="k">async</span> <span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
     <span class="k">async</span> <span class="k">with</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
         <span class="k">await</span> <span class="n">do_stuff_async</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
 
-
-<span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+<p>As mentioned in the introduction,
+you can use <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.run">asyncio.run()</a> to execute a coroutine
+in a transient event loop.
+The docs say it should be used for the main entry point of asyncio programs,
+but you <em>can</em> call it more than once.</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">20</span>
+<span class="normal">21</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
 <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
 </code></pre></div></td></tr></table></div>
 
@@ -161,7 +175,11 @@ window.addEventListener('resize', set_vh);
 <span class="go">got 200 in loop 4399589904</span>
 <span class="go">got 200 in loop 4386034640</span>
 </code></pre></div>
-<h2 id="same-loop">Same loop<span class="headerlink"> <a href="#same-loop" title="permalink">#</a></span></h2>
+<!-- # Same loop -->
+<h2 id="but-i-want-a-long-lived-event-loop">But I want a long-lived event loop<span class="headerlink"> <a href="#but-i-want-a-long-lived-event-loop" title="permalink">#</a></span></h2>
+<p>Of course, creating and cleaning up a loop every time is not exactly efficient.</p>
+<p>With a bit of diving into <a href="https://docs.python.org/3/library/asyncio-eventloop.html">asyncio guts</a>,
+we can create and manage our own:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">20</span>
 <span class="normal">21</span>
 <span class="normal">22</span>
@@ -169,7 +187,9 @@ window.addEventListener('resize', set_vh);
 <span class="normal">24</span>
 <span class="normal">25</span>
 <span class="normal">26</span>
-<span class="normal">27</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">new_event_loop</span><span class="p">()</span>
+<span class="normal">27</span>
+<span class="normal">28</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">new_event_loop</span><span class="p">()</span>
+<span class="n">asyncio</span><span class="o">.</span><span class="n">set_event_loop</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span>
 <span class="k">try</span><span class="p">:</span>
     <span class="n">loop</span><span class="o">.</span><span class="n">run_until_complete</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
     <span class="n">loop</span><span class="o">.</span><span class="n">run_until_complete</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
@@ -179,13 +199,21 @@ window.addEventListener('resize', set_vh);
     <span class="n">loop</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
 
-<p>asyncio.get_event_loop() -&gt; DeprecationWarning: There is no current event loop</p>
-<p>close() already schedules executor shutdown, but does not wait</p>
+<details open>
+<summary>These are low-level APIs, so using them correctly is not exactly easy.</summary>
+<p>We could have used <a href="https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.get_event_loop">get_event_loop()</a> to both create and set the event loop,
+but this 2-in-1 behavior was deprecated in Python 3.10.</p>
+<p>Also, <a href="https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.loop.close">loop.close()</a> already schedules executor shutdown,
+but doesn't wait for it to finish;
+for predictable behavior, it's best to wait, so we do.</p>
+</details>
+<p>It works (note the loop id):</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>brigde.py
 <span class="go">got 200 in loop 4509807312</span>
 <span class="go">got 200 in loop 4509807312</span>
 </code></pre></div>
-<h3 id="runner">Runner<span class="headerlink"> <a href="#runner" title="permalink">#</a></span></h3>
+<!-- ## Runner -->
+<p>Thankfully, beginning with Python 3.11, <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.Runner">asyncio.Runner</a> makes all that unnecessary:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">20</span>
 <span class="normal">21</span>
 <span class="normal">22</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Runner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
@@ -193,7 +221,7 @@ window.addEventListener('resize', set_vh);
     <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
 </code></pre></div></td></tr></table></div>
 
-<h2 id="same-session">Same session<span class="headerlink"> <a href="#same-session" title="permalink">#</a></span></h2>
+<h2 id="but-i-want-a-long-lived-session">But I want a long-lived session<span class="headerlink"> <a href="#but-i-want-a-long-lived-session" title="permalink">#</a></span></h2>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">15</span>
 <span class="normal">16</span>
 <span class="normal">17</span>
@@ -360,8 +388,7 @@ window.addEventListener('resize', set_vh);
 <span class="normal">62</span>
 <span class="normal">63</span>
 <span class="normal">64</span>
-<span class="normal">65</span>
-<span class="normal">66</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">try</span><span class="p">:</span>
+<span class="normal">65</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">try</span><span class="p">:</span>
     <span class="n">session</span> <span class="o">=</span> <span class="n">run</span><span class="p">(</span><span class="n">call_async</span><span class="p">(</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">))</span>
     <span class="n">run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="fm">__aenter__</span><span class="p">())</span>
     <span class="k">try</span><span class="p">:</span>
@@ -369,7 +396,6 @@ window.addEventListener('resize', set_vh);
     <span class="k">finally</span><span class="p">:</span>
         <span class="n">run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="fm">__aexit__</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
 <span class="k">finally</span><span class="p">:</span>
-    <span class="n">loop</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
     <span class="n">loop</span><span class="o">.</span><span class="n">call_soon_threadsafe</span><span class="p">(</span><span class="n">loop</span><span class="o">.</span><span class="n">stop</span><span class="p">)</span>
     <span class="n">loop_thread</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
