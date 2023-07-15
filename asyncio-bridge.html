@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-06-22">June 2023</span>
-∙ six minute read
+∙ seven minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -114,7 +114,7 @@ window.addEventListener('resize', set_vh);
 <p>But you also need to do <a href="/limit-concurrency">some async stuff</a>,
 <strong>without</strong> making <strong>everything async</strong>.</p>
 <p>Maybe the sync stuff is an existing application.</p>
-<p>Maybe you still want to use your favorite CLI library.</p>
+<p>Maybe you still want to use <a href="/output">your favorite CLI library</a>.</p>
 <p>Or maybe you need just a little async, and don't want to pay the full price.</p>
 <p>TODO: in this article, add an example, maybe mention asyncio.to_thread(), asyncio.run() etc.</p>
 <section class="toc">
@@ -221,7 +221,29 @@ for predictable behavior, it's best to wait, so we do.</p>
     <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
 </code></pre></div></td></tr></table></div>
 
+<!-- # Same loop -->
 <h2 id="but-i-want-a-long-lived-session">But I want a long-lived session<span class="headerlink"> <a href="#but-i-want-a-long-lived-session" title="permalink">#</a></span></h2>
+<p>Reusing the loop is not really enough, though.</p>
+<p>We're still throwing the aiohttp <a href="https://docs.aiohttp.org/en/v3.8.4/client_reference.html#client-session">Session</a> away after one request,
+and with it the associated connection pool;
+this means that is we make multiple requests,
+we're going to re-connect for each of them;
+keeping a long-lived session can make repeated requests much faster.
+This applies to other things as well;
+most &quot;client&quot; libraries (e.g. <a href="https://github.com/aio-libs/aiobotocore">aiobotocore</a>) keep a connection pool around.</p>
+<p>We can create the session outside of an async function and just pass it in,
+but this logs:</p>
+<pre class="code code-container"><code>ERROR:asyncio:Unclosed client session
+client_session: &lt;aiohttp.client.ClientSession object at 0x10a271cd0&gt;
+</code></pre>
+<p>... because we're expected to <code>async session.close()</code> after we're done with it.
+(Among the reasons to do that is to make sure
+associated resources are released in a predictable manner.)</p>
+<p>The idiomatic way for an object to clean after itself the <code>with</code> statement,
+and Session does support its async version;
+since <code>async with</code> is just syntactic sugar over
+calling the <a href="https://docs.python.org/3/glossary.html#term-asynchronous-context-manager">asynchronous context manager</a> protocol methods in a specific way,
+we can simulate it by doing exactly that:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">15</span>
 <span class="normal">16</span>
 <span class="normal">17</span>
@@ -239,9 +261,10 @@ for predictable behavior, it's best to wait, so we do.</p>
         <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="fm">__aexit__</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
 </code></pre></div></td></tr></table></div>
 
-<div class="highlight code-container"><pre class="code" data-lang="Text only"><span></span><code>DeprecationWarning: The object should be created within an async function
-</code></pre></div>
-<p>(aiohttp 3.8.4)</p>
+<p>This also works, but we're still left with a warning (as of aiohttp 3.8.4):</p>
+<pre class="code code-container"><code>.../bridge.py:16: DeprecationWarning: The object should be created within an async function
+  session = aiohttp.ClientSession()
+</code></pre>
 <hr />
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 9</span>
 <span class="normal">10</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">call_async</span><span class="p">(</span><span class="n">callable</span><span class="p">):</span>
