@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-06-22">June 2023</span>
-∙ seven minute read
+∙ eight minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -123,7 +123,7 @@ window.addEventListener('resize', set_vh);
 <li><a href="#but-i-want-a-long-lived-event-loop">But I want a long-lived event loop</a></li>
 <li><a href="#but-i-want-a-long-lived-session">But I want a long-lived session</a></li>
 <li><a href="#but-i-want-to-do-something-else-during-the-async-stuff">But I want to do something else during the async stuff</a></li>
-<li><a href="#but-i-want-to-do-async-stuff-from-two-different-threads">But I want to do async stuff from two different threads</a>
+<li><a href="#but-i-want-to-do-async-stuff-from-different-threads">But I want to do async stuff from different threads</a>
 <ul>
 <li><a href="#thread-runner">Thread runner</a></li>
 </ul>
@@ -308,8 +308,8 @@ so we'll do just that.</p>
 <span class="go">got 200 in loop 4538933264 in MainThread</span>
 </code></pre></div>
 <!-- ## One thread -->
-<p><a id="one-thread"></a></p>
-<p>Next up, let's call <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.Runner.run">run()</a> in another thread;
+<p><a id="one-thread"></a>
+Next up, let's call <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.Runner.run">run()</a> in another thread;
 we'll make it possible to have more than one thread,
 since it'll come in handy later on;
 in actual code, the &quot;do something else&quot; part would happen between
@@ -353,8 +353,15 @@ in actual code, the &quot;do something else&quot; part would happen between
 <span class="go">got 200 in loop 4448024592 in Thread-1 (run)</span>
 </code></pre></div>
 <!-- ## Two threads -->
-<h2 id="but-i-want-to-do-async-stuff-from-two-different-threads">But I want to do async stuff from two different threads<span class="headerlink"> <a href="#but-i-want-to-do-async-stuff-from-two-different-threads" title="permalink">#</a></span></h2>
-<p>TODO: explain why etc.</p>
+<h2 id="but-i-want-to-do-async-stuff-from-different-threads">But I want to do async stuff from different threads<span class="headerlink"> <a href="#but-i-want-to-do-async-stuff-from-different-threads" title="permalink">#</a></span></h2>
+<p>OK, but what if we call <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.Runner.run">run()</a> two different threads?</p>
+<p>This can be the case when extending an existing application;
+or we can deliberately use threads most of the time,
+because they work with normal code,
+and use async only here and there.
+Or, we may just call it from a single thread, like above,
+but then accidentally also call it from the main thread.</p>
+<p>What then? Here's what:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">35</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>        <span class="n">do_stuff_in_threads</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
@@ -371,12 +378,21 @@ in actual code, the &quot;do something else&quot; part would happen between
 <span class="x">got 200 in loop 4544447440 in Thread-1 (run)</span>
 <span class="x">got 200 in loop 4544447440 in Thread-1 (run)</span>
 </code></pre></div>
-<p>&quot;got 200 in loop&quot; sometimes only happens once</p>
-<p>https://docs.python.org/3/library/asyncio-dev.html#concurrency-and-multithreading</p>
+<p>Not only did one thread crash,
+both coroutines were run in the other thread.
+Worse, sometimes only one of the coroutines runs,
+and I remember a version of the code that deadlocked.
+In a long-running program where the threads
+don't call <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.Runner.run">run()</a> at the same time,
+we might not even get a hard failure,
+but subtle, misterious bugs.</p>
+<p>And why not? The <a href="https://docs.python.org/3/library/asyncio-dev.html#concurrency-and-multithreading">Concurrency and Multithreading</a> section of the docs does warn:</p>
 <blockquote>
-<p>Almost all asyncio objects are not thread safe, which is typically not a problem unless there is code that works with them from outside of a Task or a callback. If there’s a need for such code to call a low-level asyncio API, the <a href="https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.loop.call_soon_threadsafe">loop.call_soon_threadsafe()</a> method should be used [...]</p>
+<p>Almost all asyncio objects are not thread safe,
+which is typically not a problem unless
+there is code that works with them from outside of a Task or a callback.</p>
 </blockquote>
-<p>talk about Runner being lazy</p>
+<p>...which is exactly what we've been doing.</p>
 <hr />
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">31</span>
 <span class="normal">32</span>
