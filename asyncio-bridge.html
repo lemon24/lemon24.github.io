@@ -123,11 +123,7 @@ window.addEventListener('resize', set_vh);
 <li><a href="#but-i-want-a-long-lived-event-loop">But I want a long-lived event loop</a></li>
 <li><a href="#but-i-want-a-long-lived-session">But I want a long-lived session</a></li>
 <li><a href="#but-i-want-to-do-something-else-during-the-async-stuff">But I want to do something else during the async stuff</a></li>
-<li><a href="#but-i-want-to-do-async-stuff-from-different-threads">But I want to do async stuff from different threads</a>
-<ul>
-<li><a href="#thread-runner">Thread runner</a></li>
-</ul>
-</li>
+<li><a href="#but-i-want-to-do-async-stuff-from-multiple-threads">But I want to do async stuff from multiple threads</a></li>
 <li><a href="#context-managers">Context managers</a>
 <ul>
 <li><a href="#enter-context">Enter context</a></li>
@@ -302,11 +298,15 @@ so we'll do just that.</p>
         <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;got&#39;</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">status</span><span class="p">,</span> <span class="s1">&#39;in loop&#39;</span><span class="p">,</span> <span class="nb">id</span><span class="p">(</span><span class="n">loop</span><span class="p">),</span> <span class="s1">&#39;in&#39;</span><span class="p">,</span> <span class="n">thread</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
-<p>As expected:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>brigde.py
-<span class="go">got 200 in loop 4538933264 in MainThread</span>
-<span class="go">got 200 in loop 4538933264 in MainThread</span>
-</code></pre></div>
+<!--
+As expected:
+
+```console
+$ python brigde.py
+got 200 in loop 4538933264 in MainThread
+got 200 in loop 4538933264 in MainThread
+```
+-->
 <!-- ## One thread -->
 <p><a id="one-thread"></a>
 Next up, let's call <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.Runner.run">run()</a> in another thread;
@@ -348,13 +348,13 @@ in actual code, the &quot;do something else&quot; part would happen between
         <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="fm">__aexit__</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
 </code></pre></div></td></tr></table></div>
 
-<p>It works!</p>
+<p>Hey, it works!</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>brigde.py
 <span class="go">got 200 in loop 4448024592 in Thread-1 (run)</span>
 </code></pre></div>
 <!-- ## Two threads -->
-<h2 id="but-i-want-to-do-async-stuff-from-different-threads">But I want to do async stuff from different threads<span class="headerlink"> <a href="#but-i-want-to-do-async-stuff-from-different-threads" title="permalink">#</a></span></h2>
-<p>OK, but what if we call <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.Runner.run">run()</a> two different threads?</p>
+<h2 id="but-i-want-to-do-async-stuff-from-multiple-threads">But I want to do async stuff from multiple threads<span class="headerlink"> <a href="#but-i-want-to-do-async-stuff-from-multiple-threads" title="permalink">#</a></span></h2>
+<p>OK, but what if we call <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.Runner.run">run()</a> from two different threads?</p>
 <p>This can be the case when extending an existing application;
 or we can deliberately use threads most of the time,
 because they work with normal code,
@@ -365,7 +365,8 @@ but then accidentally also call it from the main thread.</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">35</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>        <span class="n">do_stuff_in_threads</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
-<div class="highlight code-container"><pre class="code" data-lang="Python Traceback"><span></span><code><span class="x">Exception in thread Thread-2 (run):</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python Traceback"><span></span><code><span class="x">$ python brigde.py</span>
+<span class="x">Exception in thread Thread-2 (run):</span>
 <span class="gt">Traceback (most recent call last):</span>
 <span class="w">  </span><span class="c">...</span>
   File <span class="nb">&quot;.../asyncio/runners.py&quot;</span>, line <span class="m">118</span>, in <span class="n">run</span>
@@ -393,7 +394,12 @@ which is typically not a problem unless
 there is code that works with them from outside of a Task or a callback.</p>
 </blockquote>
 <p>...which is exactly what we've been doing.</p>
-<hr />
+<p>But the warning comes with a solution:<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
+<blockquote>
+<p>To schedule a coroutine object from a different OS thread,
+the <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.run_coroutine_threadsafe">run_coroutine_threadsafe()</a> function should be used.</p>
+</blockquote>
+<p>So, we want a loop that's already running in a different thread:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">31</span>
 <span class="normal">32</span>
 <span class="normal">33</span>
@@ -410,9 +416,7 @@ there is code that works with them from outside of a Task or a callback.</p>
 <span class="normal">44</span>
 <span class="normal">45</span>
 <span class="normal">46</span>
-<span class="normal">47</span>
-<span class="normal">48</span>
-<span class="normal">49</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="n">runner</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Runner</span><span class="p">()</span>
+<span class="normal">47</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="n">runner</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Runner</span><span class="p">()</span>
 <span class="n">loop_created</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
 
 <span class="k">def</span> <span class="nf">run_forever</span><span class="p">():</span>
@@ -424,25 +428,30 @@ there is code that works with them from outside of a Task or a callback.</p>
 
 <span class="n">loop_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">run_forever</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;LoopThread&#39;</span><span class="p">)</span>
 <span class="n">loop_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
-
 <span class="n">loop_created</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
-
 <span class="n">loop</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">get_loop</span><span class="p">()</span>
 
 <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="n">coro</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run_coroutine_threadsafe</span><span class="p">(</span><span class="n">coro</span><span class="p">,</span> <span class="n">loop</span><span class="p">)</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
 
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">51</span>
+<p>We have to wait for the loop to be created/started in the loop thread,
+otherwise the main thread will race ahead,
+create the loop with its <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.Runner.get_loop">get_loop()</a> call,
+and then deadlock when <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.run_coroutine_threadsafe">run_coroutine_threadsafe()</a> is called
+on a loop that isn't running yet.</p>
+<p>We can go ahead and plug in the new <code>run()</code>,
+winding things down  after we're done:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span>
 <span class="normal">52</span>
 <span class="normal">53</span>
 <span class="normal">54</span>
 <span class="normal">55</span>
 <span class="normal">56</span>
 <span class="normal">57</span>
-<span class="normal">58</span>
-<span class="normal">59</span>
-<span class="normal">60</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">try</span><span class="p">:</span>
+<span class="normal">58</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">try</span><span class="p">:</span>
     <span class="n">session</span> <span class="o">=</span> <span class="n">run</span><span class="p">(</span><span class="n">call_async</span><span class="p">(</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">))</span>
     <span class="n">run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="fm">__aenter__</span><span class="p">())</span>
     <span class="k">try</span><span class="p">:</span>
@@ -454,14 +463,16 @@ there is code that works with them from outside of a Task or a callback.</p>
     <span class="n">loop_thread</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
 
-<p>not waiting sometimes works,
-but sometimes hangs (if run_forever() starts after we call stop())</p>
-<p>loop.stop() (instead of call_soon_threadsafe) hangs</p>
+<p>This time, it really works:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>brigde.py
 <span class="go">got 200 in loop 4444839248 in LoopThread</span>
 <span class="go">got 200 in loop 4444839248 in LoopThread</span>
 </code></pre></div>
-<h3 id="thread-runner">Thread runner<span class="headerlink"> <a href="#thread-runner" title="permalink">#</a></span></h3>
+<!-- ## Thread runner -->
+<p>Of course, getting all that in the right order isn't exactly easy,
+so let's lift it up into an abstraction;
+<a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.Runner">asyncio.Runner</a> already does the same thing,
+so we'll mimick its API:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 9</span>
 <span class="normal">10</span>
 <span class="normal">11</span>
@@ -502,8 +513,7 @@ but sometimes hangs (if run_forever() starts after we call stop())</p>
 <span class="normal">46</span>
 <span class="normal">47</span>
 <span class="normal">48</span>
-<span class="normal">49</span>
-<span class="normal">50</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">ThreadRunner</span><span class="p">:</span>
+<span class="normal">49</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">ThreadRunner</span><span class="p">:</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_runner</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Runner</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -543,17 +553,18 @@ but sometimes hangs (if run_forever() starts after we call stop())</p>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">run_forever</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;LoopThread&#39;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
-
         <span class="n">loop_created</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
 
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">75</span>
+<p>This means using it looks <a href="#one-thread">just the same</a>,
+which is pretty neat:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">74</span>
+<span class="normal">75</span>
 <span class="normal">76</span>
 <span class="normal">77</span>
 <span class="normal">78</span>
 <span class="normal">79</span>
-<span class="normal">80</span>
-<span class="normal">81</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
+<span class="normal">80</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
     <span class="n">session</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">call_async</span><span class="p">(</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">))</span>
     <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="fm">__aenter__</span><span class="p">())</span>
     <span class="k">try</span><span class="p">:</span>
@@ -562,7 +573,6 @@ but sometimes hangs (if run_forever() starts after we call stop())</p>
         <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="fm">__aexit__</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
 </code></pre></div></td></tr></table></div>
 
-<p>hey, it's the same code <a href="#one-thread">we started with</a>! pretty neat</p>
 <h2 id="context-managers">Context managers<span class="headerlink"> <a href="#context-managers" title="permalink">#</a></span></h2>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">52</span>
 <span class="normal">53</span>
@@ -570,9 +580,7 @@ but sometimes hangs (if run_forever() starts after we call stop())</p>
 <span class="normal">55</span>
 <span class="normal">56</span>
 <span class="normal">57</span>
-<span class="normal">58</span>
-<span class="normal">59</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
-    <span class="k">def</span> <span class="nf">wrap_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cm</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">factory</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="normal">58</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">wrap_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cm</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">factory</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">cm</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">cm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">call_async</span><span class="p">(</span><span class="n">factory</span><span class="p">))</span>
         <span class="k">try</span><span class="p">:</span>
@@ -581,9 +589,9 @@ but sometimes hangs (if run_forever() starts after we call stop())</p>
             <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">cm</span><span class="o">.</span><span class="fm">__aexit__</span><span class="p">(</span><span class="o">*</span><span class="n">sys</span><span class="o">.</span><span class="n">exc_info</span><span class="p">()))</span>
 </code></pre></div></td></tr></table></div>
 
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">84</span>
-<span class="normal">85</span>
-<span class="normal">86</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">83</span>
+<span class="normal">84</span>
+<span class="normal">85</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
     <span class="k">with</span> <span class="n">runner</span><span class="o">.</span><span class="n">wrap_context</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">)</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
         <span class="n">do_stuff_in_threads</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
@@ -598,9 +606,9 @@ but sometimes hangs (if run_forever() starts after we call stop())</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">_stack</span> <span class="o">=</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">ExitStack</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
 
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">62</span>
-<span class="normal">63</span>
-<span class="normal">64</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">enter_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cm</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">factory</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">61</span>
+<span class="normal">62</span>
+<span class="normal">63</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">enter_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cm</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">factory</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="n">cm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">wrap_context</span><span class="p">(</span><span class="n">cm</span><span class="o">=</span><span class="n">cm</span><span class="p">,</span> <span class="n">factory</span><span class="o">=</span><span class="n">factory</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">cm</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
@@ -620,24 +628,25 @@ but sometimes hangs (if run_forever() starts after we call stop())</p>
             <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
 
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">92</span>
-<span class="normal">93</span>
-<span class="normal">94</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">91</span>
+<span class="normal">92</span>
+<span class="normal">93</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
     <span class="n">session</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">)</span>
     <span class="n">do_stuff_in_threads</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
 <h2 id="iterables">Iterables<span class="headerlink"> <a href="#iterables" title="permalink">#</a></span></h2>
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">92</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">91</span>
+<span class="normal">92</span>
 <span class="normal">93</span>
-<span class="normal">94</span>
-<span class="normal">95</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">do_stuff_lines</span><span class="p">(</span><span class="n">session</span><span class="p">):</span>
+<span class="normal">94</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">do_stuff_lines</span><span class="p">(</span><span class="n">session</span><span class="p">):</span>
     <span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;https://death.andgravity.com/&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
         <span class="k">async</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">:</span>
             <span class="k">yield</span> <span class="n">line</span>
 </code></pre></div></td></tr></table></div>
 
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 98</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 97</span>
+<span class="normal"> 98</span>
 <span class="normal"> 99</span>
 <span class="normal">100</span>
 <span class="normal">101</span>
@@ -647,8 +656,7 @@ but sometimes hangs (if run_forever() starts after we call stop())</p>
 <span class="normal">105</span>
 <span class="normal">106</span>
 <span class="normal">107</span>
-<span class="normal">108</span>
-<span class="normal">109</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
+<span class="normal">108</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
     <span class="n">session</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">)</span>
     <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="n">it</span> <span class="o">=</span> <span class="n">aiter</span><span class="p">(</span><span class="n">do_stuff_lines</span><span class="p">(</span><span class="n">session</span><span class="p">))</span>
@@ -666,13 +674,13 @@ but sometimes hangs (if run_forever() starts after we call stop())</p>
 <span class="go">624 lines</span>
 </code></pre></div>
 <hr />
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">69</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">68</span>
+<span class="normal">69</span>
 <span class="normal">70</span>
 <span class="normal">71</span>
 <span class="normal">72</span>
 <span class="normal">73</span>
-<span class="normal">74</span>
-<span class="normal">75</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">wrap_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">it</span><span class="p">):</span>
+<span class="normal">74</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">wrap_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">it</span><span class="p">):</span>
         <span class="n">it</span> <span class="o">=</span> <span class="n">aiter</span><span class="p">(</span><span class="n">it</span><span class="p">)</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
@@ -681,10 +689,10 @@ but sometimes hangs (if run_forever() starts after we call stop())</p>
                 <span class="k">break</span>
 </code></pre></div></td></tr></table></div>
 
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">106</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">105</span>
+<span class="normal">106</span>
 <span class="normal">107</span>
-<span class="normal">108</span>
-<span class="normal">109</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
+<span class="normal">108</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
     <span class="n">session</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">)</span>
     <span class="n">count</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">runner</span><span class="o">.</span><span class="n">wrap_iter</span><span class="p">(</span><span class="n">do_stuff_lines</span><span class="p">(</span><span class="n">session</span><span class="p">)))</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="s1">&#39;lines&#39;</span><span class="p">)</span>
@@ -693,6 +701,10 @@ but sometimes hangs (if run_forever() starts after we call stop())</p>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>The <em>other</em> way of doing more than one thing at a time. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>Which itself comes with a warning:
+<em>to handle signals and to execute subprocesses,
+the event loop must be run in the main thread</em>.
+This is a sacrifice we're willing to make. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
