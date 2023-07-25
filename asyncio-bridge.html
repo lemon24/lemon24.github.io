@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-06-22">June 2023</span>
-∙ eight minute read
+∙ 10 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -115,8 +115,22 @@ window.addEventListener('resize', set_vh);
 <strong>without</strong> making <strong>everything async</strong>.</p>
 <p>Maybe the sync stuff is an existing application.</p>
 <p>Maybe you still want to use <a href="/output">your favorite CLI library</a>.</p>
-<p>Or maybe you need just a little async, and don't want to pay the full price.</p>
-<p>TODO: in this article, add an example, maybe mention asyncio.to_thread(), asyncio.run() etc.</p>
+<p>Or maybe you need just <a href="https://twitter.com/_andgravity/status/1678431313332785152" title="as a treat">a little async</a>,
+without having to pay the full price.</p>
+<p>Of course,
+you can run a single coroutine using <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.run">asyncio.run()</a>,
+and you can run sync code from a coroutine using <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.to_thread">asyncio.to_thread()</a>,
+but the former isn't granular enough,
+and the latter doesn't solve async code being at the top.</p>
+<p>As always, there must be a better way.</p>
+<p>It might look like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
+    <span class="n">session</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">)</span>
+    <span class="k">with</span> <span class="n">runner</span><span class="o">.</span><span class="n">wrap_context</span><span class="p">(</span>
+        <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;https://death.andgravity.com/&#39;</span><span class="p">)</span>
+    <span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">wrap_iter</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">))),</span> <span class="s1">&#39;lines&#39;</span><span class="p">)</span>
+</code></pre></div>
 <section class="toc">
 <ul>
 <li><a href="#but-i-need-to-do-the-thing-more-than-once">But I need to do the thing more than once</a></li>
@@ -124,12 +138,8 @@ window.addEventListener('resize', set_vh);
 <li><a href="#but-i-want-a-long-lived-session">But I want a long-lived session</a></li>
 <li><a href="#but-i-want-to-do-something-else-during-the-async-stuff">But I want to do something else during the async stuff</a></li>
 <li><a href="#but-i-want-to-do-async-stuff-from-multiple-threads">But I want to do async stuff from multiple threads</a></li>
-<li><a href="#context-managers">Context managers</a>
-<ul>
-<li><a href="#enter-context">Enter context</a></li>
-</ul>
-</li>
-<li><a href="#iterables">Iterables</a></li>
+<li><a href="#but-i-don-t-want-to-manage-async-context-managers-by-hand">But I don't want to manage async context managers by hand</a></li>
+<li><a href="#but-i-want-to-use-async-iterables">But I want to use async iterables</a></li>
 </ul>
 </section>
 <!-- # Getting started -->
@@ -573,14 +583,24 @@ which is pretty neat:</p>
         <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="fm">__aexit__</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
 </code></pre></div></td></tr></table></div>
 
-<h2 id="context-managers">Context managers<span class="headerlink"> <a href="#context-managers" title="permalink">#</a></span></h2>
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">52</span>
+<!-- # Context managers -->
+<h2 id="but-i-don-t-want-to-manage-async-context-managers-by-hand">But I don't want to manage async context managers by hand<span class="headerlink"> <a href="#but-i-don-t-want-to-manage-async-context-managers-by-hand" title="permalink">#</a></span></h2>
+<p>If I'm being honest,
+this whole &quot;simulate <code>async with</code> by calling the protocol methods&quot;
+is getting kinda tedious.
+But now we're getting good at abstracting stuff,
+and we have a place to put abstractions,
+so the solution is easy
+– have a <em>sync</em> context manager do it for us.</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">51</span>
+<span class="normal">52</span>
 <span class="normal">53</span>
 <span class="normal">54</span>
 <span class="normal">55</span>
 <span class="normal">56</span>
 <span class="normal">57</span>
-<span class="normal">58</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">wrap_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cm</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">factory</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="normal">58</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+    <span class="k">def</span> <span class="nf">wrap_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cm</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">factory</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">cm</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">cm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">call_async</span><span class="p">(</span><span class="n">factory</span><span class="p">))</span>
         <span class="k">try</span><span class="p">:</span>
@@ -589,6 +609,8 @@ which is pretty neat:</p>
             <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">cm</span><span class="o">.</span><span class="fm">__aexit__</span><span class="p">(</span><span class="o">*</span><span class="n">sys</span><span class="o">.</span><span class="n">exc_info</span><span class="p">()))</span>
 </code></pre></div></td></tr></table></div>
 
+<p>This is the same code as before, just more generic.</p>
+<p>Using it looks like this:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">83</span>
 <span class="normal">84</span>
 <span class="normal">85</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
@@ -596,7 +618,34 @@ which is pretty neat:</p>
         <span class="n">do_stuff_in_threads</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
-<h3 id="enter-context">Enter context<span class="headerlink"> <a href="#enter-context" title="permalink">#</a></span></h3>
+<!-- ## Enter context -->
+<p>I don't really like that extra level of indentation there...
+starting with Python 3.10, we can use <a href="https://docs.python.org/3/whatsnew/3.10.html#parenthesized-context-managers">parenthesized context managers</a>:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">83</span>
+<span class="normal">84</span>
+<span class="normal">85</span>
+<span class="normal">86</span>
+<span class="normal">87</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="p">(</span>
+    <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">,</span>
+    <span class="n">runner</span><span class="o">.</span><span class="n">wrap_context</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">)</span> <span class="k">as</span> <span class="n">session</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="n">do_stuff_in_threads</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+<p>...but that's still a bit iffy to me,
+and doesn't help if you need to conditionally enter a context manager.
+A better solution is to use an <a href="https://docs.python.org/3/library/contextlib.html#contextlib.ExitStack">ExitStack</a>:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">83</span>
+<span class="normal">84</span>
+<span class="normal">85</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">,</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">ExitStack</span><span class="p">()</span> <span class="k">as</span> <span class="n">stack</span><span class="p">:</span>
+    <span class="n">session</span> <span class="o">=</span> <span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">wrap_context</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">))</span>
+    <span class="n">do_stuff_in_threads</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+<p>...but that's still verbose,
+so it would be nice if we could offer some shorthand for it.
+Now, it could be argued that it's not ThreadRunner's concern to do this,
+but remember it exists to make it easy to use async code from sync code,
+and this &quot;I want this to be alive as long as the event loop&quot; use case
+is quite common.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">11</span>
 <span class="normal">12</span>
 <span class="normal">13</span>
@@ -628,6 +677,7 @@ which is pretty neat:</p>
             <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
 
+<p>So now, we can just do:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">91</span>
 <span class="normal">92</span>
 <span class="normal">93</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
@@ -635,7 +685,9 @@ which is pretty neat:</p>
     <span class="n">do_stuff_in_threads</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
-<h2 id="iterables">Iterables<span class="headerlink"> <a href="#iterables" title="permalink">#</a></span></h2>
+<!-- # Iterables -->
+<h2 id="but-i-want-to-use-async-iterables">But I want to use async iterables<span class="headerlink"> <a href="#but-i-want-to-use-async-iterables" title="permalink">#</a></span></h2>
+<p>How would you consume this <a href="https://docs.python.org/3/glossary.html#term-asynchronous-generator">asynchronous generator</a> from sync code?</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">91</span>
 <span class="normal">92</span>
 <span class="normal">93</span>
@@ -645,35 +697,15 @@ which is pretty neat:</p>
             <span class="k">yield</span> <span class="n">line</span>
 </code></pre></div></td></tr></table></div>
 
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 97</span>
-<span class="normal"> 98</span>
-<span class="normal"> 99</span>
-<span class="normal">100</span>
-<span class="normal">101</span>
-<span class="normal">102</span>
-<span class="normal">103</span>
-<span class="normal">104</span>
-<span class="normal">105</span>
-<span class="normal">106</span>
-<span class="normal">107</span>
-<span class="normal">108</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
-    <span class="n">session</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">)</span>
-    <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="n">it</span> <span class="o">=</span> <span class="n">aiter</span><span class="p">(</span><span class="n">do_stuff_lines</span><span class="p">(</span><span class="n">session</span><span class="p">))</span>
-    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">anext</span><span class="p">(</span><span class="n">it</span><span class="p">))</span>
-        <span class="k">except</span> <span class="ne">StopAsyncIteration</span><span class="p">:</span>
-            <span class="k">break</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="s1">&#39;lines&#39;</span><span class="p">)</span>
-</code></pre></div></td></tr></table></div>
-
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>brigde.py
-<span class="go">624 lines</span>
-</code></pre></div>
-<hr />
+<p>Like <code>async with</code>,
+<code>async for</code> has its own <a href="https://docs.python.org/3/glossary.html#term-asynchronous-iterable">asynchronous iterable</a> protocol we can wrap.
+We'll use the <a href="https://docs.python.org/3/library/functions.html#aiter">aiter()</a> and <a href="https://docs.python.org/3/library/functions.html#anext">anext()</a> built-ins
+instead of the corresponding <a href="https://docs.python.org/3/glossary.html#term-special-method">special methods</a>
+for slightly better error messages.</p>
+<!--
+.. literalinclude:: 50-iter.py
+    :lines: 97-
+-->
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">68</span>
 <span class="normal">69</span>
 <span class="normal">70</span>
@@ -689,6 +721,7 @@ which is pretty neat:</p>
                 <span class="k">break</span>
 </code></pre></div></td></tr></table></div>
 
+<p>You use it like so:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">105</span>
 <span class="normal">106</span>
 <span class="normal">107</span>
@@ -698,6 +731,78 @@ which is pretty neat:</p>
     <span class="nb">print</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="s1">&#39;lines&#39;</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>brigde.py
+<span class="go">624 lines</span>
+</code></pre></div>
+<p>And with wrapping this last async construct,
+we're done!</p>
+<p>Here's <a href="/_file/asyncio-bridge/51-wrap-iter.py">the final version of the code</a>.</p>
+<hr />
+<p><strong>Learned something new today?</strong> Share this with others, it really helps! <span class="text-large">
+<span class="share-icons">
+<a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Bridging%20the%20Python%20async%20gap%20from%20the%20other%20side&url=https%3A//death.andgravity.com/asyncio-bridge&via=_andgravity"
+>Twitter</a>
+<a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/asyncio-bridge&t=Bridging%20the%20Python%20async%20gap%20from%20the%20other%20side"
+>HN</a>
+<a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/asyncio-bridge&title=Bridging%20the%20Python%20async%20gap%20from%20the%20other%20side"
+>Reddit</a>
+</span>
+</span></p>
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=asyncio-bridge"
+    method="post"
+    id="embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>The <em>other</em> way of doing more than one thing at a time. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
@@ -705,6 +810,8 @@ which is pretty neat:</p>
 <em>to handle signals and to execute subprocesses,
 the event loop must be run in the main thread</em>.
 This is a sacrifice we're willing to make. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>Also, <a href="https://click.palletsprojects.com/en/latest/advanced/#managing-resources">there is precedent for this kind of API</a>,
+and <em><a href="/output#good-libraries-educate">something something copy, something something steal</a></em>. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
