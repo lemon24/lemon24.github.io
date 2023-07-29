@@ -33,7 +33,8 @@ class ThreadRunner:
         return self._runner.get_loop()
 
     def run(self, coro):
-        return asyncio.run_coroutine_threadsafe(coro, self.get_loop()).result()
+        loop = self.get_loop()
+        return asyncio.run_coroutine_threadsafe(coro, loop).result()
 
     def _lazy_init(self):
         if self._thread:
@@ -48,7 +49,9 @@ class ThreadRunner:
                 loop_created.set()
                 loop.run_forever()
 
-        self._thread = threading.Thread(target=run_forever, name='LoopThread')
+        self._thread = threading.Thread(
+            target=run_forever, name='LoopThread', daemon=True
+        )
         self._thread.start()
         loop_created.wait()
 
@@ -78,7 +81,7 @@ async def call_async(callable):
     return callable()
 
 
-async def do_stuff_async(session):
+async def do_stuff(session):
     async with session.get('https://death.andgravity.com/') as response:
         loop = asyncio.get_running_loop()
         thread = threading.current_thread()
@@ -87,7 +90,7 @@ async def do_stuff_async(session):
 
 def do_stuff_in_threads(run, session, n=1):
     threads = [
-        threading.Thread(target=run, args=(do_stuff_async(session),))
+        threading.Thread(target=run, args=(do_stuff(session),))
         for _ in range(n)
     ]
     for thread in threads:
@@ -96,7 +99,7 @@ def do_stuff_in_threads(run, session, n=1):
         thread.join()
 
 
-async def do_stuff_lines(session):
+async def generate_stuff(session):
     async with session.get('https://death.andgravity.com/') as response:
         async for line in response.content:
             yield line
@@ -104,5 +107,5 @@ async def do_stuff_lines(session):
 
 with ThreadRunner() as runner:
     session = runner.enter_context(factory=aiohttp.ClientSession)
-    count = sum(1 for line in runner.wrap_iter(do_stuff_lines(session)))
+    count = sum(1 for line in runner.wrap_iter(generate_stuff(session)))
     print(count, 'lines')

@@ -114,23 +114,49 @@ window.addEventListener('resize', set_vh);
 <p>But you also need to do <a href="/limit-concurrency">some async stuff</a>,
 <strong>without</strong> making <strong>everything async</strong>.</p>
 <p>Maybe the sync stuff is an existing application.</p>
-<p>Maybe you still want to use <a href="/output">your favorite CLI library</a>.</p>
+<p>Maybe you still want to use <a href="/output">your favorite sync library</a>.</p>
 <p>Or maybe you need just <a href="https://twitter.com/_andgravity/status/1678431313332785152" title="as a treat">a little async</a>,
 without having to pay the full price.</p>
 <p>Of course,
-you can run a single coroutine using <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.run">asyncio.run()</a>,
-and you can run sync code from a coroutine using <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.to_thread">asyncio.to_thread()</a>,
+you can run a coroutine with <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.run">asyncio.run()</a>,
+and blocking sync code from a coroutine with <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.to_thread">asyncio.to_thread()</a>,
 but the former isn't granular enough,
 and the latter doesn't solve async code being at the top.</p>
 <p>As always, there must be a better way.</p>
-<p>It might look like this:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
-    <span class="n">session</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">)</span>
-    <span class="k">with</span> <span class="n">runner</span><span class="o">.</span><span class="n">wrap_context</span><span class="p">(</span>
-        <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;https://death.andgravity.com/&#39;</span><span class="p">)</span>
-    <span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">wrap_iter</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">))),</span> <span class="s1">&#39;lines&#39;</span><span class="p">)</span>
+<p>Maybe something like this?</p>
+<!--
+```python
+runner = ThreadRunner()
+session = runner.enter_context(factory=aiohttp.ClientSession)
+with runner.wrap_context(session.get('https://death.andgravity.com/')) as response:
+    line_count = byte_count = 0
+    for line in runner.wrap_iter(response.content):
+        line_count += 1
+        byte_count += len(line)
+    print(line_count, 'lines,', byte_count, 'bytes')
+```
+-->
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">do_stuff</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">i</span> <span class="o">*</span> <span class="mi">2</span>
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">generate_stuff</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
+   <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
+       <span class="k">yield</span> <span class="n">n</span>
+
+<span class="n">runner</span> <span class="o">=</span> <span class="n">ThreadRunner</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">(</span><span class="mi">2</span><span class="p">)))</span>  <span class="c1"># 8</span>
+<span class="nb">print</span><span class="p">(</span><span class="o">*</span><span class="n">runner</span><span class="o">.</span><span class="n">wrap_iter</span><span class="p">(</span><span class="n">generate_stuff</span><span class="p">(</span><span class="mi">4</span><span class="p">)))</span>  <span class="c1"># 0 1 2 3</span>
 </code></pre></div>
+<p>Now, it would take a long time to fully explore
+how you might build up to such a thing,
+why you would actually need it...
+and so that's exactly what we're going to do.</p>
+<!--
+Now, it would take a long time to fully explore
+all the different ways that you would feel this music,
+feel this 9 8 groove,
+and so that's exactly what we're going to do.
+-->
 <section class="toc">
 <ul>
 <li><a href="#but-i-need-to-do-the-thing-more-than-once">But I need to do the thing more than once</a></li>
@@ -144,33 +170,31 @@ and the latter doesn't solve async code being at the top.</p>
 </section>
 <!-- # Getting started -->
 <h2 id="but-i-need-to-do-the-thing-more-than-once">But I need to do the thing more than once<span class="headerlink"> <a href="#but-i-need-to-do-the-thing-more-than-once" title="permalink">#</a></span></h2>
-<p>We'll make a few requests using an <a href="https://docs.aiohttp.org/">aiohttp</a> session,
-with a bit of extra logging;
-you can imagine any other async code in its place,
-no matter how complicated.</p>
-<p>I've split creating the session and making the request
-in two different functions, for reasons that will become obivous soon.</p>
+<p>To make our example more life-like,
+we'll make some requests using <a href="https://docs.aiohttp.org/">aiohttp</a>.</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 9</span>
 <span class="normal">10</span>
 <span class="normal">11</span>
-<span class="normal">12</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">do_stuff_async</span><span class="p">(</span><span class="n">session</span><span class="p">):</span>
+<span class="normal">12</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">do_stuff</span><span class="p">(</span><span class="n">session</span><span class="p">):</span>
     <span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;https://death.andgravity.com/&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
         <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span>
         <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;got&#39;</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">status</span><span class="p">,</span> <span class="s1">&#39;in loop&#39;</span><span class="p">,</span> <span class="nb">id</span><span class="p">(</span><span class="n">loop</span><span class="p">))</span>
 </code></pre></div></td></tr></table></div>
 
+<p>We create the session separately,
+since we might want to reuse it later on.</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">15</span>
 <span class="normal">16</span>
 <span class="normal">17</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
     <span class="k">async</span> <span class="k">with</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
-        <span class="k">await</span> <span class="n">do_stuff_async</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">do_stuff</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
-<p>As mentioned in the introduction,
-you can use <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.run">asyncio.run()</a> to execute a coroutine
-in a transient event loop.
-The docs say it should be used for the main entry point of asyncio programs,
-but you <em>can</em> call it more than once.</p>
+<p><a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.run">asyncio.run()</a> allows you to execute a coroutine
+in a transient event loop;
+it's meant to be the entry point of your program,
+and &quot;should ideally only be called once&quot;
+– but you <em>can</em> call it multiple times:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">20</span>
 <span class="normal">21</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
 <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
@@ -182,9 +206,11 @@ but you <em>can</em> call it more than once.</p>
 </code></pre></div>
 <!-- # Same loop -->
 <h2 id="but-i-want-a-long-lived-event-loop">But I want a long-lived event loop<span class="headerlink"> <a href="#but-i-want-a-long-lived-event-loop" title="permalink">#</a></span></h2>
-<p>Of course, creating and cleaning up a loop every time is not exactly efficient.</p>
+<p>Of course,
+creating and cleaning up a loop for each call isn't exactly efficient;
+also, we might have loop-bound resources that need to live across calls.</p>
 <p>With a bit of diving into <a href="https://docs.python.org/3/library/asyncio-eventloop.html">asyncio guts</a>,
-we can create and manage our own:</p>
+we can manage our own long-lived loop:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">20</span>
 <span class="normal">21</span>
 <span class="normal">22</span>
@@ -204,21 +230,22 @@ we can create and manage our own:</p>
     <span class="n">loop</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
 
-<details open>
-<summary>These are low-level APIs, so using them correctly is not exactly easy.</summary>
-<p>We could have used <a href="https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.get_event_loop">get_event_loop()</a> to both create and set the event loop,
-but this 2-in-1 behavior was deprecated in Python 3.10.</p>
-<p>Also, <a href="https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.loop.close">loop.close()</a> already schedules executor shutdown,
-but doesn't wait for it to finish;
-for predictable behavior, it's best to wait, so we do.</p>
-</details>
-<p>It works (note the loop id):</p>
+<p>These are low-level APIs, so a bit of care is needed to use them correctly:</p>
+<ul>
+<li>We could have used <a href="https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.get_event_loop">get_event_loop()</a> to both create and set the loop,
+but this behavior was deprecated in Python 3.10.</li>
+<li><a href="https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.loop.close">loop.close()</a> already schedules executor shutdown,
+but does not wait for it to finish;
+for predictable behavior,
+it's best to wait cleanup tasks explicitly.</li>
+</ul>
+<p>Anyway, it works – note the loop id:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>brigde.py
 <span class="go">got 200 in loop 4509807312</span>
 <span class="go">got 200 in loop 4509807312</span>
 </code></pre></div>
 <!-- ## Runner -->
-<p>Thankfully, beginning with Python 3.11, <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.Runner">asyncio.Runner</a> makes all that unnecessary:</p>
+<p>Thankfully, starting with Python 3.11, <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.Runner">asyncio.Runner</a> makes this much easier:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">20</span>
 <span class="normal">21</span>
 <span class="normal">22</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Runner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
@@ -228,59 +255,69 @@ for predictable behavior, it's best to wait, so we do.</p>
 
 <!-- # Same loop -->
 <h2 id="but-i-want-a-long-lived-session">But I want a long-lived session<span class="headerlink"> <a href="#but-i-want-a-long-lived-session" title="permalink">#</a></span></h2>
-<p>Reusing the loop is not really enough, though.</p>
-<p>We're still throwing the aiohttp <a href="https://docs.aiohttp.org/en/v3.8.4/client_reference.html#client-session">Session</a> away after one request,
-and with it the associated connection pool;
-this means that is we make multiple requests,
-we're going to re-connect for each of them;
-keeping a long-lived session can make repeated requests much faster.
-This applies to other things as well;
-most &quot;client&quot; libraries (e.g. <a href="https://github.com/aio-libs/aiobotocore">aiobotocore</a>) keep a connection pool around.</p>
-<p>We can create the session outside of an async function and just pass it in,
-but this logs:</p>
-<pre class="code code-container"><code>ERROR:asyncio:Unclosed client session
-client_session: &lt;aiohttp.client.ClientSession object at 0x10a271cd0&gt;
-</code></pre>
-<p>... because we're expected to <code>async session.close()</code> after we're done with it.
-(Among the reasons to do that is to make sure
-associated resources are released in a predictable manner.)</p>
-<p>The idiomatic way for an object to clean after itself the <code>with</code> statement,
-and Session does support its async version;
-since <code>async with</code> is just syntactic sugar over
-calling the <a href="https://docs.python.org/3/glossary.html#term-asynchronous-context-manager">asynchronous context manager</a> protocol methods in a specific way,
-we can simulate it by doing exactly that:</p>
+<p>Reusing the loop is not enough, though.</p>
+<p>We're  throwing the <a href="https://docs.aiohttp.org/en/v3.8.4/client_reference.html#client-session">Session</a> away after each request,
+and with it the associated connection pool,
+which means each request creates a new connection.
+Reusing connections can make repeated requests much faster –
+most &quot;client&quot; libraries (e.g. <a href="https://github.com/aio-libs/aiobotocore">aiobotocore</a>) keep a connection pool around
+for this reason.</p>
+<p>Creating the session outside an async function and passing it in works:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">15</span>
 <span class="normal">16</span>
 <span class="normal">17</span>
-<span class="normal">18</span>
-<span class="normal">19</span>
-<span class="normal">20</span>
-<span class="normal">21</span>
-<span class="normal">22</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Runner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
+<span class="normal">18</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Runner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
     <span class="n">session</span> <span class="o">=</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span>
-    <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="fm">__aenter__</span><span class="p">())</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">do_stuff_async</span><span class="p">(</span><span class="n">session</span><span class="p">))</span>
-        <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">do_stuff_async</span><span class="p">(</span><span class="n">session</span><span class="p">))</span>
-    <span class="k">finally</span><span class="p">:</span>
-        <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="fm">__aexit__</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+    <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">(</span><span class="n">session</span><span class="p">))</span>
+    <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">(</span><span class="n">session</span><span class="p">))</span>
 </code></pre></div></td></tr></table></div>
 
-<p>This works, but we're still left with a warning (as of aiohttp 3.8.4):</p>
-<pre class="code code-container"><code>.../bridge.py:16: DeprecationWarning: The object should be created within an async function
-  session = aiohttp.ClientSession()
-</code></pre>
-<p>... hmmh, the constructor wants to be called in an async function
-– let's make an async function to call it in:</p>
+<p>...but with a bunch of warnings:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>brigde.py
+<span class="go">.../bridge.py:16: DeprecationWarning: The object should be created within an async function</span>
+<span class="go">  session = aiohttp.ClientSession()</span>
+<span class="go">got 200 in loop 4570601360</span>
+<span class="go">got 200 in loop 4570601360</span>
+<span class="go">Unclosed client session</span>
+<span class="go">client_session: &lt;aiohttp.client.ClientSession object at 0x10ff01c90&gt;</span>
+</code></pre></div>
+<p>The first one's easy
+– the constructor wants to be called in an async function,
+so we write one to call it in
+(to pass in constructor arguments, we can use a <a href="https://docs.python.org/3/library/functools.html#functools.partial">partial()</a>):</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 9</span>
 <span class="normal">10</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">call_async</span><span class="p">(</span><span class="n">callable</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">callable</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
 
-<p>Here you go (to pass in constructor arguments, we can use a <a href="https://docs.python.org/3/library/functools.html#functools.partial">partial()</a>):</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">19</span>
 <span class="normal">20</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Runner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
     <span class="n">session</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">call_async</span><span class="p">(</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">))</span>
+</code></pre></div></td></tr></table></div>
+
+<p>The second one happens because
+we're expected to <code>async session.close()</code> after we're done with it.
+But we didn't do that before –
+we used the (async) <code>with</code> statement,
+the idiomatic way for objects to clean up after themselves.
+Since <code>async with</code> is syntactic sugar over
+calling the <a href="https://docs.python.org/3/glossary.html#term-asynchronous-context-manager">asynchronous context manager</a> protocol methods <a href="https://snarky.ca/unravelling-the-async-with-statement/">in a specific way</a>,
+we can simulate it by doing that:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Runner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
+    <span class="n">session</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">call_async</span><span class="p">(</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">))</span>
+    <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="fm">__aenter__</span><span class="p">())</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">(</span><span class="n">session</span><span class="p">))</span>
+        <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">(</span><span class="n">session</span><span class="p">))</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="fm">__aexit__</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
 </code></pre></div></td></tr></table></div>
 
 <!-- # Threads -->
@@ -301,7 +338,7 @@ so we'll do just that.</p>
 <span class="normal">14</span>
 <span class="normal">15</span>
 <span class="normal">16</span>
-<span class="normal">17</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">do_stuff_async</span><span class="p">(</span><span class="n">session</span><span class="p">):</span>
+<span class="normal">17</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">do_stuff</span><span class="p">(</span><span class="n">session</span><span class="p">):</span>
     <span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;https://death.andgravity.com/&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
         <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span>
         <span class="n">thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">current_thread</span><span class="p">()</span>
@@ -334,7 +371,7 @@ in actual code, the &quot;do something else&quot; part would happen between
 <span class="normal">27</span>
 <span class="normal">28</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">do_stuff_in_threads</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
     <span class="n">threads</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">run</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">do_stuff_async</span><span class="p">(</span><span class="n">session</span><span class="p">),))</span>
+        <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">run</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">(</span><span class="n">session</span><span class="p">),))</span>
         <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
     <span class="p">]</span>
     <span class="k">for</span> <span class="n">thread</span> <span class="ow">in</span> <span class="n">threads</span><span class="p">:</span>
@@ -523,7 +560,10 @@ so we'll mimick its API:</p>
 <span class="normal">46</span>
 <span class="normal">47</span>
 <span class="normal">48</span>
-<span class="normal">49</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">ThreadRunner</span><span class="p">:</span>
+<span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span>
+<span class="normal">52</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">ThreadRunner</span><span class="p">:</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_runner</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Runner</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -546,7 +586,8 @@ so we'll mimick its API:</p>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runner</span><span class="o">.</span><span class="n">get_loop</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coro</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run_coroutine_threadsafe</span><span class="p">(</span><span class="n">coro</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_loop</span><span class="p">())</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+        <span class="n">loop</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_loop</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run_coroutine_threadsafe</span><span class="p">(</span><span class="n">coro</span><span class="p">,</span> <span class="n">loop</span><span class="p">)</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">_lazy_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="p">:</span>
@@ -561,20 +602,22 @@ so we'll mimick its API:</p>
                 <span class="n">loop_created</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
                 <span class="n">loop</span><span class="o">.</span><span class="n">run_forever</span><span class="p">()</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">run_forever</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;LoopThread&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+            <span class="n">target</span><span class="o">=</span><span class="n">run_forever</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;LoopThread&#39;</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
         <span class="n">loop_created</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
 
 <p>This means using it looks <a href="#one-thread">just the same</a>,
 which is pretty neat:</p>
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">74</span>
-<span class="normal">75</span>
-<span class="normal">76</span>
-<span class="normal">77</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">77</span>
 <span class="normal">78</span>
 <span class="normal">79</span>
-<span class="normal">80</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
+<span class="normal">80</span>
+<span class="normal">81</span>
+<span class="normal">82</span>
+<span class="normal">83</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
     <span class="n">session</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">call_async</span><span class="p">(</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">))</span>
     <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="fm">__aenter__</span><span class="p">())</span>
     <span class="k">try</span><span class="p">:</span>
@@ -592,14 +635,14 @@ But now we're getting good at abstracting stuff,
 and we have a place to put abstractions,
 so the solution is easy
 – have a <em>sync</em> context manager do it for us.</p>
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">51</span>
-<span class="normal">52</span>
-<span class="normal">53</span>
-<span class="normal">54</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">54</span>
 <span class="normal">55</span>
 <span class="normal">56</span>
 <span class="normal">57</span>
-<span class="normal">58</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+<span class="normal">58</span>
+<span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
     <span class="k">def</span> <span class="nf">wrap_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cm</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">factory</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">cm</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">cm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">call_async</span><span class="p">(</span><span class="n">factory</span><span class="p">))</span>
@@ -609,11 +652,12 @@ so the solution is easy
             <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">cm</span><span class="o">.</span><span class="fm">__aexit__</span><span class="p">(</span><span class="o">*</span><span class="n">sys</span><span class="o">.</span><span class="n">exc_info</span><span class="p">()))</span>
 </code></pre></div></td></tr></table></div>
 
+<!-- FIXME: unravelling -->
 <p>This is the same code as before, just more generic.</p>
 <p>Using it looks like this:</p>
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">83</span>
-<span class="normal">84</span>
-<span class="normal">85</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">86</span>
+<span class="normal">87</span>
+<span class="normal">88</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
     <span class="k">with</span> <span class="n">runner</span><span class="o">.</span><span class="n">wrap_context</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">)</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
         <span class="n">do_stuff_in_threads</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
@@ -621,11 +665,11 @@ so the solution is easy
 <!-- ## Enter context -->
 <p>I don't really like that extra level of indentation there...
 starting with Python 3.10, we can use <a href="https://docs.python.org/3/whatsnew/3.10.html#parenthesized-context-managers">parenthesized context managers</a>:</p>
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">83</span>
-<span class="normal">84</span>
-<span class="normal">85</span>
-<span class="normal">86</span>
-<span class="normal">87</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="p">(</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">86</span>
+<span class="normal">87</span>
+<span class="normal">88</span>
+<span class="normal">89</span>
+<span class="normal">90</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="p">(</span>
     <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">,</span>
     <span class="n">runner</span><span class="o">.</span><span class="n">wrap_context</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">)</span> <span class="k">as</span> <span class="n">session</span><span class="p">,</span>
 <span class="p">):</span>
@@ -634,9 +678,9 @@ starting with Python 3.10, we can use <a href="https://docs.python.org/3/whatsne
 <p>...but that's still a bit iffy to me,
 and doesn't help if you need to conditionally enter a context manager.
 A better solution is to use an <a href="https://docs.python.org/3/library/contextlib.html#contextlib.ExitStack">ExitStack</a>:</p>
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">83</span>
-<span class="normal">84</span>
-<span class="normal">85</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">,</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">ExitStack</span><span class="p">()</span> <span class="k">as</span> <span class="n">stack</span><span class="p">:</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">86</span>
+<span class="normal">87</span>
+<span class="normal">88</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">,</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">ExitStack</span><span class="p">()</span> <span class="k">as</span> <span class="n">stack</span><span class="p">:</span>
     <span class="n">session</span> <span class="o">=</span> <span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">wrap_context</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">))</span>
     <span class="n">do_stuff_in_threads</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
@@ -655,9 +699,9 @@ is quite common.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></su
         <span class="bp">self</span><span class="o">.</span><span class="n">_stack</span> <span class="o">=</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">ExitStack</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
 
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">61</span>
-<span class="normal">62</span>
-<span class="normal">63</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">enter_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cm</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">factory</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">64</span>
+<span class="normal">65</span>
+<span class="normal">66</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">enter_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cm</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">factory</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="n">cm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">wrap_context</span><span class="p">(</span><span class="n">cm</span><span class="o">=</span><span class="n">cm</span><span class="p">,</span> <span class="n">factory</span><span class="o">=</span><span class="n">factory</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">cm</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
@@ -678,9 +722,9 @@ is quite common.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></su
 </code></pre></div></td></tr></table></div>
 
 <p>So now, we can just do:</p>
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">91</span>
-<span class="normal">92</span>
-<span class="normal">93</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">94</span>
+<span class="normal">95</span>
+<span class="normal">96</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
     <span class="n">session</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">)</span>
     <span class="n">do_stuff_in_threads</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
@@ -688,10 +732,10 @@ is quite common.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></su
 <!-- # Iterables -->
 <h2 id="but-i-want-to-use-async-iterables">But I want to use async iterables<span class="headerlink"> <a href="#but-i-want-to-use-async-iterables" title="permalink">#</a></span></h2>
 <p>How would you consume this <a href="https://docs.python.org/3/glossary.html#term-asynchronous-generator">asynchronous generator</a> from sync code?</p>
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">91</span>
-<span class="normal">92</span>
-<span class="normal">93</span>
-<span class="normal">94</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">do_stuff_lines</span><span class="p">(</span><span class="n">session</span><span class="p">):</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">94</span>
+<span class="normal">95</span>
+<span class="normal">96</span>
+<span class="normal">97</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">generate_stuff</span><span class="p">(</span><span class="n">session</span><span class="p">):</span>
     <span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;https://death.andgravity.com/&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
         <span class="k">async</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">:</span>
             <span class="k">yield</span> <span class="n">line</span>
@@ -704,15 +748,15 @@ instead of the corresponding <a href="https://docs.python.org/3/glossary.html#te
 for slightly better error messages.</p>
 <!--
 .. literalinclude:: 50-iter.py
-    :lines: 97-
+    :lines: 100-
 -->
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">68</span>
-<span class="normal">69</span>
-<span class="normal">70</span>
-<span class="normal">71</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">71</span>
 <span class="normal">72</span>
 <span class="normal">73</span>
-<span class="normal">74</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">wrap_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">it</span><span class="p">):</span>
+<span class="normal">74</span>
+<span class="normal">75</span>
+<span class="normal">76</span>
+<span class="normal">77</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">wrap_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">it</span><span class="p">):</span>
         <span class="n">it</span> <span class="o">=</span> <span class="n">aiter</span><span class="p">(</span><span class="n">it</span><span class="p">)</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
@@ -722,12 +766,12 @@ for slightly better error messages.</p>
 </code></pre></div></td></tr></table></div>
 
 <p>You use it like so:</p>
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">105</span>
-<span class="normal">106</span>
-<span class="normal">107</span>
-<span class="normal">108</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">108</span>
+<span class="normal">109</span>
+<span class="normal">110</span>
+<span class="normal">111</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">with</span> <span class="n">ThreadRunner</span><span class="p">()</span> <span class="k">as</span> <span class="n">runner</span><span class="p">:</span>
     <span class="n">session</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">)</span>
-    <span class="n">count</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">runner</span><span class="o">.</span><span class="n">wrap_iter</span><span class="p">(</span><span class="n">do_stuff_lines</span><span class="p">(</span><span class="n">session</span><span class="p">)))</span>
+    <span class="n">count</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">runner</span><span class="o">.</span><span class="n">wrap_iter</span><span class="p">(</span><span class="n">generate_stuff</span><span class="p">(</span><span class="n">session</span><span class="p">)))</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="s1">&#39;lines&#39;</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
