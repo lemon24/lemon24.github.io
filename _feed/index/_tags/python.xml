@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #python</title>
-  <updated>2023-07-30T13:00:00+00:00</updated>
+  <updated>2023-07-30T16:00:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
@@ -12,7 +12,7 @@
   <entry xml:base="https://death.andgravity.com/asyncio-bridge">
     <id>https://death.andgravity.com/asyncio-bridge</id>
     <title>Bridging the Python async gap from the other side</title>
-    <updated>2023-07-30T13:00:00+00:00</updated>
+    <updated>2023-07-30T16:00:00+00:00</updated>
     <content type="html">&lt;p&gt;So, you're doing some sync stuff.&lt;/p&gt;
 &lt;p&gt;But you also need to do &lt;a href="/limit-concurrency"&gt;some async stuff&lt;/a&gt;,
 &lt;strong&gt;without&lt;/strong&gt; making &lt;strong&gt;everything async&lt;/strong&gt;.&lt;/p&gt;
@@ -28,18 +28,6 @@ and the latter doesn't solve async code being at the top.&lt;/p&gt;
 &lt;p&gt;As always, there must be a better way.&lt;/p&gt;
 &lt;hr /&gt;
 &lt;p&gt;Maybe something like this?&lt;/p&gt;
-&lt;!--
-```python
-runner = ThreadRunner()
-session = runner.enter_context(factory=aiohttp.ClientSession)
-with runner.wrap_context(session.get('https://death.andgravity.com/')) as response:
-    line_count = byte_count = 0
-    for line in runner.wrap_iter(response.content):
-        line_count += 1
-        byte_count += len(line)
-    print(line_count, 'lines,', byte_count, 'bytes')
-```
---&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;async&lt;/span&gt; &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;do_stuff&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
     &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;
 
@@ -51,6 +39,15 @@ with runner.wrap_context(session.get('https://death.andgravity.com/')) as respon
 &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;runner&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;run&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;do_stuff&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;)))&lt;/span&gt;  &lt;span class="c1"&gt;# 8&lt;/span&gt;
 &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;runner&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;wrap_iter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;generate_stuff&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;4&lt;/span&gt;&lt;span class="p"&gt;)))&lt;/span&gt;  &lt;span class="c1"&gt;# 0 1 2 3&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;!--
+```python
+session = runner.enter_context(factory=aiohttp.ClientSession)
+coroutine = session.get('https://death.andgravity.com/')
+with runner.wrap_context(coroutine) as response:
+    lines = list(runner.wrap_iter(response.content))
+print('got', len(lines), 'lines')  # got 624 lines
+```
+--&gt;
 &lt;p&gt;Now, it would take a long time to fully explore
 how you might build up to such a thing,
 why you would actually need it...
@@ -70,6 +67,7 @@ and so that's exactly what we're going to do.
 &lt;li&gt;&lt;a href="#but-i-want-to-do-async-stuff-from-multiple-threads"&gt;But I want to do async stuff from multiple threads&lt;/a&gt;&lt;/li&gt;
 &lt;li&gt;&lt;a href="#but-i-don-t-want-to-manage-async-context-managers-by-hand"&gt;But I don't want to manage async context managers by hand&lt;/a&gt;&lt;/li&gt;
 &lt;li&gt;&lt;a href="#but-i-want-to-use-async-iterables"&gt;But I want to use async iterables&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#so-should-you-do-this"&gt;So, should you do this?&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 &lt;/section&gt;
 &lt;!-- # Getting started --&gt;
@@ -681,9 +679,18 @@ instead of calling the corresponding &lt;a href="https://docs.python.org/3/gloss
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;python&lt;span class="w"&gt; &lt;/span&gt;brigde.py
 &lt;span class="go"&gt;624 lines&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;And with wrapping this last async construct,
-we're done!&lt;/p&gt;
+&lt;p&gt;And with this, we're done!&lt;/p&gt;
 &lt;p&gt;Here's &lt;a href="/_file/asyncio-bridge/51-wrap-iter.py"&gt;the final version of the code&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 id="so-should-you-do-this"&gt;So, should you do this?&lt;span class="headerlink"&gt; &lt;a href="#so-should-you-do-this" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;I did use something like this on a &amp;quot;production&amp;quot; project without any problems.&lt;/p&gt;
+&lt;p&gt;Performance might be an issue when running many of small tasks,
+but the overhead for medium-to-large tasks should be negligible,
+especially compared with the cost of doing I/O
+(for example, returning an entire HTTP response is likely fine, 
+wrapping an async iterator of characters might not be).&lt;/p&gt;
+&lt;p&gt;In my case,
+I was forced to use an async library that didn't have a sync counterpart,
+and the benefit of having a mostly sync code base was overwhelming.&lt;/p&gt;
 &lt;p&gt;&lt;strong&gt;Learned something new today?&lt;/strong&gt; Share this with others, it really helps! &lt;span class="text-large"&gt;
 &lt;span class="share-icons"&gt;
 &lt;a
