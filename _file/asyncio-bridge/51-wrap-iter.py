@@ -59,10 +59,16 @@ class ThreadRunner:
     def wrap_context(self, cm=None, factory=None):
         if cm is None:
             cm = self.run(call_async(factory))
+        aenter = type(cm).__aenter__
+        aexit = type(cm).__aexit__
+        value = self.run(aenter(cm))
         try:
-            yield self.run(cm.__aenter__())
-        finally:
-            self.run(cm.__aexit__(*sys.exc_info()))
+            yield value
+        except:
+            if not self.run(aexit(cm, *sys.exc_info())):
+                raise
+        else:
+            self.run(aexit(cm, None, None, None))
 
     def enter_context(self, cm=None, factory=None):
         cm = self.wrap_context(cm=cm, factory=factory)
@@ -99,13 +105,9 @@ def do_stuff_in_threads(run, session, n=1):
         thread.join()
 
 
-async def generate_stuff(session):
-    async with session.get('https://death.andgravity.com/') as response:
-        async for line in response.content:
-            yield line
-
-
 with ThreadRunner() as runner:
     session = runner.enter_context(factory=aiohttp.ClientSession)
-    count = sum(1 for line in runner.wrap_iter(generate_stuff(session)))
-    print(count, 'lines')
+    coroutine = session.get('https://death.andgravity.com/')
+    with runner.wrap_context(coroutine) as response:
+        lines = [line for line in runner.wrap_iter(response.content)]
+    print('got', len(lines), 'lines')
