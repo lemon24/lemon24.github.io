@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-08-24">August 2023</span>
-∙ seven minute read
+∙ eight minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -196,12 +196,12 @@ and a new value for the etag header to be stored</p>
 </code></pre></div>
 
 <p>if the URL is an HTTP one,
-we use Requests to get the feed;
+we get it using Requests, and return the underlying file-like object;<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
 if not, we assume it's the path to a file</p>
 <p>for maximum flexibility, we also support file: URIs;
 extract_path() does a bit of validation
-(e.g. allow file:feed.xml and file://localhost/feed.xml, 
-but not file://invalid/feed.xml or unknown://host/path<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>)
+(e.g. allow file:feed.xml and file://localhost/feed.xml,
+but not file://invalid/feed.xml or unknown://host/path<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>)
 and returns a path we can pass to open</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">extract_path</span><span class="p">(</span><span class="n">url</span><span class="p">):</span>
     <span class="n">url_parsed</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">urlparse</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
@@ -225,9 +225,8 @@ without chaging the code</p>
     <span class="n">headers</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="c1"># ...</span>
     <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">raw</span><span class="p">,</span> <span class="n">etag</span>
-</code></pre></div>
 
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">file_retriever</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">file_retriever</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">):</span>
     <span class="n">path</span> <span class="o">=</span> <span class="n">extract_path</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
     <span class="k">return</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">),</span> <span class="kc">None</span>
 </code></pre></div>
@@ -256,7 +255,7 @@ without chaging the code</p>
 (in practice, we actually provide method for that,
 that also makes sure it stays sorted)</p>
 <h3 id="problem-can-t-validate-an-url-without-retrieving-it">problem: can't validate an url without retrieving it<span class="headerlink"> <a href="#problem-can-t-validate-an-url-without-retrieving-it" title="permalink">#</a></span></h3>
-<p>to add a feed, users call <code>add_feed(url)</code>, 
+<p>to add a feed, users call <code>add_feed(url)</code>,
 which saves it in the database,
 to be retrieved on the next update.</p>
 <p>what happens when the user adds an invalid feed, e.g. unknown://host/path?
@@ -278,7 +277,7 @@ but this invites it to accidentally become out of sync with the retriever one.</
     <span class="s1">&#39;&#39;</span><span class="p">:</span> <span class="n">file_url_validator</span><span class="p">,</span>
 <span class="p">}</span>
 </code></pre></div>
-<p>we could group the retriever and the corresponding validator 
+<p>we could group the retriever and the corresponding validator
 by storing a (retriever, validator) tuple in the retriever registry.
 this is betetr, but results in less-than readable code during use
 (especially if we later need to add a third thing);
@@ -317,27 +316,61 @@ and makes it difficult to customize bits of behavior that affect both the retrie
 <p>we're making the retriever instances <a href="https://docs.python.org/3/glossary.html#term-callable">callable</a>;
 this allows us to
 replace the original retriever functions with instances,
-and leave both <code>retrieve()</code> and the retriever registry unchanged.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
+and leave both <code>retrieve()</code> and the retriever registry unchanged.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">http_retriever</span> <span class="o">=</span> <span class="n">HTTPRetriever</span><span class="p">()</span>
 <span class="n">file_retriever</span> <span class="o">=</span> <span class="n">FileRetriever</span><span class="p">()</span>
 </code></pre></div>
 
 <p><code>validate_url()</code> works like <code>retrieve()</code>,
 but it  delegates to the appropriate method:</p>
-<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">71</span>
-<span class="normal">72</span>
-<span class="normal">73</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">validate_url</span><span class="p">(</span><span class="n">url</span><span class="p">):</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">validate_url</span><span class="p">(</span><span class="n">url</span><span class="p">):</span>
     <span class="n">retriever</span> <span class="o">=</span> <span class="n">get_retriever</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
     <span class="n">retriever</span><span class="o">.</span><span class="n">validate_url</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-</code></pre></div></td></tr></table></div>
+</code></pre></div>
 
 <p>And here you have it – <strong>if you repeat similar sets of functions, consider grouping them in a class</strong>.</p>
 <h3 id="not-just-functions-attributes-too">Not just functions, attributes too<span class="headerlink"> <a href="#not-just-functions-attributes-too" title="permalink">#</a></span></h3>
-<p>Later on, I added a <code>slow_to_read</code> class attribute to each retriever,
-that allows the parsing infrastructure to read() 
-the file returned by the retriever into a temporary file,
-and pass that to the parser (as an optimization).</p>
-<p>TODO: example code</p>
+<p>say you want to update feeds in parallel, using multiple threads.</p>
+<p>parsing is pure Python, CPU bound code,
+so threads won't help because of the <a href="https://docs.python.org/3/glossary.html#term-global-interpreter-lock">global interpreter lock</a>;
+more importantly, parsing is not the bottleneck –
+we can parse feeds much faster than we retrieve them.</p>
+<p>retrieving, however, is mostly waiting around for I/O –
+it takes ages to connect to the server and for it to respond.</p>
+<p>but, because we're <a href="https://requests.readthedocs.io/en/latest/user/advanced/#body-content-workflow">streaming the reponse</a>,
+there's still I/O left to be done
+after <code>retrieve()</code> passes the file to the parser
+(unless the response is small enough to fit in the TCP receive buffer).
+we need to make sure the response is consumed <em>before</em> <code>retrieve()</code> returns.
+one solution is to read it into a temporary file, and return that instead
+(reading it into memory defeats the purpose of streaming).</p>
+<p>we could implement this directly in HTTPRetriever,
+but it may be a good idea to do it in <code>retrieve()</code>,
+so others retrievers can opt into this behavior;
+we'll use a class attribute to allow them to do so:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">HTTPRetriever</span><span class="p">:</span>
+    <span class="n">slow_to_read</span> <span class="o">=</span> <span class="kc">True</span>
+</code></pre></div>
+
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">FileRetriever</span><span class="p">:</span>
+    <span class="n">slow_to_read</span> <span class="o">=</span> <span class="kc">False</span>
+</code></pre></div>
+
+<p>If the retriever is slow to read, we do the swap:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">retriever</span> <span class="o">=</span> <span class="n">get_retriever</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+    <span class="n">file</span><span class="p">,</span> <span class="n">etag</span> <span class="o">=</span> <span class="n">retriever</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">file</span> <span class="ow">and</span> <span class="n">retriever</span><span class="o">.</span><span class="n">slow_to_read</span><span class="p">:</span>
+        <span class="n">temp</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryFile</span><span class="p">()</span>
+        <span class="n">shutil</span><span class="o">.</span><span class="n">copyfileobj</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">temp</span><span class="p">)</span>
+        <span class="n">file</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="n">temp</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">file</span> <span class="o">=</span> <span class="n">temp</span>
+
+    <span class="k">return</span> <span class="n">file</span><span class="p">,</span> <span class="n">etag</span>
+</code></pre></div>
+
 <h2 id="example-flask-s-tagged-json">Example: Flask's tagged JSON<span class="headerlink"> <a href="#example-flask-s-tagged-json" title="permalink">#</a></span></h2>
 <p>The Flask web framework provides <a href="https://flask.palletsprojects.com/en/2.3.x/api/#tagged-json">tagged JSON</a> (<a href="https://github.com/pallets/flask/blob/2.3.x/src/flask/json/tag.py">code</a>),
 an extendable compact representation for non-standard JSON types.</p>
@@ -347,10 +380,10 @@ delegates the conversion work to methods of a number of <a href="https://flask.p
 <ul>
 <li><code>check()</code> checks if a Python value should be tagged by that tag</li>
 <li><code>tag()</code> converts it to tagged JSON</li>
-<li><code>to_python()</code> converts a JSON value back to Python 
+<li><code>to_python()</code> converts a JSON value back to Python
 (the serializer uses the <code>key</code> tag attribute to find the correct tag)</li>
 </ul>
-<p>An interesting thing is that 
+<p>An interesting thing is that
 tag instances have a <code>serializer</code> instance attribute
 pointing back to the serializer;
 this is to allow recursion –
@@ -359,26 +392,36 @@ you need to recursively (un)pack its values.
 An instance attribute was not strictly required,
 each method could receive it as an argument,
 but <a href="/same-arguments">when your functions take the same arguments...</a></p>
-<h2 id="">...<span class="headerlink"> <a href="#" title="permalink">#</a></span></h2>
-<p>If multiple similar arguments, see other article</p>
-<p>Daos in general</p>
+<h2 id="formalizing-this">formalizing this<span class="headerlink"> <a href="#formalizing-this" title="permalink">#</a></span></h2>
+<p>TODO:</p>
 <ul>
-<li>maybe tie in another one about protocols and inheritance</li>
+<li>inheritance</li>
+<li>protocols</li>
 </ul>
-<p>Counterexample: if there's no state or need for inheritance, modules work too (also works with duck typing)</p>
+<h2 id="counter-example-modules">counter-example: modules<span class="headerlink"> <a href="#counter-example-modules" title="permalink">#</a></span></h2>
+<p>TODO:</p>
+<p>if there's no state or need for inheritance, modules work too (also works with duck typing)</p>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>the reason why we're doing this final validation here
+<li id="fn-1"><p>this code has a potential bug:
+if we were using a <a href="https://requests.readthedocs.io/en/latest/user/advanced/#session-objects">persistent session</a> instead of a transient one,
+the connection would never be released,
+since we're never closing the response after we're done with it.
+in the actual code, we're doing both,
+but the only way do so reliably is to <a href="https://github.com/lemon24/reader/blob/3.8/src/reader/_parser/http.py#L39-L103">return a context manager</a>;
+I omitted this detail because it doesn't add anything
+to the point we're trying to make here. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>the reason why we're doing this final validation here
 is because files are uniquely allows to have an explicit file: scheme,
-or no scheme at all. 
-also, once we add Windows support, 
+or no scheme at all.
+also, once we add Windows support,
 it'll also be able to accept paths like C:\feed.xml;
 note that drive letter is undistinguishable from a scheme –
-it's good to deal with this in the code that cares about it <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>if callable instances are too <a href="https://docs.python.org/3/glossary.html#term-magic-method">magic</a> for you,
+it's good to deal with this in the code that cares about it <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>if callable instances are too <a href="https://docs.python.org/3/glossary.html#term-magic-method">magic</a> for you,
 you can  name those methods <code>retrieve()</code>;
 here, I think it makes sense for retriever to be callable,
-since retrieving is its main job, everything else is scondary. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+since retrieving is its main job, everything else is scondary. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
