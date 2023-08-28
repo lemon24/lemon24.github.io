@@ -283,7 +283,7 @@ this is betetr, but results in less-than readable code during use
 (especially if we later need to add a third thing);
 also, it allows using a retriever with the wrong validator,
 and makes it difficult to customize bits of behavior that affect both the retriever and validator</p>
-<!-- TODO: link to so future "when to use classes" article -->
+<!-- TODO: link to future "when to use classes" article -->
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">RETRIEVERS</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s1">&#39;https://&#39;</span><span class="p">:</span> <span class="p">(</span><span class="n">http_retriever</span><span class="p">,</span> <span class="n">http_url_validator</span><span class="p">),</span>
     <span class="s1">&#39;http://&#39;</span><span class="p">:</span> <span class="p">(</span><span class="n">http_retriever</span><span class="p">,</span> <span class="n">http_url_validator</span><span class="p">),</span>
@@ -293,7 +293,7 @@ and makes it difficult to customize bits of behavior that affect both the retrie
 <p>better still, we can make the grouping explicit by using a class:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">HTTPRetriever</span><span class="p">:</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">):</span>
         <span class="n">headers</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="c1"># ...</span>
         <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">raw</span><span class="p">,</span> <span class="n">etag</span>
@@ -305,7 +305,7 @@ and makes it difficult to customize bits of behavior that affect both the retrie
 
 <span class="k">class</span> <span class="nc">FileRetriever</span><span class="p">:</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">):</span>
         <span class="n">path</span> <span class="o">=</span> <span class="n">extract_path</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
         <span class="k">return</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">),</span> <span class="kc">None</span>
 
@@ -313,16 +313,19 @@ and makes it difficult to customize bits of behavior that affect both the retrie
         <span class="n">extract_path</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
 </code></pre></div>
 
-<p>we're making the retriever instances <a href="https://docs.python.org/3/glossary.html#term-callable">callable</a>;
-this allows us to
-replace the original retriever functions with instances,
-and leave both <code>retrieve()</code> and the retriever registry unchanged.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
+<p>we then create retriever instances,
+and update <code>retrieve()</code> to call their methods:<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">http_retriever</span> <span class="o">=</span> <span class="n">HTTPRetriever</span><span class="p">()</span>
 <span class="n">file_retriever</span> <span class="o">=</span> <span class="n">FileRetriever</span><span class="p">()</span>
 </code></pre></div>
 
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">retriever</span> <span class="o">=</span> <span class="n">get_retriever</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">retriever</span><span class="o">.</span><span class="n">retrieve</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">)</span>
+</code></pre></div>
+
 <p><code>validate_url()</code> works like <code>retrieve()</code>,
-but it  delegates to the appropriate method:</p>
+but delegates accordingly:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">validate_url</span><span class="p">(</span><span class="n">url</span><span class="p">):</span>
     <span class="n">retriever</span> <span class="o">=</span> <span class="n">get_retriever</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
     <span class="n">retriever</span><span class="o">.</span><span class="n">validate_url</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
@@ -359,7 +362,7 @@ we'll use a class attribute to allow them to do so:</p>
 <p>If the retriever is slow to read, we do the swap:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="n">retriever</span> <span class="o">=</span> <span class="n">get_retriever</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-    <span class="n">file</span><span class="p">,</span> <span class="n">etag</span> <span class="o">=</span> <span class="n">retriever</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">)</span>
+    <span class="n">file</span><span class="p">,</span> <span class="n">etag</span> <span class="o">=</span> <span class="n">retriever</span><span class="o">.</span><span class="n">retrieve</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">file</span> <span class="ow">and</span> <span class="n">retriever</span><span class="o">.</span><span class="n">slow_to_read</span><span class="p">:</span>
         <span class="n">temp</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryFile</span><span class="p">()</span>
@@ -418,10 +421,9 @@ also, once we add Windows support,
 it'll also be able to accept paths like C:\feed.xml;
 note that drive letter is undistinguishable from a scheme –
 it's good to deal with this in the code that cares about it <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-3"><p>if callable instances are too <a href="https://docs.python.org/3/glossary.html#term-magic-method">magic</a> for you,
-you can  name those methods <code>retrieve()</code>;
-here, I think it makes sense for retriever to be callable,
-since retrieving is its main job, everything else is scondary. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>we could've avoided this last change
+by making the retriever instances <a href="https://docs.python.org/3/glossary.html#term-callable">callable</a>.
+<!-- TODO: talk about symmetry, and meta-retriever --> <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
