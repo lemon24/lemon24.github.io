@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-08-24">August 2023</span>
-∙ eight minute read
+∙ 10 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -396,11 +396,167 @@ An instance attribute was not strictly required,
 each method could receive it as an argument,
 but <a href="/same-arguments">when your functions take the same arguments...</a></p>
 <h2 id="formalizing-this">formalizing this<span class="headerlink"> <a href="#formalizing-this" title="permalink">#</a></span></h2>
-<p>TODO:</p>
-<ul>
-<li>inheritance</li>
-<li>protocols</li>
-</ul>
+<p>OK, we're more or less done, the code works.</p>
+<p>But, how would you communicate to others 
+(readers, implementers, interpreters, type checkers)
+that an HTTPRetriever is the same kind of thing as FileRetriever,
+and as everything else that's intended to be a value in RETRIEVERS?</p>
+<h3 id="duck-typing">Duck typing<span class="headerlink"> <a href="#duck-typing" title="permalink">#</a></span></h3>
+<p>Here's the definition of <a href="https://docs.python.org/3/glossary.html#term-duck-typing">duck typing</a>:</p>
+<blockquote>
+<p>A programming style which does not look at an object's type to determine if it has the right interface; instead, the method or attribute is simply called or used (&quot;If it looks like a duck and quacks like a duck, it must be a duck.&quot;) By emphasizing interfaces rather than specific types, well-designed code improves its flexibility by allowing polymorphic substitution. Duck-typing avoids tests using <a href="https://docs.python.org/3/library/functions.html#type">type()</a> or <a href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a>. [...] Instead, it typically employs <a href="https://docs.python.org/3/library/functions.html#hasattr">hasattr()</a> tests or <a href="https://docs.python.org/3/glossary.html#term-EAFP">EAFP</a> programming.</p>
+</blockquote>
+<p>We're already doing this - 
+if it retrieves like a retriever and it validates URLs like a retriever,
+it is a retriever.</p>
+<p>You see this all the time in Python.
+For example, <a href="https://docs.python.org/3/library/json.html#json.dump">json.dump()</a> takes a <a href="https://docs.python.org/3/glossary.html#term-file-object">file-like object</a>;
+now, the full <a href="https://docs.python.org/3/glossary.html#term-text-file">text file</a> <a href="https://docs.python.org/3/library/io.html#io.TextIOBase">interface</a> 
+has a non-trivial number of methods and attributes,
+but dump() only cares about one, <a href="https://docs.python.org/3/library/io.html#io.TextIOBase.write">write()</a>,
+and will accept <em>any</em> object implementing it:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyFile</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">s</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;writing: </span><span class="si">{</span><span class="n">s</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="gp">... </span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">f</span> <span class="o">=</span> <span class="n">MyFile</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">({</span><span class="s1">&#39;one&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="n">f</span><span class="p">)</span>
+<span class="go">writing: {</span>
+<span class="go">writing: &quot;one&quot;</span>
+<span class="go">writing: : </span>
+<span class="go">writing: 1</span>
+<span class="go">writing: }</span>
+</code></pre></div>
+<p>Sometimes, this is made explicit in the <a href="https://docs.python.org/3/library/json.html#json.dump">documentation</a>:</p>
+<blockquote>
+<p>Serialize <em>obj</em> [...] to <em>fp</em> (a <code>.write()</code>-supporting <a href="https://docs.python.org/3/glossary.html#term-file-object">file-like object</a>)</p>
+</blockquote>
+<h3 id="inheritance">Inheritance<span class="headerlink"> <a href="#inheritance" title="permalink">#</a></span></h3>
+<p>Nevertheless, you may want to express (and enforce) this in a more formal way.</p>
+<p>The next easiest option is to use a base class:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Retriever</span><span class="p">:</span>
+    <span class="n">slow_to_read</span> <span class="o">=</span> <span class="kc">False</span>
+  
+    <span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+  
+    <span class="k">def</span> <span class="nf">validate_url</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+</code></pre></div>
+
+<p>This allows you to provide default attributes and methods,
+use <a href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a> to check you got a retriever,
+and will help type checkers and autocompletion,
+at the expense of requiring all retrievers to inherit the base class:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyRetriever</span><span class="p">(</span><span class="n">Retriever</span><span class="p">):</span> <span class="k">pass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">retriever</span> <span class="o">=</span> <span class="n">MyRetriever</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">retriever</span><span class="o">.</span><span class="n">slow_to_read</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">retriever</span><span class="p">,</span> <span class="n">Retriever</span><span class="p">)</span>
+<span class="go">True</span>
+</code></pre></div>
+<p>What it won't do is to force subclasses to actually define the methods:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">retriever</span><span class="o">.</span><span class="n">validate_url</span><span class="p">(</span><span class="s1">&#39;myurl&#39;</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+<span class="w">  </span><span class="c">...</span>
+<span class="gr">NotImplementedError</span>
+</code></pre></div>
+<h3 id="abstract-base-classes">Abstract base classes<span class="headerlink"> <a href="#abstract-base-classes" title="permalink">#</a></span></h3>
+<p>And this is where <a href="https://docs.python.org/3/glossary.html#term-abstract-base-class">abstract base classes</a> come in.</p>
+<p>The decorators in the <a href="https://docs.python.org/3/library/abc.html">abc</a> module allow you to define abstract methods:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Retriever</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+
+    <span class="nd">@abstractproperty</span>
+    <span class="k">def</span> <span class="nf">slow_to_read</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span>
+  
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+  
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">validate_url</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+</code></pre></div>
+
+<p>... which have to be overriden by subclasses:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyRetriever</span><span class="p">(</span><span class="n">Retriever</span><span class="p">):</span> <span class="k">pass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">MyRetriever</span><span class="p">()</span>
+<span class="gt">Traceback (most recent call last):</span>
+<span class="w">  </span><span class="c">...</span>
+<span class="gr">TypeError</span>: <span class="n">Can&#39;t instantiate abstract class MyRetriever with abstract methods retrieve, slow_to_read, validate_url</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyRetriever</span><span class="p">(</span><span class="n">Retriever</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">slow_to_read</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="gp">... </span>    <span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">):</span> <span class="o">...</span>
+<span class="gp">... </span>    <span class="k">def</span> <span class="nf">validate_url</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">):</span> <span class="o">...</span>
+<span class="gp">... </span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">MyRetriever</span><span class="p">()</span>
+<span class="go">&lt;__main__.MyRetriever object at 0x1037aac50&gt;</span>
+</code></pre></div>
+<p>Note however that this will check
+only the presence of the required methods or attributes,
+not their type signatures or types.</p>
+<p>You can also register arbitrary classes as &quot;virtual subclasses&quot;,
+so they pass <a href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a> checks,
+but this won't check for required methods:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyRetriever</span><span class="p">:</span> <span class="k">pass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Retriever</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">MyRetriever</span><span class="p">)</span>
+<span class="go">&lt;class &#39;__main__.MyRetriever&#39;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">MyRetriever</span><span class="p">(),</span> <span class="n">Retriever</span><span class="p">)</span>
+<span class="go">True</span>
+</code></pre></div>
+<h3 id="protocols">Protocols<span class="headerlink"> <a href="#protocols" title="permalink">#</a></span></h3>
+<p>Finally, we have protocols, aka structural subtyping, aka static duck typing.</p>
+<p>Introduced in <a href="https://peps.python.org/pep-0544/">PEP 544</a>,
+protocols go in the other direction from inheritance –
+what if instead of having things declare what type they are,
+we could declare what methods something has to have to <em>be</em> of that type?</p>
+<p>you declare a protocol using <a href="https://docs.python.org/3/library/typing.html#typing.Protocol">typing.Protocol</a>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Retriever</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">slow_to_read</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">etag</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">IO</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span> <span class="nf">validate_url</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="o">...</span>
+</code></pre></div>
+
+<p>in some other place,
+you define an implementation:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">MyRetriever</span><span class="p">:</span>
+    <span class="n">slow_to_read</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">validate_url</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">pass</span>
+</code></pre></div>
+
+<p>...which you can then use
+(note that in practice,
+<code>retriever</code> will be declared to be a Retriever
+far away from where MyRetriever is actually instantiated,
+even different code bases):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">retriever</span><span class="p">:</span> <span class="n">Retriever</span> <span class="o">=</span> <span class="n">MyRetriever</span><span class="p">()</span>
+</code></pre></div>
+
+<p>a type checker <a href="https://mypy.readthedocs.io/en/stable/protocols.html">like mypy</a> will then check if the provided instance conforms to the protocol
+– not only that methods exist, but that their signatures are correct too!</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>mypy<span class="w"> </span>protocol.py<span class="w"> </span>
+<span class="go">protocol.py:26: error: Incompatible types in assignment (expression has type &quot;MyRetriever&quot;, variable has type &quot;Retriever&quot;)  [assignment]</span>
+<span class="go">protocol.py:26: note: &quot;MyRetriever&quot; is missing following &quot;Retriever&quot; protocol member:</span>
+<span class="go">protocol.py:26: note:     retrieve</span>
+<span class="go">protocol.py:26: note: Following member(s) of &quot;MyRetriever&quot; have conflicts:</span>
+<span class="go">protocol.py:26: note:     Expected:</span>
+<span class="go">protocol.py:26: note:         def validate_url(self, url: str) -&gt; None</span>
+<span class="go">protocol.py:26: note:     Got:</span>
+<span class="go">protocol.py:26: note:         def validate_url(self, url:</span>
+</code></pre></div>
 <h2 id="counter-example-modules">counter-example: modules<span class="headerlink"> <a href="#counter-example-modules" title="permalink">#</a></span></h2>
 <p>TODO:</p>
 <p>if there's no state or need for inheritance, modules work too (also works with duck typing)</p>
