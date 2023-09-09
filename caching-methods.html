@@ -141,8 +141,8 @@ and more often than not,
 <section class="admonition note">
 <p class="admonition-title">Note</p>
 <p>In this article, I will focus on caching
- using <a href="https://docs.python.org/3/library/functools.html#functools.lru_cache">functools.lru_cache()</a>.
- Retrying with a library like <a href="https://tenacity.readthedocs.io/">tenacity</a>
+ using <a class="external" href="https://docs.python.org/3/library/functools.html#functools.lru_cache">functools.lru_cache()</a>.
+ Retrying with a library like <a class="external" href="https://tenacity.readthedocs.io/">tenacity</a>
  would work more or less the same.</p>
 </section>
 <h2 id="but-i-don-t-own-the-client-code">But I don't own the client code<span class="headerlink"> <a href="#but-i-don-t-own-the-client-code" title="permalink">#</a></span></h2>
@@ -175,11 +175,11 @@ override each method, and decorate the overrides:</p>
 </code></pre></div>
 
 <p>Of course, this doesn't really help with maintainability,
-but it does give us an excuse to look at a potential issue with <a href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache()</a>.</p>
+but it does give us an excuse to look at a potential issue with <a class="external" href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache()</a>.</p>
 <h2 id="but-decorating-methods-keeps-instances-around-for-too-long">But decorating methods keeps instances around for too long<span class="headerlink"> <a href="#but-decorating-methods-keeps-instances-around-for-too-long" title="permalink">#</a></span></h2>
-<p>The <a href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache()</a> docs say,</p>
+<p>The <a class="external" href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache()</a> docs say,</p>
 <blockquote>
-<p>If a method is cached, the <code>self</code> instance argument is included in the cache. See <a href="https://docs.python.org/3/faq/programming.html#faq-cache-method-calls">How do I cache method calls?</a></p>
+<p>If a method is cached, the <code>self</code> instance argument is included in the cache. See <a class="external" href="https://docs.python.org/3/faq/programming.html#faq-cache-method-calls">How do I cache method calls?</a></p>
 </blockquote>
 <p>... in turn:</p>
 <blockquote>
@@ -187,7 +187,7 @@ but it does give us an excuse to look at a potential issue with <a href="https:/
 </blockquote>
 <p>Depending on how often Client is instantiated,
 this <em>might</em> count as a memory and/or resource leak.
-For a more detailed explanation, see <a href="https://rednafi.github.io/reflections/dont-wrap-instance-methods-with-functoolslru_cache-decorator-in-python.html" title="Don't wrap instance methods with 'functools.lru_cache' decorator in Python">this article</a>.</p>
+For a more detailed explanation, see <a class="external" href="https://rednafi.github.io/reflections/dont-wrap-instance-methods-with-functoolslru_cache-decorator-in-python.html" title="Don't wrap instance methods with 'functools.lru_cache' decorator in Python">this article</a>.</p>
 <p>One solution is to decorate the <em>bound</em> method,
 <em>after</em> the object is created:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">SubclassShadow</span><span class="p">(</span><span class="n">Client</span><span class="p">):</span>
@@ -216,7 +216,7 @@ Before, the cache had the same lifetime as the <em>unbound</em> method
  Because each instance has different state,
  the results of the calls may be different
  (it helps to think of instance attributes
- as <a href="/same-arguments">implicit arguments passed to each method</a>);
+ as <a class="internal" href="/same-arguments">implicit arguments passed to each method</a>);
  for example, clients instantiated with different users
  should not return the same thing.</p>
 </section>
@@ -242,7 +242,7 @@ but we still have to decorate methods one by one.</p>
         <span class="k">return</span> <span class="n">cached</span>
 </code></pre></div>
 
-<p><a href="https://docs.python.org/3/reference/datamodel.html#object.__getattribute__">__getattribute__()</a> allows us to intercept
+<p><a class="external" href="https://docs.python.org/3/reference/datamodel.html#object.__getattribute__">__getattribute__()</a> allows us to intercept
 all attribute accesses (including methods).
 When a method is requested,
 we get it from the parent,
@@ -251,26 +251,26 @@ and store it in the instance dictionary;
 the second time around,
 we return the already decorated method.</p>
 <p>We don't decorate methods whose names start with an underscore,
-including any <a href="https://docs.python.org/3/glossary.html#term-magic-method"><code>__magic__</code></a> or <code>_private</code> ones;
+including any <a class="external" href="https://docs.python.org/3/glossary.html#term-magic-method"><code>__magic__</code></a> or <code>_private</code> ones;
 additional filtering logic
 (e.g. only cache methods starting with <code>get_</code>)
 would go here as well.</p>
-<p>Note we can't use <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a>,
+<p>Note we can't use <a class="external" href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a>,
 because it's only called
 if the attribute is not found through the normal mechanism –
 and looking up the class tree <em>is</em> part of the normal mechanism.</p>
 <p>We could just decorate all the methods upfront, in  <code>__init__()</code>,
 but that might not work if the parent does magic stuff
-without implementing <a href="https://docs.python.org/3/reference/datamodel.html#object.__dir__">__dir__()</a> properly.</p>
+without implementing <a class="external" href="https://docs.python.org/3/reference/datamodel.html#object.__dir__">__dir__()</a> properly.</p>
 <h2 id="but-i-don-t-instantiate-the-client">But I don't instantiate the client<span class="headerlink"> <a href="#but-i-don-t-instantiate-the-client" title="permalink">#</a></span></h2>
 <p>Sometimes, you're not the one instantiating the client;
-it may be created by a <a href="https://python-patterns.guide/gang-of-four/abstract-factory/#the-pythonic-approach-callable-factories">callable factory</a>
+it may be created by a <a class="external" href="https://python-patterns.guide/gang-of-four/abstract-factory/#the-pythonic-approach-callable-factories">callable factory</a>
 that doesn't allow passing in a different class,<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
 or you might just get it from a framework.</p>
 <p>No worries, subclassing is not required for Python meta­programming –
 instead,
 we can wrap the instance in an object proxy
-(also known as <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/#implementing-dynamic-wrapper">dynamic wrapper</a>).</p>
+(also known as <a class="external" href="https://python-patterns.guide/gang-of-four/decorator-pattern/#implementing-dynamic-wrapper">dynamic wrapper</a>).</p>
 <p>The code looks pretty much the same,
 but instead of delegating to the parent,
 we delegate to the <em>wrapped</em> instance:</p>
@@ -291,12 +291,12 @@ we delegate to the <em>wrapped</em> instance:</p>
 </code></pre></div>
 
 <p>Because the proxy is a separate object,
-now we <em>can</em> use <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a>,
+now we <em>can</em> use <a class="external" href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a>,
 and we don't have to check the instance dictionary explicitly –
 on the second call, the decorated method is already there,
-so <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a> isn't called anymore.</p>
+so <a class="external" href="https://docs.python.org/3/reference/datamodel.html#object.__getattr__">__getattr__()</a> isn't called anymore.</p>
 <h2 id="but-the-proxy-breaks-completion">But the proxy breaks completion<span class="headerlink"> <a href="#but-the-proxy-breaks-completion" title="permalink">#</a></span></h2>
-<p>Oops, we're guilty of the not implementing <a href="https://docs.python.org/3/reference/datamodel.html#object.__dir__">__dir__()</a> mentioned before.</p>
+<p>Oops, we're guilty of the not implementing <a class="external" href="https://docs.python.org/3/reference/datamodel.html#object.__dir__">__dir__()</a> mentioned before.</p>
 <p>Among others, this breaks completion:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">Proxy</span><span class="p">(</span><span class="n">Client</span><span class="p">())</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="s1">&#39;one&#39;</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
@@ -317,15 +317,15 @@ so <a href="https://docs.python.org/3/reference/datamodel.html#object.__getattr_
 </code></pre></div>
 <p>With this, we have a solution that covers almost everything I've met in practice.</p>
 <h2 id="but-the-proxy-fails-isinstance-checks">But the proxy fails isinstance() checks<span class="headerlink"> <a href="#but-the-proxy-fails-isinstance-checks" title="permalink">#</a></span></h2>
-<p>Turns out, <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/#caveat-wrapping-doesnt-actually-work">writing a perfect proxy is pretty difficult</a>.</p>
+<p>Turns out, <a class="external" href="https://python-patterns.guide/gang-of-four/decorator-pattern/#caveat-wrapping-doesnt-actually-work">writing a perfect proxy is pretty difficult</a>.</p>
 <p>For example, although not recommended,
-code may need to do <a href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a> checks:</p>
+code may need to do <a class="external" href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a> checks:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">Client</span><span class="p">)</span>
 <span class="go">False</span>
 </code></pre></div>
-<p>We could fix this by implementing <a href="https://docs.python.org/3/reference/datamodel.html#class.__instancecheck__">__instancecheck__()</a>,
+<p>We could fix this by implementing <a class="external" href="https://docs.python.org/3/reference/datamodel.html#class.__instancecheck__">__instancecheck__()</a>,
 but I thought we were past wrapping things one by one.
-<a href="https://wrapt.readthedocs.io/en/latest/wrappers.html#object-proxy">wrapt</a> gives us an almost-perfect proxy:</p>
+<a class="external" href="https://wrapt.readthedocs.io/en/latest/wrappers.html#object-proxy">wrapt</a> gives us an almost-perfect proxy:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">WraptProxy</span><span class="p">(</span><span class="n">wrapt</span><span class="o">.</span><span class="n">ObjectProxy</span><span class="p">):</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wrapped</span><span class="p">):</span>
@@ -381,12 +381,12 @@ we could go back to decorating the bound methods
 <p>Unexpected? A bit.
 Unholy? Maybe, depending where you're coming from.
 But actually, no, not really –
-after all, it still <a href="https://docs.python.org/3/glossary.html#term-duck-typing">walks and quacks</a> like a Client,
+after all, it still <a class="external" href="https://docs.python.org/3/glossary.html#term-duck-typing">walks and quacks</a> like a Client,
 and we've only changed <em>our</em> instance.</p>
 <p>In the end, that's one of the reasons people like Python
 –
 you're free to bring in the big guns of meta­programming if you need to,
-but sometimes a tiny bit of <a href="https://en.wikipedia.org/wiki/Monkey_patch">monkey patching</a>
+but sometimes a tiny bit of <a class="external" href="https://en.wikipedia.org/wiki/Monkey_patch">monkey patching</a>
 will do just as well.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
 <!-- TODO: example from andgravity-generator -->
 <hr />
@@ -458,15 +458,15 @@ will do just as well.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a
 </form>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>I'm mainly dissing <a href="https://python-patterns.guide/gang-of-four/decorator-pattern/#implementing-static-wrapper">static</a> (1:1) wrappers here.
+<li id="fn-1"><p>I'm mainly dissing <a class="external" href="https://python-patterns.guide/gang-of-four/decorator-pattern/#implementing-static-wrapper">static</a> (1:1) wrappers here.
 As a higher level of abstraction,
 wrappers can be <em>very</em> useful,
 both maintainability and readability-wise;
 for a great example of this, check out Raymond Hettinger's
-<a href="https://www.youtube.com/watch?v=wf-BqAjZb8M">Beyond PEP 8 – Best practices for beautiful intelligible code</a>
+<a class="external" href="https://www.youtube.com/watch?v=wf-BqAjZb8M">Beyond PEP 8 – Best practices for beautiful intelligible code</a>
 talk. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>For example, <a href="https://docs.python.org/3/library/sqlite3.html#sqlite3.connect">sqlite3.connect()</a> does, via the <em>factory</em> parameter;
-<a href="https://reader.readthedocs.io/en/stable/api.html#reader.make_reader">reader.​make_reader()</a> doesn't (at least, not yet). <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>For example, <a class="external" href="https://docs.python.org/3/library/sqlite3.html#sqlite3.connect">sqlite3.connect()</a> does, via the <em>factory</em> parameter;
+<a class="external" href="https://reader.readthedocs.io/en/stable/api.html#reader.make_reader">reader.​make_reader()</a> doesn't (at least, not yet). <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-3"><p>Just like cats and salami,
 a very small amount of monkey patching is probably fine,
 though you definitely shouldn't make it a staple of your diet. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>

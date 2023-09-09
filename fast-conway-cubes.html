@@ -120,13 +120,13 @@ window.addEventListener('resize', set_vh);
 <div class="column col-sm-12 col-md-10 col-8">
 
 <p>... in which we optimize
-<a href="/conway-cubes">our Advent of Code 2020 day 17 solution</a>,
-a Python implementation of multidimensional <a href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life">Game of Life</a>,
+<a class="internal" href="/conway-cubes">our Advent of Code 2020 day 17 solution</a>,
+a Python implementation of multidimensional <a class="external" href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life">Game of Life</a>,
 to end up with a <strong>65x improvement</strong>.</p>
 <p>We will focus on profiling and optimizing the existing code, in a way
 that helps you translate those skills to your regular, non-puzzle coding.</p>
-<p>We'll start from <a href="/_file/fast-conway-cubes/00-begin/conway_cubes.py">the script</a> as we left it in the initial article,
-and check we didn't break anything using <a href="/_file/fast-conway-cubes/00-begin/test_conway_cubes.py">the tests</a> we already wrote.</p>
+<p>We'll start from <a class="attachment" href="/_file/fast-conway-cubes/00-begin/conway_cubes.py">the script</a> as we left it in the initial article,
+and check we didn't break anything using <a class="attachment" href="/_file/fast-conway-cubes/00-begin/test_conway_cubes.py">the tests</a> we already wrote.</p>
 <details>
 <summary>Contents</summary>
 <section class="toc">
@@ -145,10 +145,10 @@ and check we didn't break anything using <a href="/_file/fast-conway-cubes/00-be
 </section>
 </details>
 <h2 id="why-is-it-slow">Why is it slow?<span class="headerlink"> <a href="#why-is-it-slow" title="permalink">#</a></span></h2>
-<p>Our solution is pretty <a href="/conway-cubes#simulation">naive</a>:
+<p>Our solution is pretty <a class="internal" href="/conway-cubes#simulation">naive</a>:
 for each cell, count how many of the cell's neighbors are active,
 and change the cell state based on that;
-see <a href="/conway-cubes#the-problem">this</a>
+see <a class="internal" href="/conway-cubes#the-problem">this</a>
 for a detailed explanation of the rules.</p>
 <p>As we add more dimensions, the run time increases by orders of magnitude;
 for a world of size 16, I get:</p>
@@ -179,8 +179,8 @@ centered on the cell, except the cell itself):</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">size</span> <span class="o">**</span> <span class="n">dims</span><span class="p">,</span> <span class="n">size</span> <span class="o">**</span> <span class="n">dims</span> <span class="o">*</span> <span class="p">(</span><span class="mi">3</span> <span class="o">**</span> <span class="n">dims</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
 <span class="go">(160000, 12800000)</span>
 </code></pre></div>
-<p>That is indeed <a href="https://en.wikipedia.org/wiki/Exponential_growth">exponential growth</a> (the number of dimensions being the exponent).</p>
-<p>As I mentioned before, there are <a href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life#Algorithms">many optimizations</a> to simulating Life.
+<p>That is indeed <a class="external" href="https://en.wikipedia.org/wiki/Exponential_growth">exponential growth</a> (the number of dimensions being the exponent).</p>
+<p>As I mentioned before, there are <a class="external" href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life#Algorithms">many optimizations</a> to simulating Life.
 They usually involve one or more of:</p>
 <ul>
 <li>reducing the number of cells to look at</li>
@@ -196,7 +196,7 @@ and easier to translate to other Python problems.</p>
 we'd probably both use better algorithms,
 and switch to a faster language.)</p>
 <h2 id="intro-to-profiling">Intro to profiling<span class="headerlink"> <a href="#intro-to-profiling" title="permalink">#</a></span></h2>
-<p>The Python standard library provides a <a href="https://docs.python.org/3/library/profile.html">profiler</a>
+<p>The Python standard library provides a <a class="external" href="https://docs.python.org/3/library/profile.html">profiler</a>
 which allows getting statistics for how often and how long
 various functions get executed.</p>
 <p>For us, the easiest way to use it is to pass a whole script, like this:</p>
@@ -205,7 +205,7 @@ various functions get executed.</p>
 <section class="admonition note">
 <p class="admonition-title">Note</p>
 <p>You can also profile specific bits of code;
- see <a href="https://docs.python.org/3/library/profile.html#profile.Profile">this</a>
+ see <a class="external" href="https://docs.python.org/3/library/profile.html#profile.Profile">this</a>
  for details.</p>
 </section>
 <p>Before profiling, we get a baseline run time for the &quot;real&quot; workload:</p>
@@ -288,7 +288,7 @@ it'll take even more, around 25x on my machine.</p>
 <p class="admonition-title">Tip</p>
 <p>If you're following along, you might find it useful
  to re-run the command automatically every time you save the file.</p>
-<p>I used <a href="https://eradman.com/entrproject/">entr</a> to do it:</p>
+<p>I used <a class="external" href="https://eradman.com/entrproject/">entr</a> to do it:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash"><span></span><code><span class="nb">echo</span><span class="w"> </span>conway_cubes.py<span class="w"> </span><span class="p">|</span><span class="w"> </span>entr<span class="w"> </span>-rcs<span class="w"> </span><span class="s2">&quot;</span>
 <span class="s2">python3 -m cProfile -s cumulative conway_cubes.py test 8 4 1 \</span>
 <span class="s2">| grep -A20 ncalls</span>
@@ -368,7 +368,7 @@ it is a pure function (the result only depends on the arguments),
 and has a single argument with only a handful of values (2, 3, 4).</p>
 <p>We could pre-compute the results for each dimension,
 save them in a global dict, and reuse them from there.</p>
-<p>Turns out, the <a href="https://docs.python.org/3/library/functools.html">functools.lru_cache</a> decorator from the standard library
+<p>Turns out, the <a class="external" href="https://docs.python.org/3/library/functools.html">functools.lru_cache</a> decorator from the standard library
 allows us to do just that in a transparent way:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">2</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">lru_cache</span>
 </code></pre></div></td></tr></table></div>
@@ -437,9 +437,9 @@ thankfully, we are checking that as well –
 that's what the <code>if active</code> in <code>except IndexError</code> does.</p>
 <p>But now we've made a bit of logic dependent on another that's quite far from it.
 Instead of just reasoning through it every time we change something,
-we rely on <a href="/conway-cubes#bonus-more-tests">the edge case tests</a>
+we rely on <a class="internal" href="/conway-cubes#bonus-more-tests">the edge case tests</a>
 to verify it for us (nothing to do, since we've already written them :).</p>
-<p><a href="/_file/fast-conway-cubes/10-any-coord-0/conway_cubes.py">The script up to this point.</a></p>
+<p><a class="attachment" href="/_file/fast-conway-cubes/10-any-coord-0/conway_cubes.py">The script up to this point.</a></p>
 <h2 id="neighbor-coords">neighbor_coords<span class="headerlink"> <a href="#neighbor-coords" title="permalink">#</a></span></h2>
 <p>Next up is the <code>neighbor_coords</code> list comprehension.</p>
 <p>Using functions written in C may remove some of the comprehension overhead;
@@ -608,7 +608,7 @@ If only there was a way to do the same thing for a function.</p>
     <span class="k">return</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;get_active_neighbors&#39;</span><span class="p">]</span>
 </code></pre></div></td></tr></table></div>
 <p>We build the string with the source code of a function,
-and then use <a href="https://docs.python.org/3/library/functions.html#exec">exec</a> to execute it in private global context.
+and then use <a class="external" href="https://docs.python.org/3/library/functions.html#exec">exec</a> to execute it in private global context.
 We're using an explicit context to avoid polluting module globals
 – everything that gets defined in the source code string is a <code>context</code> item.</p>
 <p>You may notice that we're embedding the representation of the directions list
@@ -616,12 +616,12 @@ directly in the code, instead of calling <code>make_directions()</code>;
 I'm not sure this brings a great speed-up, but it can't hurt.</p>
 <section class="admonition attention">
 <p class="admonition-title">Attention</p>
-<p>Never use <a href="https://docs.python.org/3/library/functions.html#exec">exec</a>/eval with untrusted code,
+<p>Never use <a class="external" href="https://docs.python.org/3/library/functions.html#exec">exec</a>/eval with untrusted code,
  unless you want to get hacked;
- <a href="https://nedbatchelder.com/blog/201206/eval_really_is_dangerous.html">details</a>.</p>
+ <a class="external" href="https://nedbatchelder.com/blog/201206/eval_really_is_dangerous.html">details</a>.</p>
 <p>Security issues aside, it makes code way harder to understand,
  and breaks a lot of conventions about where classes and functions come from;
- <a href="https://lucumr.pocoo.org/2011/2/1/exec-in-python/">more details</a>.</p>
+ <a class="external" href="https://lucumr.pocoo.org/2011/2/1/exec-in-python/">more details</a>.</p>
 <p>We're doing it here for ... didactic purposes.
  And speed. Mostly speed.</p>
 </section>
@@ -666,7 +666,7 @@ from <code>ndenumerate()</code> into a separate function:</p>
 <pre class="code code-container"><code>   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
      4096    0.091    0.000    0.091    0.000 &lt;string&gt;:3(get_active_neighbors)
 </code></pre>
-<p><a href="/_file/fast-conway-cubes/99-end/conway_cubes.py">The final version of the script.</a></p>
+<p><a class="attachment" href="/_file/fast-conway-cubes/99-end/conway_cubes.py">The final version of the script.</a></p>
 <h2 id="the-real-world">The real world<span class="headerlink"> <a href="#the-real-world" title="permalink">#</a></span></h2>
 <p>So, with our <code>test 8 4 1</code> profiling parameters,
 we got a 91% (~11x) improvement in <code>get_active_neighbors()</code> cumulative time.</p>
@@ -683,9 +683,9 @@ we got a 91% (~11x) improvement in <code>get_active_neighbors()</code> cumulativ
 </code></pre></div>
 <p>Almost. That's still an 86% (~7x) improvement.</p>
 <h2 id="bonus-pypy">Bonus: PyPy<span class="headerlink"> <a href="#bonus-pypy" title="permalink">#</a></span></h2>
-<p><a href="https://www.pypy.org/">PyPy</a> is an alternative Python implementation that's
+<p><a class="external" href="https://www.pypy.org/">PyPy</a> is an alternative Python implementation that's
 often faster than CPython (the standard implementation)
-due to its use of <a href="https://en.wikipedia.org/wiki/Just-in-time_compilation">just-in-time compilation</a>.</p>
+due to its use of <a class="external" href="https://en.wikipedia.org/wiki/Just-in-time_compilation">just-in-time compilation</a>.</p>
 <p>Currently, it works mostly out of the box for Python code up to version 3.7
 (with the exception of some CPython extensions).</p>
 <p>First, let's see how it performs on the unoptimized script:</p>
@@ -721,7 +721,7 @@ Yes and no, but mostly no:</p>
 <li><strong>65x</strong> over the unoptimized script with CPython!</li>
 </ul>
 <h2 id="conclusions">Conclusions<span class="headerlink"> <a href="#conclusions" title="permalink">#</a></span></h2>
-<p><strong><a href="https://wiki.c2.com/?ProfileBeforeOptimizing">Profile before optimizing</a>.</strong>
+<p><strong><a class="external" href="https://wiki.c2.com/?ProfileBeforeOptimizing">Profile before optimizing</a>.</strong>
 Most often, your intuition about where the code is slow is wrong.</p>
 <p><strong>Many small optimizations add up.</strong></p>
 <p><strong>A different algorithm can be better than many small optimizations.</strong>
@@ -734,11 +734,11 @@ Tests help you know you're not breaking anything.
 Profiling helps minimize the amount of code you change.</p>
 <section class="admonition note">
 <p class="admonition-title">Note</p>
-<p><a href="https://docs.python.org/3/faq/programming.html#my-program-is-too-slow-how-do-i-speed-it-up">My program is too slow. How do I speed it up?</a>
+<p><a class="external" href="https://docs.python.org/3/faq/programming.html#my-program-is-too-slow-how-do-i-speed-it-up">My program is too slow. How do I speed it up?</a>
  from the Python Programming FAQ has more, better advice
  on the points above.</p>
 </section>
-<p><strong><a href="https://www.pypy.org/">PyPy</a> is amazing</strong>, give it a try if you can.</p>
+<p><strong><a class="external" href="https://www.pypy.org/">PyPy</a> is amazing</strong>, give it a try if you can.</p>
 <p>Function calls are slow in Python;
 that only matters if you're calling them millions of times.</p>
 <p>You can do cool stuff with Python code generation;
