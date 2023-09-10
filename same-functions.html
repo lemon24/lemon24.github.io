@@ -165,19 +165,18 @@ this is sometimes called the <a class="external" href="https://en.wikipedia.org/
 <p>Usually, feeds come from the internet,
 but you can also use local files.
 The parsers for various formats don't really care where a feed is coming from,
-so a retrieved feed is passed along to the parser as an open file.</p>
+so they always take as input an open file.</p>
 <p><a class="external" href="https://github.com/lemon24/reader">reader</a> supports conditional requests –
 that is, only retrieve a feed if it changed.
-It does this by storing the <a class="external" href="https://en.wikipedia.org/wiki/HTTP_ETag">ETag</a> HTTP header from a response,
-and passing it back as the If-None-Match header of the next request;
+To do this, it stores the <a class="external" href="https://en.wikipedia.org/wiki/HTTP_ETag">ETag</a> HTTP header from a response,
+and passes it back as the If-None-Match header of the next request;
 if nothing changed,
 the server can respond with <a class="external" href="https://en.wikipedia.org/wiki/List_of_HTTP_status_codes#304">304 Not Modified</a>
 instead of sending back the full content.</p>
-<p>Let's have a look at how this code evolved in response to new requirements;
-this is a simplified version, but it still does something useful
-(if you're curious, you can find a current version
-<a class="external" href="https://github.com/lemon24/reader/blob/3.9/src/reader/_parser/_lazy.py#L190-L268">here</a>).</p>
-<p>In the beginning, there was a function
+<p>Let's have a look at how the code to retrieve feeds evolved over time;
+this version omits a few details,
+but it will end up with a structure similar to that of the <a class="external" href="https://github.com/lemon24/reader/blob/3.9/src/reader/_parser/_lazy.py#L190-L268">full version</a>.
+In the beginning, there was a function
 – URL and old ETag in, file and new ETag out:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">url</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;http://&#39;</span><span class="p">,</span> <span class="s1">&#39;https://&#39;</span><span class="p">)):</span>
@@ -198,12 +197,12 @@ this is a simplified version, but it still does something useful
     <span class="k">return</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">),</span> <span class="kc">None</span>
 </code></pre></div>
 
-<p>We get HTTP URLs using <a class="external" href="https://requests.readthedocs.io/">Requests</a>,
+<p>We use <a class="external" href="https://requests.readthedocs.io/">Requests</a> to get HTTP URLs,
 and return the underlying file-like object.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
-<p>For local files, we suport both bare paths and <a class="external" href="https://en.wikipedia.org/wiki/File_URI_scheme">file URIs</a>,
-and do a bit of validation for the latter
-– e.g. <em>file:feed</em> and <em>file://localhost/feed</em> are OK,
-<em>file://invalid/feed</em> and <em>unknown:feed</em><sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup> are not:</p>
+<p>For local files, we suport both bare paths and <a class="external" href="https://en.wikipedia.org/wiki/File_URI_scheme">file URIs</a>;
+for the latter, we need to do a bit of validation –
+<em>file:feed</em> and <em>file://localhost/feed</em> are OK,
+but <em>file://invalid/feed</em> and <em>unknown:feed</em><sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup> are not:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">extract_path</span><span class="p">(</span><span class="n">url</span><span class="p">):</span>
     <span class="n">url_parsed</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">urlparse</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">url_parsed</span><span class="o">.</span><span class="n">scheme</span> <span class="o">==</span> <span class="s1">&#39;file&#39;</span><span class="p">:</span>
@@ -601,15 +600,14 @@ the connection would never be released,
 since we're not closing the response after we're done with it.
 In the actual code, we're doing both,
 but the only way do so reliably is to <a class="external" href="https://github.com/lemon24/reader/blob/3.9/src/reader/_parser/http.py#L39-L103">return a context manager</a>;
-I omitted this detail because it doesn't add anything
+I omitted this because it doesn't add anything
 to our discussion about classes. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>the reason why we're doing this final validation here
-is because files are uniquely allows to have an explicit file: scheme,
-or no scheme at all.
-also, once we add Windows support,
-it'll also be able to accept paths like C:\feed.xml;
-note that drive letter is undistinguishable from a scheme –
-it's good to deal with this in the code that cares about it <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>We're handling unknown URI schemes here 
+because bare paths don't have a scheme,
+so anything that didn't match a known scheme must be a bare path.
+Also, on Windows (not supported yet),
+the drive letter in a path like <em>c:\feed.xml</em> 
+is indistinguishable from a scheme. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-3"><p>we could've avoided this last change
 by making the retriever instances <a class="external" href="https://docs.python.org/3/glossary.html#term-callable">callable</a>.
 <!-- TODO: talk about symmetry, and meta-retriever --> <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
