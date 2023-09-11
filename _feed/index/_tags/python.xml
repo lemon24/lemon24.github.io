@@ -2,13 +2,623 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #python</title>
-  <updated>2023-08-28T20:00:00+00:00</updated>
+  <updated>2023-09-11T20:00:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
   </author>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index/_tags/python.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/same-functions">
+    <id>https://death.andgravity.com/same-functions</id>
+    <title>When to use classes in Python? When you repeat similar sets of functions</title>
+    <updated>2023-09-11T20:00:00+00:00</updated>
+    <content type="html">&lt;p&gt;Are you having trouble figuring out when to use classes or how to organize them?&lt;/p&gt;
+&lt;p&gt;Have you repeatedly searched for &amp;quot;when to use classes in Python&amp;quot;,
+read all the articles and watched all the talks,
+and &lt;em&gt;still&lt;/em&gt;  don't know whether you should be using classes in any given situation?&lt;/p&gt;
+&lt;p&gt;Have you read discussions about it that for all you know &lt;em&gt;may be right&lt;/em&gt;,
+but they're &lt;em&gt;so academic&lt;/em&gt; you can't parse the jargon?&lt;/p&gt;
+&lt;p&gt;Have you read articles that all treat the &amp;quot;obvious&amp;quot; cases,
+leaving you with no clear answer when you try to apply them to your own code?&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;My experience is that, &lt;strong&gt;unfortunately&lt;/strong&gt;,
+the best way to learn this &lt;em&gt;is&lt;/em&gt; to &lt;a class="internal" href="/stdlib"&gt;look at lots of examples&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Most guidelines tend to either be too vague &lt;em&gt;if you don't already know enough&lt;/em&gt; about the subject,
+or too specific and saying things you already know.&lt;/p&gt;
+&lt;p&gt;This is one of those things that once you get it seems obvious and intuitive,
+&lt;em&gt;but it's not&lt;/em&gt;, and is quite difficult to explain properly.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;So, instead of prescribing a general approach,
+let's look at:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;one specific case&lt;/strong&gt; where you may want to use classes&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;examples from real-world code&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;some considerations you should keep in mind&lt;/li&gt;
+&lt;/ul&gt;
+&lt;details&gt;
+&lt;summary&gt;Contents&lt;/summary&gt;
+&lt;section class="toc"&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#the-heuristic"&gt;The heuristic&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#example-retrievers"&gt;Example: Retrievers&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#problem-can-t-add-new-feed-sources"&gt;Problem: can't add new feed sources&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#problem-can-t-validate-urls-until-retrieving-them"&gt;Problem: can't validate URLs until retrieving them&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#not-just-functions-attributes-too"&gt;Not just functions, attributes too&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#example-flask-s-tagged-json"&gt;Example: Flask's tagged JSON&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#formalizing-this"&gt;Formalizing this&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#duck-typing"&gt;Duck typing&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#inheritance"&gt;Inheritance&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#abstract-base-classes"&gt;Abstract base classes&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#protocols"&gt;Protocols&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#counter-example-modules"&gt;Counter-example: modules&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#try-it-out"&gt;Try it out&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;/details&gt;
+&lt;h2 id="the-heuristic"&gt;The heuristic&lt;span class="headerlink"&gt; &lt;a href="#the-heuristic" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;strong&gt;If you repeat similar sets of functions, consider grouping them in a class.&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;That's it.&lt;/p&gt;
+&lt;p&gt;In its most basic form,
+a class is when you group data with functions that operate on that data;
+sometimes, there is no data,
+but it can still be useful to group the functions
+into an &lt;em&gt;abstract object&lt;/em&gt; that exists only
+to make things easier to use / understand.&lt;/p&gt;
+&lt;p&gt;Depending on whether you choose which class to use at runtime,
+this is sometimes called the &lt;a class="external" href="https://en.wikipedia.org/wiki/Strategy_pattern"&gt;strategy pattern&lt;/a&gt;.&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Note&lt;/p&gt;
+&lt;p&gt;As Wikipedia &lt;a class="external" href="https://simple.wikipedia.org/wiki/Heuristic"&gt;puts it&lt;/a&gt;,
+ &amp;quot;A &lt;strong&gt;heuristic&lt;/strong&gt; is a practical way to solve a problem.
+ It is &lt;em&gt;better than chance&lt;/em&gt;, but &lt;em&gt;does not always work&lt;/em&gt;.
+ A person develops a heuristic by using
+ intelligence, experience, and common sense.&amp;quot;&lt;/p&gt;
+&lt;p&gt;So, this is &lt;strong&gt;not&lt;/strong&gt; the correct thing to do &lt;strong&gt;all the time&lt;/strong&gt;,
+ or even &lt;em&gt;most&lt;/em&gt; of the time.&lt;/p&gt;
+&lt;p&gt;Instead, I hope that this and &lt;em&gt;other&lt;/em&gt; heuristics
+ can help &lt;strong&gt;build the right intuition&lt;/strong&gt;
+ for people on their way from
+ &amp;quot;I know the class syntax, now what?&amp;quot; to
+ &amp;quot;proper&amp;quot; object-oriented design.&lt;/p&gt;
+&lt;/section&gt;
+&lt;h2 id="example-retrievers"&gt;Example: Retrievers&lt;span class="headerlink"&gt; &lt;a href="#example-retrievers" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;My &lt;a class="external" href="https://github.com/lemon24/reader"&gt;feed reader library&lt;/a&gt; retrieves and stores &lt;a class="external" href="https://en.wikipedia.org/wiki/Web_feed"&gt;web feeds&lt;/a&gt;
+(Atom, RSS and so on).&lt;/p&gt;
+&lt;p&gt;Usually, feeds come from the internet,
+but you can also use local files.
+The parsers for various formats don't really care where a feed is coming from,
+so they always take an open file as input.&lt;/p&gt;
+&lt;p&gt;&lt;a class="external" href="https://github.com/lemon24/reader"&gt;reader&lt;/a&gt; supports conditional requests –
+that is, only retrieve a feed if it changed.
+To do this, it stores the &lt;a class="external" href="https://en.wikipedia.org/wiki/HTTP_ETag"&gt;ETag&lt;/a&gt; HTTP header from a response,
+and passes it back as the If-None-Match header of the next request;
+if nothing changed,
+the server can respond with &lt;a class="external" href="https://en.wikipedia.org/wiki/List_of_HTTP_status_codes#304"&gt;304 Not Modified&lt;/a&gt;
+instead of sending back the full content.&lt;/p&gt;
+&lt;p&gt;Let's have a look at how the code to retrieve feeds evolved over time;
+this version omits a few details,
+but it will end up with a structure similar to that of the &lt;a class="external" href="https://github.com/lemon24/reader/blob/3.9/src/reader/_parser/_lazy.py#L190-L268"&gt;full version&lt;/a&gt;.
+In the beginning, there was a function
+– URL and old ETag in, file and new ETag out:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;retrieve&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;any&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;p&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;http://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;https://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)):&lt;/span&gt;
+        &lt;span class="n"&gt;headers&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{}&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="n"&gt;headers&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;If-None-Match&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;
+        &lt;span class="n"&gt;response&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;requests&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;headers&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;headers&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;stream&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="n"&gt;response&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;raise_for_status&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;response&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;status_code&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="mi"&gt;304&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="n"&gt;response&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;close&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+            &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;
+        &lt;span class="n"&gt;etag&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;response&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;headers&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;ETag&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="n"&gt;response&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;raw&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;decode_content&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;True&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;response&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;raw&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;
+
+    &lt;span class="c1"&gt;# fall back to file&lt;/span&gt;
+    &lt;span class="n"&gt;path&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;extract_path&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;rb&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;We use &lt;a class="external" href="https://requests.readthedocs.io/"&gt;Requests&lt;/a&gt; to get HTTP URLs,
+and return the underlying file-like object.&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;For local files, we suport both bare paths and &lt;a class="external" href="https://en.wikipedia.org/wiki/File_URI_scheme"&gt;file URIs&lt;/a&gt;;
+for the latter, we do a bit of validation –
+&lt;em&gt;file:feed&lt;/em&gt; and &lt;em&gt;file://localhost/feed&lt;/em&gt; are OK,
+but &lt;em&gt;file://invalid/feed&lt;/em&gt; and &lt;em&gt;unknown:feed&lt;/em&gt;&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt; are not:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;extract_path&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;url_parsed&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;urllib&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;urlparse&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;url_parsed&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;scheme&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;file&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;url_parsed&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;netloc&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;localhost&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+            &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;ValueError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;unknown authority for file URI&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;urllib&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;request&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;url2pathname&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url_parsed&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;url_parsed&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;scheme&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;ValueError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;unknown scheme for file URI&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="c1"&gt;# no scheme, treat as a path&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;h3 id="problem-can-t-add-new-feed-sources"&gt;Problem: can't add new feed sources&lt;span class="headerlink"&gt; &lt;a href="#problem-can-t-add-new-feed-sources" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;One of &lt;em&gt;reader&lt;/em&gt;'s goals is to be extensible.
+For example, it should be possible to add new feed sources
+like an FTP server (&lt;em&gt;ftp://...&lt;/em&gt;) or &lt;a class="external" href="https://reader.readthedocs.io/en/latest/plugins.html#twitter"&gt;Twitter&lt;/a&gt; without changing &lt;em&gt;reader&lt;/em&gt; code;
+however, our current implementation makes it hard to do so.&lt;/p&gt;
+&lt;p&gt;We can fix this by extracting retrieval logic
+into separate functions, one per protocol:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;http_retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;headers&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{}&lt;/span&gt;
+    &lt;span class="c1"&gt;# ...&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;response&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;raw&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;file_retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;path&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;extract_path&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;rb&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;...and then routing to the right one depending on the URL prefix:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# sorted by key length (longest first)&lt;/span&gt;
+&lt;span class="n"&gt;RETRIEVERS&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;https://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;http_retriever&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;http://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;http_retriever&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="c1"&gt;# fall back to file&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;file_retriever&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;get_retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;retriever&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;RETRIEVERS&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;items&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;lower&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;lower&lt;/span&gt;&lt;span class="p"&gt;()):&lt;/span&gt;
+            &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;retriever&lt;/span&gt;
+    &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;ValueError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;no retriever for URL&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;retrieve&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;retriever&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;get_retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;Now, plugins can register retrievers by adding them to &lt;code&gt;RETRIEVERS&lt;/code&gt;
+(in practice, there's &lt;a class="external" href="https://github.com/lemon24/reader/blob/3.9/src/reader/_parser/_lazy.py#L354-L367"&gt;a method for that&lt;/a&gt;,
+so users don't need to care about it staying sorted).&lt;/p&gt;
+&lt;h3 id="problem-can-t-validate-urls-until-retrieving-them"&gt;Problem: can't validate URLs until retrieving them&lt;span class="headerlink"&gt; &lt;a href="#problem-can-t-validate-urls-until-retrieving-them" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;To add a feed, you call &lt;a class="external" href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.add_feed"&gt;add_feed()&lt;/a&gt; with the feed URL.&lt;/p&gt;
+&lt;p&gt;But what if you pass an invalid URL?
+The feed gets stored in the database,
+and you get an &amp;quot;unknown scheme for file URI&amp;quot; error on the next update.
+However, this can be confusing
+– a good API should signal errors near the action that triggered them.
+This means &lt;a class="external" href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.add_feed"&gt;add_feed()&lt;/a&gt; needs to validate the URL
+without actually retrieving it.&lt;/p&gt;
+&lt;p&gt;For HTTP, Requests can do the validation for us;
+for files, we can call &lt;code&gt;extract_path()&lt;/code&gt; and ignore the result.
+Of course, we should select the appropriate logic in the same way we select retrievers,
+otherwise we're &lt;a class="anchor" href="#problem-can-t-add-new-feed-sources"&gt;back where we started&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Now, there's more than one way of doing this.
+We could keep a separate validator registry,
+but that may accidentally become out of sync with the retriever one.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;URL_VALIDATORS&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;https://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;http_url_validator&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;http://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;http_url_validator&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;file_url_validator&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Or, we could keep a (retriever, validator) pair in the retriever registry.
+This is better, but it's not all that readable
+(what if need to add a &lt;a class="anchor" href="#not-just-functions-attributes-too"&gt;third thing&lt;/a&gt;?);
+also, it makes customizing behavior
+that affects both the retriever and validator harder.&lt;/p&gt;
+&lt;!-- TODO: link to future "when to use classes" article --&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;RETRIEVERS&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;https://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;http_retriever&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;http_url_validator&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;http://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;http_retriever&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;http_url_validator&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file_retriever&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;file_url_validator&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Better yet, we can &lt;em&gt;use a class&lt;/em&gt; to make the grouping explicit:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;HTTPRetriever&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;retrieve&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="n"&gt;headers&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{}&lt;/span&gt;
+        &lt;span class="c1"&gt;# ...&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;response&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;raw&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;validate_url&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="n"&gt;session&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;requests&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Session&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="n"&gt;session&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get_adapter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="n"&gt;session&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;prepare_request&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;requests&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Request&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;GET&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;FileRetriever&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;retrieve&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="n"&gt;path&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;extract_path&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;rb&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;validate_url&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="n"&gt;extract_path&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;We then instantiate them,
+and update &lt;code&gt;retrieve()&lt;/code&gt; to call the methods:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;http_retriever&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;HTTPRetriever&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="n"&gt;file_retriever&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;FileRetriever&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;retrieve&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;retriever&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;get_retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;retriever&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;retrieve&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;code&gt;validate_url()&lt;/code&gt; works just the same:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;validate_url&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;retriever&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;get_retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;retriever&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;validate_url&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;And there you have it – &lt;strong&gt;if you repeat similar sets of functions, consider grouping them in a class&lt;/strong&gt;.&lt;/p&gt;
+&lt;h3 id="not-just-functions-attributes-too"&gt;Not just functions, attributes too&lt;span class="headerlink"&gt; &lt;a href="#not-just-functions-attributes-too" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Say you want to update feeds in parallel, using multiple threads.&lt;/p&gt;
+&lt;p&gt;Retrieving feeds is mostly waiting around for I/O,
+so it will benefit the most from it.
+Parsing, on the other hand,
+is pure Python, CPU bound code,
+so threads won't help due to the &lt;a class="external" href="https://docs.python.org/3/glossary.html#term-global-interpreter-lock"&gt;global interpreter lock&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;However, because we're &lt;a class="external" href="https://requests.readthedocs.io/en/latest/user/advanced/#body-content-workflow"&gt;streaming the reponse body&lt;/a&gt;,
+I/O is not done when the retriever returns the file,
+but when the parser finishes reading it.&lt;sup class="footnote-ref" id="fnref-3"&gt;&lt;a href="#fn-3"&gt;3&lt;/a&gt;&lt;/sup&gt;
+We can consume the response in &lt;code&gt;retrieve()&lt;/code&gt;
+by reading it into a temporary file
+and returning that instead.&lt;/p&gt;
+&lt;p&gt;We'll allow any retriever to opt into this behavior
+by using a &lt;em&gt;class attribute&lt;/em&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;HTTPRetriever&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;slow_to_read&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;True&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;FileRetriever&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;slow_to_read&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;False&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;If a retriever is slow to read, &lt;code&gt;retrieve()&lt;/code&gt; does the swap:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;retrieve&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;retriever&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;get_retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;retriever&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;retrieve&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt; &lt;span class="ow"&gt;and&lt;/span&gt; &lt;span class="n"&gt;retriever&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;slow_to_read&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="n"&gt;temp&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;tempfile&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;TemporaryFile&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="n"&gt;shutil&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;copyfileobj&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;temp&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;close&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="n"&gt;temp&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;seek&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="n"&gt;file&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;temp&lt;/span&gt;
+
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+
+
+
+&lt;div class="panel inline-panel" &gt;
+    &lt;div class="panel-header text-large"&gt;
+        Liking this so far? Here&amp;#39;s another article you might like:
+    &lt;/div&gt;
+    &lt;div class="panel-body"&gt;
+        &lt;p&gt;&lt;a href="/same-arguments"&gt;
+            When to use classes in Python? When your functions take the same arguments
+        &lt;/a&gt;
+    &lt;/div&gt;
+&lt;/div&gt;
+&lt;h2 id="example-flask-s-tagged-json"&gt;Example: Flask's tagged JSON&lt;span class="headerlink"&gt; &lt;a href="#example-flask-s-tagged-json" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;The Flask web framework provides
+an extendable compact representation for non-standard JSON types
+called &lt;a class="external" href="https://flask.palletsprojects.com/en/2.3.x/api/#tagged-json"&gt;tagged JSON&lt;/a&gt; (&lt;a class="external" href="https://github.com/pallets/flask/blob/2.3.x/src/flask/json/tag.py"&gt;code&lt;/a&gt;).
+&lt;a class="external" href="https://flask.palletsprojects.com/en/2.3.x/api/#flask.json.tag.TaggedJSONSerializer"&gt;The serializer class&lt;/a&gt;
+delegates most conversion work to methods of various &lt;a class="external" href="https://flask.palletsprojects.com/en/2.3.x/api/#flask.json.tag.JSONTag"&gt;JSONTag&lt;/a&gt; subclasses
+(one per supported type):&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;check()&lt;/code&gt; checks if a Python value should be tagged by that tag&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;tag()&lt;/code&gt; converts it to tagged JSON&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;to_python()&lt;/code&gt; converts a JSON value back to Python
+(the serializer uses the &lt;code&gt;key&lt;/code&gt; tag attribute to find the correct tag)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Interestingly,
+tag instances have an attribute pointing back to the serializer,
+likely to allow recursion –
+when (un)packing a possibly nested collection,
+you need to recursively (un)pack its values.
+Passing the serializer to each method would have also worked,
+but &lt;a class="internal" href="/same-arguments"&gt;when your functions take the same arguments...&lt;/a&gt;&lt;/p&gt;
+&lt;h2 id="formalizing-this"&gt;Formalizing this&lt;span class="headerlink"&gt; &lt;a href="#formalizing-this" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;OK, the retriever code works.
+But, how should you communicate to others
+(readers, implementers, interpreters, type checkers)
+that an HTTPRetriever is the same kind of thing as a FileRetriever,
+and as anything else that can go in &lt;code&gt;RETRIEVERS&lt;/code&gt;?&lt;/p&gt;
+&lt;h3 id="duck-typing"&gt;Duck typing&lt;span class="headerlink"&gt; &lt;a href="#duck-typing" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Here's the definition of &lt;a class="external" href="https://docs.python.org/3/glossary.html#term-duck-typing"&gt;duck typing&lt;/a&gt;:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;A programming style which does not look at an object's type to determine if it has the right interface; instead, the method or attribute is simply called or used (&amp;quot;If it looks like a duck and quacks like a duck, it must be a duck.&amp;quot;) [...]&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;!-- By emphasizing interfaces rather than specific types, well-designed code improves its flexibility by allowing polymorphic substitution. Duck-typing avoids tests using [type()] or [isinstance()]. [...] Instead, it typically employs [hasattr()] tests or [EAFP] programming. --&gt;
+&lt;p&gt;This is what we're doing now!
+If it retrieves like a retriever and validates URLs like a retriever,
+then it's a retriever.&lt;/p&gt;
+&lt;p&gt;You see this all the time in Python.
+For example, &lt;a class="external" href="https://docs.python.org/3/library/json.html#json.dump"&gt;json.dump()&lt;/a&gt; takes a &lt;a class="external" href="https://docs.python.org/3/glossary.html#term-file-object"&gt;file-like object&lt;/a&gt;;
+now, the full &lt;a class="external" href="https://docs.python.org/3/glossary.html#term-text-file"&gt;text file&lt;/a&gt; &lt;a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase"&gt;interface&lt;/a&gt;
+has lots methods and attributes,
+but dump() only cares about &lt;a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase.write"&gt;write()&lt;/a&gt;,
+and will accept &lt;em&gt;any&lt;/em&gt; object implementing it:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;MyFile&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;write&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;        &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;writing: &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gp"&gt;...&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;f&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;MyFile&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;json&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;dump&lt;/span&gt;&lt;span class="p"&gt;({&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;one&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt; &lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;writing: {&lt;/span&gt;
+&lt;span class="go"&gt;writing: &amp;quot;one&amp;quot;&lt;/span&gt;
+&lt;span class="go"&gt;writing: :&lt;/span&gt;
+&lt;span class="go"&gt;writing: 1&lt;/span&gt;
+&lt;span class="go"&gt;writing: }&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The main way to communicate this is through documentation:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Serialize &lt;em&gt;obj&lt;/em&gt; [...] to &lt;em&gt;fp&lt;/em&gt; (a &lt;code&gt;.write()&lt;/code&gt;-supporting &lt;a class="external" href="https://docs.python.org/3/glossary.html#term-file-object"&gt;file-like object&lt;/a&gt;)&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h3 id="inheritance"&gt;Inheritance&lt;span class="headerlink"&gt; &lt;a href="#inheritance" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Nevertheless, you may want to be more explicit about
+the relationships between types.
+The easiest option is to use a base class,
+and require retrievers to inherit from it.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Retriever&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;slow_to_read&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;False&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;retrieve&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;NotImplementedError&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;validate_url&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;NotImplementedError&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;This allows you to check you the type with &lt;a class="external" href="https://docs.python.org/3/library/functions.html#isinstance"&gt;isinstance()&lt;/a&gt;,
+provide default methods and attributes,
+and will help type checkers and autocompletion,
+at the expense of forcing a dependency on the base class.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;MyRetriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Retriever&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt; &lt;span class="k"&gt;pass&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;retriever&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;MyRetriever&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;retriever&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;slow_to_read&lt;/span&gt;
+&lt;span class="go"&gt;False&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;isinstance&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;retriever&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Retriever&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;True&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;What it won't do is check subclasses actually define the methods:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;retriever&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;validate_url&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;myurl&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="gr"&gt;NotImplementedError&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h3 id="abstract-base-classes"&gt;Abstract base classes&lt;span class="headerlink"&gt; &lt;a href="#abstract-base-classes" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;This is where &lt;a class="external" href="https://docs.python.org/3/glossary.html#term-abstract-base-class"&gt;abstract base classes&lt;/a&gt; come in.
+The decorators in the &lt;a class="external" href="https://docs.python.org/3/library/abc.html"&gt;abc&lt;/a&gt; module allow defining abstract methods
+that &lt;em&gt;must&lt;/em&gt; be overriden:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ABC&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+
+    &lt;span class="nd"&gt;@abstractproperty&lt;/span&gt;
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;slow_to_read&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="kc"&gt;False&lt;/span&gt;
+
+    &lt;span class="nd"&gt;@abstractmethod&lt;/span&gt;
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;retrieve&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;NotImplementedError&lt;/span&gt;
+
+    &lt;span class="nd"&gt;@abstractmethod&lt;/span&gt;
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;validate_url&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;NotImplementedError&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;This is checked at runtime
+(but only that methods and attributes &lt;em&gt;are present&lt;/em&gt;,
+not their signatures or types):&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;MyRetriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Retriever&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt; &lt;span class="k"&gt;pass&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;MyRetriever&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="gt"&gt;Traceback (most recent call last):&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c"&gt;...&lt;/span&gt;
+&lt;span class="gr"&gt;TypeError&lt;/span&gt;: &lt;span class="n"&gt;Can&amp;#39;t instantiate abstract class MyRetriever with abstract methods retrieve, slow_to_read, validate_url&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;MyRetriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Retriever&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;slow_to_read&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;False&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;retrieve&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;validate_url&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
+&lt;span class="gp"&gt;...&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;MyRetriever&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="go"&gt;&amp;lt;__main__.MyRetriever object at 0x1037aac50&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;Tip&lt;/p&gt;
+&lt;p&gt;You can also use ABCs to register arbitrary types
+ as &amp;quot;virtual subclasses&amp;quot;;
+ this allows them to pass &lt;a class="external" href="https://docs.python.org/3/library/functions.html#isinstance"&gt;isinstance()&lt;/a&gt; checks
+ without inheritance,
+ but won't check for required methods:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;MyRetriever&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="k"&gt;pass&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;Retriever&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;register&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;MyRetriever&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;&amp;lt;class &amp;#39;__main__.MyRetriever&amp;#39;&amp;gt;&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="nb"&gt;isinstance&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;MyRetriever&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt; &lt;span class="n"&gt;Retriever&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;True&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/section&gt;
+&lt;h3 id="protocols"&gt;Protocols&lt;span class="headerlink"&gt; &lt;a href="#protocols" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Finally, we have protocols, aka structural subtyping,
+aka static &lt;a class="anchor" href="#duck-typing"&gt;duck typing&lt;/a&gt;.
+Introduced in &lt;a class="external" href="https://peps.python.org/pep-0544/"&gt;PEP 544&lt;/a&gt;,
+they go in the opposite direction –
+what if instead declaring what the type of something &lt;em&gt;is&lt;/em&gt;,
+we declare what methods it has to have &lt;em&gt;to be&lt;/em&gt; of a specific type?&lt;/p&gt;
+&lt;p&gt;You define a protocol by inheriting &lt;a class="external" href="https://docs.python.org/3/library/typing.html#typing.Protocol"&gt;typing.Protocol&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Protocol&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+
+    &lt;span class="nd"&gt;@property&lt;/span&gt;
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;slow_to_read&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="nb"&gt;bool&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="o"&gt;...&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;retrieve&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="nb"&gt;tuple&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;IO&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nb"&gt;bytes&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;]:&lt;/span&gt;
+        &lt;span class="o"&gt;...&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;validate_url&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="o"&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;...and then use it in type annotations:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;mount_retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;prefix&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;retriever&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Retriever&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;NotImplementedError&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;Some other code
+(not necessarily yours, not necessarily aware the protocol even exists)
+defines an implementation:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;MyRetriever&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;slow_to_read&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;False&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;validate_url&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;pass&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;...and then uses it with annotated code:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;mount_retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;my&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;MyRetriever&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;A type checker like &lt;a class="external" href="https://mypy.readthedocs.io/en/stable/protocols.html"&gt;mypy&lt;/a&gt; will check if the provided instance conforms to the protocol
+– not only that methods exist, but that their signatures are correct too
+– all without the implementation having to declare anything.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;mypy&lt;span class="w"&gt; &lt;/span&gt;myproto.py
+&lt;span class="go"&gt;myproto.py:11: error: Argument 2 to &amp;quot;mount_retriever&amp;quot; has incompatible type &amp;quot;MyRetriever&amp;quot;; expected &amp;quot;Retriever&amp;quot;  [arg-type]&lt;/span&gt;
+&lt;span class="go"&gt;myproto.py:11: note: &amp;quot;MyRetriever&amp;quot; is missing following &amp;quot;Retriever&amp;quot; protocol member:&lt;/span&gt;
+&lt;span class="go"&gt;myproto.py:11: note:     retrieve&lt;/span&gt;
+&lt;span class="go"&gt;myproto.py:11: note: Following member(s) of &amp;quot;MyRetriever&amp;quot; have conflicts:&lt;/span&gt;
+&lt;span class="go"&gt;myproto.py:11: note:     Expected:&lt;/span&gt;
+&lt;span class="go"&gt;myproto.py:11: note:         def validate_url(self, url: str) -&amp;gt; None&lt;/span&gt;
+&lt;span class="go"&gt;myproto.py:11: note:     Got:&lt;/span&gt;
+&lt;span class="go"&gt;myproto.py:11: note:         def validate_url(self) -&amp;gt; Any&lt;/span&gt;
+&lt;span class="go"&gt;Found 1 error in 1 file (checked 1 source file)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;Tip&lt;/p&gt;
+&lt;p&gt;If you decorate your protocol with &lt;a class="external" href="https://docs.python.org/3/library/typing.html#typing.runtime_checkable"&gt;runtime_checkable&lt;/a&gt;,
+ you can use it in &lt;a class="external" href="https://docs.python.org/3/library/functions.html#isinstance"&gt;isinstance()&lt;/a&gt; checks,
+ but like ABCs, it only checks methods are present.&lt;/p&gt;
+&lt;/section&gt;
+&lt;!-- TODO: zope.interface: https://peps.python.org/pep-0544/#existing-approaches-to-structural-subtyping --&gt;
+&lt;h2 id="counter-example-modules"&gt;Counter-example: modules&lt;span class="headerlink"&gt; &lt;a href="#counter-example-modules" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;If a class has no state
+and you don't need inheritance,
+you can use a module instead:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# module.py&lt;/span&gt;
+
+&lt;span class="n"&gt;slow_to_read&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;False&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;retrieve&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;etag&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;NotImplementedError&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;validate_url&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;NotImplementedError&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;From a &lt;a class="anchor" href="#duck-typing"&gt;duck typing&lt;/a&gt; perspective,
+this is a valid retriever,
+since it has all the expected methods and attributes.
+So much so, that it's also compatible with &lt;a class="anchor" href="#protocols"&gt;protocols&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;module&lt;/span&gt;
+
+&lt;span class="n"&gt;mount_retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;mod&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;module&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;mypy&lt;span class="w"&gt; &lt;/span&gt;module.py
+&lt;span class="go"&gt;Success: no issues found in 1 source file&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;I tried to keep the retriever example stateless,
+but real world classes rarely are
+(it may be &lt;a class="internal" href="/same-arguments#solution-make-the-class-immutable"&gt;immutable state&lt;/a&gt;, but it's state nonetheless).
+Also, you're limited to exactly one implementation per module,
+which is ususally too much like Java for my tastes.&lt;/p&gt;
+&lt;h2 id="try-it-out"&gt;Try it out&lt;span class="headerlink"&gt; &lt;a href="#try-it-out" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;If you're doing something and you think you need a class,
+do it and see how it looks.
+If you think it's better, keep it,
+otherwise, revert the change.
+You can always switch in either direction later.&lt;/p&gt;
+&lt;p&gt;If you got it right the first time, great!
+If not, &lt;strong&gt;by having to fix it you'll learn something&lt;/strong&gt;,
+and next time you'll know better.&lt;/p&gt;
+&lt;p&gt;Also, don't beat yourself up.&lt;/p&gt;
+&lt;p&gt;Sure, there are nice libraries out there
+that use classes in &lt;em&gt;just the right way&lt;/em&gt;,
+after spending lots of time to find the right abstraction.
+But &lt;strong&gt;abstraction is difficult and time consuming&lt;/strong&gt;,
+and in everyday code good enough is just that – good enough –
+you don't need to go to the extreme.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Learned something new today?&lt;/strong&gt; Share this with others, it really helps! &lt;span class="text-large"&gt;
+&lt;span class="share-icons"&gt;
+&lt;a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=When%20to%20use%20classes%20in%20Python%3F%20When%20you%20repeat%20similar%20sets%20of%20functions&amp;url=https%3A//death.andgravity.com/same-functions&amp;via=_andgravity"
+&gt;Twitter&lt;/a&gt;
+&lt;a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/same-functions&amp;t=When%20to%20use%20classes%20in%20Python%3F%20When%20you%20repeat%20similar%20sets%20of%20functions"
+&gt;HN&lt;/a&gt;
+&lt;a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/same-functions&amp;title=When%20to%20use%20classes%20in%20Python%3F%20When%20you%20repeat%20similar%20sets%20of%20functions"
+&gt;Reddit&lt;/a&gt;
+&lt;/span&gt;
+&lt;/span&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;b&gt;
+Want to know when new articles come out?
+
+&lt;a href="#embedded-subscribe-form"&gt;Subscribe here&lt;/a&gt;
+to get new stuff straight to your inbox!
+
+&lt;/b&gt;&lt;/p&gt;
+
+
+
+&lt;div class="panel inline-panel" &gt;
+    &lt;div class="panel-header text-large"&gt;
+        If you&amp;#39;ve made it this far, you might like:
+    &lt;/div&gt;
+    &lt;div class="panel-body"&gt;
+        &lt;p&gt;&lt;a href="/query-builder-how"&gt;
+            Write an SQL query builder in 150 lines of Python!
+        &lt;/a&gt;
+    &lt;/div&gt;
+&lt;/div&gt;
+&lt;section class="footnotes"&gt;
+&lt;ol&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;This code has a potential bug:
+if we were using a &lt;a class="external" href="https://requests.readthedocs.io/en/latest/user/advanced/#session-objects"&gt;persistent session&lt;/a&gt; instead of a transient one,
+the connection would never be released,
+since we're not closing the response after we're done with it.
+In the actual code, we're doing both,
+but the only way do so reliably is to &lt;a class="external" href="https://github.com/lemon24/reader/blob/3.9/src/reader/_parser/http.py#L39-L103"&gt;return a context manager&lt;/a&gt;;
+I omitted this because it doesn't add anything
+to our discussion about classes. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-2"&gt;&lt;p&gt;We're handling unknown URI schemes here
+because bare paths don't have a scheme,
+so anything that didn't match a known scheme must be a bare path.
+Also, on Windows (not supported yet),
+the drive letter in a path like &lt;em&gt;c:\feed.xml&lt;/em&gt;
+is indistinguishable from a scheme. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-3"&gt;&lt;p&gt;Unless the response is small enough to fit in the TCP receive buffer. &lt;a href="#fnref-3" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+    <link href="https://death.andgravity.com/same-functions" rel="alternate"/>
+    <summary>In this article, we look at another heuristic for using classes in Python, with examples from real-world code, and some things to keep in mind.</summary>
+    <published>2023-09-11T20:00:00+00:00</published>
+  </entry>
   <entry xml:base="https://death.andgravity.com/reader-3-9">
     <id>https://death.andgravity.com/reader-3-9</id>
     <title>reader 3.9 released</title>
@@ -9459,6 +10069,19 @@ Want to know when new articles come out?
 to get new stuff straight to your inbox!
 
 &lt;/b&gt;&lt;/p&gt;
+
+
+
+&lt;div class="panel inline-panel" &gt;
+    &lt;div class="panel-header text-large"&gt;
+        If you&amp;#39;ve made it this far, you might like:
+    &lt;/div&gt;
+    &lt;div class="panel-body"&gt;
+        &lt;p&gt;&lt;a href="/caching-methods"&gt;
+            Caching a lot of methods in Python
+        &lt;/a&gt;
+    &lt;/div&gt;
+&lt;/div&gt;
 &lt;h2 id="bonus-other-alternatives"&gt;Bonus: other alternatives&lt;span class="headerlink"&gt; &lt;a href="#bonus-other-alternatives" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
 &lt;p&gt;Still here? Cool!&lt;/p&gt;
 &lt;p&gt;Let's look at some of the other options I considered,
@@ -10136,6 +10759,19 @@ Want to know when new articles come out?
 to get new stuff straight to your inbox!
 
 &lt;/b&gt;&lt;/p&gt;
+
+
+
+&lt;div class="panel inline-panel" &gt;
+    &lt;div class="panel-header text-large"&gt;
+        If you&amp;#39;ve made it this far, you might like:
+    &lt;/div&gt;
+    &lt;div class="panel-body"&gt;
+        &lt;p&gt;&lt;a href="/same-functions"&gt;
+            When to use classes in Python? When you repeat similar sets of functions
+        &lt;/a&gt;
+    &lt;/div&gt;
+&lt;/div&gt;
 &lt;section class="footnotes"&gt;
 &lt;ol&gt;
 &lt;li id="fn-1"&gt;&lt;p&gt;A &lt;a class="external" href="https://docs.python.org/3/library/functions.html#slice"&gt;slice&lt;/a&gt; is an object Python uses internally

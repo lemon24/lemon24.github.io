@@ -31,14 +31,14 @@
 
 
 <title>When to use classes in Python? When you repeat similar sets of functions - death and gravity</title>
-<meta name="description" content="TODO" />
+<meta name="description" content="In this article, we look at another heuristic for using classes in Python, with examples from real-world code, and some things to keep in mind." />
 
 
 <meta property="og:title" content="When to use classes in Python? When you repeat similar sets of functions">
 <meta property="og:site_name" content="death and gravity">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://death.andgravity.com/same-functions">
-<meta property="og:description" content="TODO">
+<meta property="og:description" content="In this article, we look at another heuristic for using classes in Python, with examples from real-world code, and some things to keep in mind.">
 
 
 
@@ -54,6 +54,15 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
 
 
 
@@ -78,7 +87,7 @@ window.addEventListener('resize', set_vh);
 
 
 <small>
-<span class="tooltip" data-tooltip="published on 2023-08-24">August 2023</span>
+<span class="tooltip" data-tooltip="published on 2023-09-11">September 2023</span>
 ∙ 11 minute read
 ∙
 </small><span class="share-icons">
@@ -133,6 +142,32 @@ let's look at:</p>
 <li><strong>examples from real-world code</strong></li>
 <li>some considerations you should keep in mind</li>
 </ul>
+<details>
+<summary>Contents</summary>
+<section class="toc">
+<ul>
+<li><a href="#the-heuristic">The heuristic</a></li>
+<li><a href="#example-retrievers">Example: Retrievers</a>
+<ul>
+<li><a href="#problem-can-t-add-new-feed-sources">Problem: can't add new feed sources</a></li>
+<li><a href="#problem-can-t-validate-urls-until-retrieving-them">Problem: can't validate URLs until retrieving them</a></li>
+<li><a href="#not-just-functions-attributes-too">Not just functions, attributes too</a></li>
+</ul>
+</li>
+<li><a href="#example-flask-s-tagged-json">Example: Flask's tagged JSON</a></li>
+<li><a href="#formalizing-this">Formalizing this</a>
+<ul>
+<li><a href="#duck-typing">Duck typing</a></li>
+<li><a href="#inheritance">Inheritance</a></li>
+<li><a href="#abstract-base-classes">Abstract base classes</a></li>
+<li><a href="#protocols">Protocols</a></li>
+</ul>
+</li>
+<li><a href="#counter-example-modules">Counter-example: modules</a></li>
+<li><a href="#try-it-out">Try it out</a></li>
+</ul>
+</section>
+</details>
 <h2 id="the-heuristic">The heuristic<span class="headerlink"> <a href="#the-heuristic" title="permalink">#</a></span></h2>
 <p><strong>If you repeat similar sets of functions, consider grouping them in a class.</strong></p>
 <p>That's it.</p>
@@ -165,7 +200,7 @@ this is sometimes called the <a class="external" href="https://en.wikipedia.org/
 <p>Usually, feeds come from the internet,
 but you can also use local files.
 The parsers for various formats don't really care where a feed is coming from,
-so they always take as input an open file.</p>
+so they always take an open file as input.</p>
 <p><a class="external" href="https://github.com/lemon24/reader">reader</a> supports conditional requests –
 that is, only retrieve a feed if it changed.
 To do this, it stores the <a class="external" href="https://en.wikipedia.org/wiki/HTTP_ETag">ETag</a> HTTP header from a response,
@@ -200,7 +235,7 @@ In the beginning, there was a function
 <p>We use <a class="external" href="https://requests.readthedocs.io/">Requests</a> to get HTTP URLs,
 and return the underlying file-like object.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
 <p>For local files, we suport both bare paths and <a class="external" href="https://en.wikipedia.org/wiki/File_URI_scheme">file URIs</a>;
-for the latter, we need to do a bit of validation –
+for the latter, we do a bit of validation –
 <em>file:feed</em> and <em>file://localhost/feed</em> are OK,
 but <em>file://invalid/feed</em> and <em>unknown:feed</em><sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup> are not:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">extract_path</span><span class="p">(</span><span class="n">url</span><span class="p">):</span>
@@ -215,12 +250,13 @@ but <em>file://invalid/feed</em> and <em>unknown:feed</em><sup class="footnote-r
     <span class="k">return</span> <span class="n">url</span>
 </code></pre></div>
 
-<h3 id="problem-can-t-add-new-feed-sources">problem: can't add new feed sources<span class="headerlink"> <a href="#problem-can-t-add-new-feed-sources" title="permalink">#</a></span></h3>
-<p>reader allows plugins to extend its behavior,
-but the code above makes it impossible to add new feed sources
-e.g. an FTP server (<code>ftp://...</code>)
-without chaging the code</p>
-<p>one way to fix this is to extract the retrieve functionality for each protocol into separate functions,</p>
+<h3 id="problem-can-t-add-new-feed-sources">Problem: can't add new feed sources<span class="headerlink"> <a href="#problem-can-t-add-new-feed-sources" title="permalink">#</a></span></h3>
+<p>One of <em>reader</em>'s goals is to be extensible.
+For example, it should be possible to add new feed sources
+like an FTP server (<em>ftp://...</em>) or <a class="external" href="https://reader.readthedocs.io/en/latest/plugins.html#twitter">Twitter</a> without changing <em>reader</em> code;
+however, our current implementation makes it hard to do so.</p>
+<p>We can fix this by extracting retrieval logic
+into separate functions, one per protocol:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">http_retriever</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">):</span>
     <span class="n">headers</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="c1"># ...</span>
@@ -231,7 +267,7 @@ without chaging the code</p>
     <span class="k">return</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">),</span> <span class="kc">None</span>
 </code></pre></div>
 
-<p>and then route to them depending on the url prefix</p>
+<p>...and then routing to the right one depending on the URL prefix:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="c1"># sorted by key length (longest first)</span>
 <span class="n">RETRIEVERS</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s1">&#39;https://&#39;</span><span class="p">:</span> <span class="n">http_retriever</span><span class="p">,</span>
@@ -251,38 +287,36 @@ without chaging the code</p>
     <span class="k">return</span> <span class="n">retriever</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">)</span>
 </code></pre></div>
 
-<p>now, plugins can register additional retrievers by adding them to RETRIEVERS
-(in practice, we actually provide method for that,
-that also makes sure it stays sorted)</p>
-<h3 id="problem-can-t-validate-an-url-without-retrieving-it">problem: can't validate an url without retrieving it<span class="headerlink"> <a href="#problem-can-t-validate-an-url-without-retrieving-it" title="permalink">#</a></span></h3>
-<p>to add a feed, users call <code>add_feed(url)</code>,
-which saves it in the database,
-to be retrieved on the next update.</p>
-<p>what happens when the user adds an invalid feed, e.g. unknown://host/path?
-it gets saved to the database,
-and on the next update we get an &quot;unknown scheme for file URI&quot; error.
-that's good, but it would be way nicer if the user got it
-when adding the feed.</p>
-<p>for HTTP, we can use Requests to do the validation for us;
-for files, we can call <code>extract_path()</code> and discard the result.
-of course, we can't use an if statement to choose which to do,
-since it would take us <a class="anchor" href="#problem-can-t-add-new-feed-sources">back where we started</a>
-– we need to select the validation using the same mechanism we use to select retrievers</p>
-<p>now, there's more than one way of doing this</p>
-<p>we could keep a separate validator registry,
-but this invites it to accidentally become out of sync with the retriever one.</p>
+<p>Now, plugins can register retrievers by adding them to <code>RETRIEVERS</code>
+(in practice, there's <a class="external" href="https://github.com/lemon24/reader/blob/3.9/src/reader/_parser/_lazy.py#L354-L367">a method for that</a>,
+so users don't need to care about it staying sorted).</p>
+<h3 id="problem-can-t-validate-urls-until-retrieving-them">Problem: can't validate URLs until retrieving them<span class="headerlink"> <a href="#problem-can-t-validate-urls-until-retrieving-them" title="permalink">#</a></span></h3>
+<p>To add a feed, you call <a class="external" href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.add_feed">add_feed()</a> with the feed URL.</p>
+<p>But what if you pass an invalid URL?
+The feed gets stored in the database,
+and you get an &quot;unknown scheme for file URI&quot; error on the next update.
+However, this can be confusing
+– a good API should signal errors near the action that triggered them.
+This means <a class="external" href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.add_feed">add_feed()</a> needs to validate the URL
+without actually retrieving it.</p>
+<p>For HTTP, Requests can do the validation for us;
+for files, we can call <code>extract_path()</code> and ignore the result.
+Of course, we should select the appropriate logic in the same way we select retrievers,
+otherwise we're <a class="anchor" href="#problem-can-t-add-new-feed-sources">back where we started</a>.</p>
+<p>Now, there's more than one way of doing this.
+We could keep a separate validator registry,
+but that may accidentally become out of sync with the retriever one.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">URL_VALIDATORS</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s1">&#39;https://&#39;</span><span class="p">:</span> <span class="n">http_url_validator</span><span class="p">,</span>
     <span class="s1">&#39;http://&#39;</span><span class="p">:</span> <span class="n">http_url_validator</span><span class="p">,</span>
     <span class="s1">&#39;&#39;</span><span class="p">:</span> <span class="n">file_url_validator</span><span class="p">,</span>
 <span class="p">}</span>
 </code></pre></div>
-<p>we could group the retriever and the corresponding validator
-by storing a (retriever, validator) tuple in the retriever registry.
-this is betetr, but results in less-than readable code during use
-(especially if we later need to add a third thing);
-also, it allows using a retriever with the wrong validator,
-and makes it difficult to customize bits of behavior that affect both the retriever and validator</p>
+<p>Or, we could keep a (retriever, validator) pair in the retriever registry.
+This is better, but it's not all that readable
+(what if need to add a <a class="anchor" href="#not-just-functions-attributes-too">third thing</a>?);
+also, it makes customizing behavior
+that affects both the retriever and validator harder.</p>
 <!-- TODO: link to future "when to use classes" article -->
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">RETRIEVERS</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s1">&#39;https://&#39;</span><span class="p">:</span> <span class="p">(</span><span class="n">http_retriever</span><span class="p">,</span> <span class="n">http_url_validator</span><span class="p">),</span>
@@ -290,7 +324,7 @@ and makes it difficult to customize bits of behavior that affect both the retrie
     <span class="s1">&#39;&#39;</span><span class="p">:</span> <span class="p">(</span><span class="n">file_retriever</span><span class="p">,</span> <span class="n">file_url_validator</span><span class="p">),</span>
 <span class="p">}</span>
 </code></pre></div>
-<p>better still, we can make the grouping explicit by using a class:</p>
+<p>Better yet, we can <em>use a class</em> to make the grouping explicit:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">HTTPRetriever</span><span class="p">:</span>
 
     <span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">):</span>
@@ -313,8 +347,8 @@ and makes it difficult to customize bits of behavior that affect both the retrie
         <span class="n">extract_path</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
 </code></pre></div>
 
-<p>we then create retriever instances,
-and update <code>retrieve()</code> to call their methods:<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
+<p>We then instantiate them,
+and update <code>retrieve()</code> to call the methods:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">http_retriever</span> <span class="o">=</span> <span class="n">HTTPRetriever</span><span class="p">()</span>
 <span class="n">file_retriever</span> <span class="o">=</span> <span class="n">FileRetriever</span><span class="p">()</span>
 </code></pre></div>
@@ -324,33 +358,28 @@ and update <code>retrieve()</code> to call their methods:<sup class="footnote-re
     <span class="k">return</span> <span class="n">retriever</span><span class="o">.</span><span class="n">retrieve</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">)</span>
 </code></pre></div>
 
-<p><code>validate_url()</code> works like <code>retrieve()</code>,
-but delegates accordingly:</p>
+<p><code>validate_url()</code> works just the same:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">validate_url</span><span class="p">(</span><span class="n">url</span><span class="p">):</span>
     <span class="n">retriever</span> <span class="o">=</span> <span class="n">get_retriever</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
     <span class="n">retriever</span><span class="o">.</span><span class="n">validate_url</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
 </code></pre></div>
 
-<p>And here you have it – <strong>if you repeat similar sets of functions, consider grouping them in a class</strong>.</p>
+<p>And there you have it – <strong>if you repeat similar sets of functions, consider grouping them in a class</strong>.</p>
 <h3 id="not-just-functions-attributes-too">Not just functions, attributes too<span class="headerlink"> <a href="#not-just-functions-attributes-too" title="permalink">#</a></span></h3>
-<p>say you want to update feeds in parallel, using multiple threads.</p>
-<p>parsing is pure Python, CPU bound code,
-so threads won't help because of the <a class="external" href="https://docs.python.org/3/glossary.html#term-global-interpreter-lock">global interpreter lock</a>;
-more importantly, parsing is not the bottleneck –
-we can parse feeds much faster than we retrieve them.</p>
-<p>retrieving, however, is mostly waiting around for I/O –
-it takes ages to connect to the server and for it to respond.</p>
-<p>but, because we're <a class="external" href="https://requests.readthedocs.io/en/latest/user/advanced/#body-content-workflow">streaming the reponse</a>,
-there's still I/O left to be done
-after <code>retrieve()</code> passes the file to the parser
-(unless the response is small enough to fit in the TCP receive buffer).
-we need to make sure the response is consumed <em>before</em> <code>retrieve()</code> returns.
-one solution is to read it into a temporary file, and return that instead
-(reading it into memory defeats the purpose of streaming).</p>
-<p>we could implement this directly in HTTPRetriever,
-but it may be a good idea to do it in <code>retrieve()</code>,
-so others retrievers can opt into this behavior;
-we'll use a class attribute to allow them to do so:</p>
+<p>Say you want to update feeds in parallel, using multiple threads.</p>
+<p>Retrieving feeds is mostly waiting around for I/O,
+so it will benefit the most from it.
+Parsing, on the other hand,
+is pure Python, CPU bound code,
+so threads won't help due to the <a class="external" href="https://docs.python.org/3/glossary.html#term-global-interpreter-lock">global interpreter lock</a>.</p>
+<p>However, because we're <a class="external" href="https://requests.readthedocs.io/en/latest/user/advanced/#body-content-workflow">streaming the reponse body</a>,
+I/O is not done when the retriever returns the file,
+but when the parser finishes reading it.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>
+We can consume the response in <code>retrieve()</code>
+by reading it into a temporary file
+and returning that instead.</p>
+<p>We'll allow any retriever to opt into this behavior
+by using a <em>class attribute</em>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">HTTPRetriever</span><span class="p">:</span>
     <span class="n">slow_to_read</span> <span class="o">=</span> <span class="kc">True</span>
 </code></pre></div>
@@ -359,7 +388,7 @@ we'll use a class attribute to allow them to do so:</p>
     <span class="n">slow_to_read</span> <span class="o">=</span> <span class="kc">False</span>
 </code></pre></div>
 
-<p>If the retriever is slow to read, we do the swap:</p>
+<p>If a retriever is slow to read, <code>retrieve()</code> does the swap:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="n">retriever</span> <span class="o">=</span> <span class="n">get_retriever</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
     <span class="n">file</span><span class="p">,</span> <span class="n">etag</span> <span class="o">=</span> <span class="n">retriever</span><span class="o">.</span><span class="n">retrieve</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">)</span>
@@ -374,46 +403,59 @@ we'll use a class attribute to allow them to do so:</p>
     <span class="k">return</span> <span class="n">file</span><span class="p">,</span> <span class="n">etag</span>
 </code></pre></div>
 
+
+
+
+<div class="panel inline-panel" >
+    <div class="panel-header text-large">
+        Liking this so far? Here&#39;s another article you might like:
+    </div>
+    <div class="panel-body">
+        <p><a href="/same-arguments">
+            When to use classes in Python? When your functions take the same arguments
+        </a>
+    </div>
+</div>
 <h2 id="example-flask-s-tagged-json">Example: Flask's tagged JSON<span class="headerlink"> <a href="#example-flask-s-tagged-json" title="permalink">#</a></span></h2>
-<p>The Flask web framework provides <a class="external" href="https://flask.palletsprojects.com/en/2.3.x/api/#tagged-json">tagged JSON</a> (<a class="external" href="https://github.com/pallets/flask/blob/2.3.x/src/flask/json/tag.py">code</a>),
-an extendable compact representation for non-standard JSON types.</p>
-<p>The main class, <a class="external" href="https://flask.palletsprojects.com/en/2.3.x/api/#flask.json.tag.TaggedJSONSerializer">TaggedJSONSerializer</a>,
-delegates the conversion work to methods of a number of <a class="external" href="https://flask.palletsprojects.com/en/2.3.x/api/#flask.json.tag.JSONTag">JSONTag</a> subclasses
-(one class for each supported type):</p>
+<p>The Flask web framework provides
+an extendable compact representation for non-standard JSON types
+called <a class="external" href="https://flask.palletsprojects.com/en/2.3.x/api/#tagged-json">tagged JSON</a> (<a class="external" href="https://github.com/pallets/flask/blob/2.3.x/src/flask/json/tag.py">code</a>).
+<a class="external" href="https://flask.palletsprojects.com/en/2.3.x/api/#flask.json.tag.TaggedJSONSerializer">The serializer class</a>
+delegates most conversion work to methods of various <a class="external" href="https://flask.palletsprojects.com/en/2.3.x/api/#flask.json.tag.JSONTag">JSONTag</a> subclasses
+(one per supported type):</p>
 <ul>
 <li><code>check()</code> checks if a Python value should be tagged by that tag</li>
 <li><code>tag()</code> converts it to tagged JSON</li>
 <li><code>to_python()</code> converts a JSON value back to Python
 (the serializer uses the <code>key</code> tag attribute to find the correct tag)</li>
 </ul>
-<p>An interesting thing is that
-tag instances have a <code>serializer</code> instance attribute
-pointing back to the serializer;
-this is to allow recursion –
-e.g. when (un)packing a collection like a dict,
+<p>Interestingly,
+tag instances have an attribute pointing back to the serializer,
+likely to allow recursion –
+when (un)packing a possibly nested collection,
 you need to recursively (un)pack its values.
-An instance attribute was not strictly required,
-each method could receive it as an argument,
+Passing the serializer to each method would have also worked,
 but <a class="internal" href="/same-arguments">when your functions take the same arguments...</a></p>
-<h2 id="formalizing-this">formalizing this<span class="headerlink"> <a href="#formalizing-this" title="permalink">#</a></span></h2>
-<p>OK, we're more or less done, the code works.</p>
-<p>But, how would you communicate to others
+<h2 id="formalizing-this">Formalizing this<span class="headerlink"> <a href="#formalizing-this" title="permalink">#</a></span></h2>
+<p>OK, the retriever code works.
+But, how should you communicate to others
 (readers, implementers, interpreters, type checkers)
-that an HTTPRetriever is the same kind of thing as FileRetriever,
-and as everything else that's intended to be a value in RETRIEVERS?</p>
+that an HTTPRetriever is the same kind of thing as a FileRetriever,
+and as anything else that can go in <code>RETRIEVERS</code>?</p>
 <h3 id="duck-typing">Duck typing<span class="headerlink"> <a href="#duck-typing" title="permalink">#</a></span></h3>
 <p>Here's the definition of <a class="external" href="https://docs.python.org/3/glossary.html#term-duck-typing">duck typing</a>:</p>
 <blockquote>
-<p>A programming style which does not look at an object's type to determine if it has the right interface; instead, the method or attribute is simply called or used (&quot;If it looks like a duck and quacks like a duck, it must be a duck.&quot;) By emphasizing interfaces rather than specific types, well-designed code improves its flexibility by allowing polymorphic substitution. Duck-typing avoids tests using <a class="external" href="https://docs.python.org/3/library/functions.html#type">type()</a> or <a class="external" href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a>. [...] Instead, it typically employs <a class="external" href="https://docs.python.org/3/library/functions.html#hasattr">hasattr()</a> tests or <a class="external" href="https://docs.python.org/3/glossary.html#term-EAFP">EAFP</a> programming.</p>
+<p>A programming style which does not look at an object's type to determine if it has the right interface; instead, the method or attribute is simply called or used (&quot;If it looks like a duck and quacks like a duck, it must be a duck.&quot;) [...]</p>
 </blockquote>
-<p>We're already doing this -
-if it retrieves like a retriever and it validates URLs like a retriever,
-it is a retriever.</p>
+<!-- By emphasizing interfaces rather than specific types, well-designed code improves its flexibility by allowing polymorphic substitution. Duck-typing avoids tests using [type()] or [isinstance()]. [...] Instead, it typically employs [hasattr()] tests or [EAFP] programming. -->
+<p>This is what we're doing now!
+If it retrieves like a retriever and validates URLs like a retriever,
+then it's a retriever.</p>
 <p>You see this all the time in Python.
 For example, <a class="external" href="https://docs.python.org/3/library/json.html#json.dump">json.dump()</a> takes a <a class="external" href="https://docs.python.org/3/glossary.html#term-file-object">file-like object</a>;
 now, the full <a class="external" href="https://docs.python.org/3/glossary.html#term-text-file">text file</a> <a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase">interface</a>
-has a non-trivial number of methods and attributes,
-but dump() only cares about one, <a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase.write">write()</a>,
+has lots methods and attributes,
+but dump() only cares about <a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase.write">write()</a>,
 and will accept <em>any</em> object implementing it:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyFile</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">s</span><span class="p">):</span>
@@ -427,13 +469,15 @@ and will accept <em>any</em> object implementing it:</p>
 <span class="go">writing: 1</span>
 <span class="go">writing: }</span>
 </code></pre></div>
-<p>Sometimes, this is made explicit in the <a class="external" href="https://docs.python.org/3/library/json.html#json.dump">documentation</a>:</p>
+<p>The main way to communicate this is through documentation:</p>
 <blockquote>
 <p>Serialize <em>obj</em> [...] to <em>fp</em> (a <code>.write()</code>-supporting <a class="external" href="https://docs.python.org/3/glossary.html#term-file-object">file-like object</a>)</p>
 </blockquote>
 <h3 id="inheritance">Inheritance<span class="headerlink"> <a href="#inheritance" title="permalink">#</a></span></h3>
-<p>Nevertheless, you may want to express (and enforce) this in a more formal way.</p>
-<p>The next easiest option is to use a base class:</p>
+<p>Nevertheless, you may want to be more explicit about
+the relationships between types.
+The easiest option is to use a base class,
+and require retrievers to inherit from it.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Retriever</span><span class="p">:</span>
     <span class="n">slow_to_read</span> <span class="o">=</span> <span class="kc">False</span>
 
@@ -444,10 +488,10 @@ and will accept <em>any</em> object implementing it:</p>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 </code></pre></div>
 
-<p>This allows you to provide default attributes and methods,
-use <a class="external" href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a> to check you got a retriever,
+<p>This allows you to check you the type with <a class="external" href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a>,
+provide default methods and attributes,
 and will help type checkers and autocompletion,
-at the expense of requiring all retrievers to inherit the base class:</p>
+at the expense of forcing a dependency on the base class.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyRetriever</span><span class="p">(</span><span class="n">Retriever</span><span class="p">):</span> <span class="k">pass</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">retriever</span> <span class="o">=</span> <span class="n">MyRetriever</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">retriever</span><span class="o">.</span><span class="n">slow_to_read</span>
@@ -455,15 +499,16 @@ at the expense of requiring all retrievers to inherit the base class:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">retriever</span><span class="p">,</span> <span class="n">Retriever</span><span class="p">)</span>
 <span class="go">True</span>
 </code></pre></div>
-<p>What it won't do is to force subclasses to actually define the methods:</p>
+<p>What it won't do is check subclasses actually define the methods:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">retriever</span><span class="o">.</span><span class="n">validate_url</span><span class="p">(</span><span class="s1">&#39;myurl&#39;</span><span class="p">)</span>
 <span class="gt">Traceback (most recent call last):</span>
 <span class="w">  </span><span class="c">...</span>
 <span class="gr">NotImplementedError</span>
 </code></pre></div>
 <h3 id="abstract-base-classes">Abstract base classes<span class="headerlink"> <a href="#abstract-base-classes" title="permalink">#</a></span></h3>
-<p>And this is where <a class="external" href="https://docs.python.org/3/glossary.html#term-abstract-base-class">abstract base classes</a> come in.</p>
-<p>The decorators in the <a class="external" href="https://docs.python.org/3/library/abc.html">abc</a> module allow you to define abstract methods:</p>
+<p>This is where <a class="external" href="https://docs.python.org/3/glossary.html#term-abstract-base-class">abstract base classes</a> come in.
+The decorators in the <a class="external" href="https://docs.python.org/3/library/abc.html">abc</a> module allow defining abstract methods
+that <em>must</em> be overriden:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Retriever</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
 
     <span class="nd">@abstractproperty</span>
@@ -479,7 +524,9 @@ at the expense of requiring all retrievers to inherit the base class:</p>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 </code></pre></div>
 
-<p>... which have to be overriden by subclasses:</p>
+<p>This is checked at runtime
+(but only that methods and attributes <em>are present</em>,
+not their signatures or types):</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyRetriever</span><span class="p">(</span><span class="n">Retriever</span><span class="p">):</span> <span class="k">pass</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">MyRetriever</span><span class="p">()</span>
 <span class="gt">Traceback (most recent call last):</span>
@@ -494,78 +541,85 @@ at the expense of requiring all retrievers to inherit the base class:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">MyRetriever</span><span class="p">()</span>
 <span class="go">&lt;__main__.MyRetriever object at 0x1037aac50&gt;</span>
 </code></pre></div>
-<p>Note however that this will check
-only the presence of the required methods or attributes,
-not their type signatures or types.</p>
-<p>You can also register arbitrary classes as &quot;virtual subclasses&quot;,
-so they pass <a class="external" href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a> checks,
-but this won't check for required methods:</p>
+<section class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>You can also use ABCs to register arbitrary types
+ as &quot;virtual subclasses&quot;;
+ this allows them to pass <a class="external" href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a> checks
+ without inheritance,
+ but won't check for required methods:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyRetriever</span><span class="p">:</span> <span class="k">pass</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">Retriever</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">MyRetriever</span><span class="p">)</span>
 <span class="go">&lt;class &#39;__main__.MyRetriever&#39;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">MyRetriever</span><span class="p">(),</span> <span class="n">Retriever</span><span class="p">)</span>
 <span class="go">True</span>
 </code></pre></div>
+</section>
 <h3 id="protocols">Protocols<span class="headerlink"> <a href="#protocols" title="permalink">#</a></span></h3>
-<p>Finally, we have protocols, aka structural subtyping, aka static duck typing.</p>
-<p>Introduced in <a class="external" href="https://peps.python.org/pep-0544/">PEP 544</a>,
-protocols go in the other direction from inheritance –
-what if instead of having things declare what type they are,
-we could declare what methods something has to have to <em>be</em> of that type?</p>
-<p>you declare a protocol using <a class="external" href="https://docs.python.org/3/library/typing.html#typing.Protocol">typing.Protocol</a>:</p>
+<p>Finally, we have protocols, aka structural subtyping,
+aka static <a class="anchor" href="#duck-typing">duck typing</a>.
+Introduced in <a class="external" href="https://peps.python.org/pep-0544/">PEP 544</a>,
+they go in the opposite direction –
+what if instead declaring what the type of something <em>is</em>,
+we declare what methods it has to have <em>to be</em> of a specific type?</p>
+<p>You define a protocol by inheriting <a class="external" href="https://docs.python.org/3/library/typing.html#typing.Protocol">typing.Protocol</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Retriever</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">slow_to_read</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="o">...</span>
 
-    <span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">etag</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">IO</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+    <span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">etag</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">IO</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
         <span class="o">...</span>
 
     <span class="k">def</span> <span class="nf">validate_url</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="o">...</span>
 </code></pre></div>
 
-<p>in some other place,
-you define an implementation:</p>
+<p>...and then use it in type annotations:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">mount_retriever</span><span class="p">(</span><span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">retriever</span><span class="p">:</span> <span class="n">Retriever</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+</code></pre></div>
+
+<p>Some other code
+(not necessarily yours, not necessarily aware the protocol even exists)
+defines an implementation:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">MyRetriever</span><span class="p">:</span>
     <span class="n">slow_to_read</span> <span class="o">=</span> <span class="kc">False</span>
 
-    <span class="k">def</span> <span class="nf">validate_url</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">validate_url</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">pass</span>
 </code></pre></div>
 
-<p>...which you can then use
-(note that in practice,
-<code>retriever</code> will be declared to be a Retriever
-far away from where MyRetriever is actually instantiated,
-even different code bases):</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">retriever</span><span class="p">:</span> <span class="n">Retriever</span> <span class="o">=</span> <span class="n">MyRetriever</span><span class="p">()</span>
+<p>...and then uses it with annotated code:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">mount_retriever</span><span class="p">(</span><span class="s1">&#39;my&#39;</span><span class="p">,</span> <span class="n">MyRetriever</span><span class="p">())</span>
 </code></pre></div>
 
-<p>a type checker <a class="external" href="https://mypy.readthedocs.io/en/stable/protocols.html">like mypy</a> will then check if the provided instance conforms to the protocol
-– not only that methods exist, but that their signatures are correct too!</p>
+<p>A type checker like <a class="external" href="https://mypy.readthedocs.io/en/stable/protocols.html">mypy</a> will check if the provided instance conforms to the protocol
+– not only that methods exist, but that their signatures are correct too
+– all without the implementation having to declare anything.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>mypy<span class="w"> </span>myproto.py
-<span class="go">myproto.py:11: error: Incompatible types in assignment (expression has type &quot;MyRetriever&quot;, variable has type &quot;Retriever&quot;)  [assignment]</span>
+<span class="go">myproto.py:11: error: Argument 2 to &quot;mount_retriever&quot; has incompatible type &quot;MyRetriever&quot;; expected &quot;Retriever&quot;  [arg-type]</span>
 <span class="go">myproto.py:11: note: &quot;MyRetriever&quot; is missing following &quot;Retriever&quot; protocol member:</span>
 <span class="go">myproto.py:11: note:     retrieve</span>
 <span class="go">myproto.py:11: note: Following member(s) of &quot;MyRetriever&quot; have conflicts:</span>
 <span class="go">myproto.py:11: note:     Expected:</span>
 <span class="go">myproto.py:11: note:         def validate_url(self, url: str) -&gt; None</span>
 <span class="go">myproto.py:11: note:     Got:</span>
-<span class="go">myproto.py:11: note:         def validate_url(self, url: int) -&gt; None</span>
+<span class="go">myproto.py:11: note:         def validate_url(self) -&gt; Any</span>
 <span class="go">Found 1 error in 1 file (checked 1 source file)</span>
 </code></pre></div>
+<section class="admonition tip">
+<p class="admonition-title">Tip</p>
 <p>If you decorate your protocol with <a class="external" href="https://docs.python.org/3/library/typing.html#typing.runtime_checkable">runtime_checkable</a>,
-you can also use it at runtime to do <code>isinstance(retriever, Retriever)</code> checks,
-but just like <a class="external" href="https://docs.python.org/3/library/abc.html">abc</a>, that only checks for the presence of required methods.</p>
+ you can use it in <a class="external" href="https://docs.python.org/3/library/functions.html#isinstance">isinstance()</a> checks,
+ but like ABCs, it only checks methods are present.</p>
+</section>
 <!-- TODO: zope.interface: https://peps.python.org/pep-0544/#existing-approaches-to-structural-subtyping -->
-<h2 id="counter-example-modules">counter-example: modules<span class="headerlink"> <a href="#counter-example-modules" title="permalink">#</a></span></h2>
-<p>If the class has no state<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup>
+<h2 id="counter-example-modules">Counter-example: modules<span class="headerlink"> <a href="#counter-example-modules" title="permalink">#</a></span></h2>
+<p>If a class has no state
 and you don't need inheritance,
-modules work too:</p>
+you can use a module instead:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="c1"># module.py</span>
 
 <span class="n">slow_to_read</span> <span class="o">=</span> <span class="kc">False</span>
@@ -580,18 +634,114 @@ modules work too:</p>
 <p>From a <a class="anchor" href="#duck-typing">duck typing</a> perspective,
 this is a valid retriever,
 since it has all the expected methods and attributes.
-So much so, that it is also compatible with <a class="anchor" href="#protocols">protocols</a>:</p>
+So much so, that it's also compatible with <a class="anchor" href="#protocols">protocols</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">module</span>
 
-<span class="n">retriever</span><span class="p">:</span> <span class="n">Retriever</span> <span class="o">=</span> <span class="n">module</span>
+<span class="n">mount_retriever</span><span class="p">(</span><span class="s1">&#39;mod&#39;</span><span class="p">,</span> <span class="n">module</span><span class="p">)</span>
 </code></pre></div>
 
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>mypy<span class="w"> </span>module.py
 <span class="go">Success: no issues found in 1 source file</span>
 </code></pre></div>
-<p>The caveat is that, of course,
-you can have exactly one implementation per module.</p>
-<!-- TODO: type checking that -->
+<p>I tried to keep the retriever example stateless,
+but real world classes rarely are
+(it may be <a class="internal" href="/same-arguments#solution-make-the-class-immutable">immutable state</a>, but it's state nonetheless).
+Also, you're limited to exactly one implementation per module,
+which is ususally too much like Java for my tastes.</p>
+<h2 id="try-it-out">Try it out<span class="headerlink"> <a href="#try-it-out" title="permalink">#</a></span></h2>
+<p>If you're doing something and you think you need a class,
+do it and see how it looks.
+If you think it's better, keep it,
+otherwise, revert the change.
+You can always switch in either direction later.</p>
+<p>If you got it right the first time, great!
+If not, <strong>by having to fix it you'll learn something</strong>,
+and next time you'll know better.</p>
+<p>Also, don't beat yourself up.</p>
+<p>Sure, there are nice libraries out there
+that use classes in <em>just the right way</em>,
+after spending lots of time to find the right abstraction.
+But <strong>abstraction is difficult and time consuming</strong>,
+and in everyday code good enough is just that – good enough –
+you don't need to go to the extreme.</p>
+<p><strong>Learned something new today?</strong> Share this with others, it really helps! <span class="text-large">
+<span class="share-icons">
+<a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=When%20to%20use%20classes%20in%20Python%3F%20When%20you%20repeat%20similar%20sets%20of%20functions&url=https%3A//death.andgravity.com/same-functions&via=_andgravity"
+>Twitter</a>
+<a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/same-functions&t=When%20to%20use%20classes%20in%20Python%3F%20When%20you%20repeat%20similar%20sets%20of%20functions"
+>HN</a>
+<a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/same-functions&title=When%20to%20use%20classes%20in%20Python%3F%20When%20you%20repeat%20similar%20sets%20of%20functions"
+>Reddit</a>
+</span>
+</span></p>
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=same-functions"
+    method="post"
+    id="embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
+
+
+
+<div class="panel inline-panel" >
+    <div class="panel-header text-large">
+        If you&#39;ve made it this far, you might like:
+    </div>
+    <div class="panel-body">
+        <p><a href="/query-builder-how">
+            Write an SQL query builder in 150 lines of Python!
+        </a>
+    </div>
+</div>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>This code has a potential bug:
@@ -602,17 +752,13 @@ In the actual code, we're doing both,
 but the only way do so reliably is to <a class="external" href="https://github.com/lemon24/reader/blob/3.9/src/reader/_parser/http.py#L39-L103">return a context manager</a>;
 I omitted this because it doesn't add anything
 to our discussion about classes. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>We're handling unknown URI schemes here 
+<li id="fn-2"><p>We're handling unknown URI schemes here
 because bare paths don't have a scheme,
 so anything that didn't match a known scheme must be a bare path.
 Also, on Windows (not supported yet),
-the drive letter in a path like <em>c:\feed.xml</em> 
+the drive letter in a path like <em>c:\feed.xml</em>
 is indistinguishable from a scheme. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-3"><p>we could've avoided this last change
-by making the retriever instances <a class="external" href="https://docs.python.org/3/glossary.html#term-callable">callable</a>.
-<!-- TODO: talk about symmetry, and meta-retriever --> <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-4"><p>I tried to keep the example above stateless,
-but the real world isn't so clear cut most of the time. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>Unless the response is small enough to fit in the TCP receive buffer. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
@@ -638,6 +784,11 @@ but the real world isn't so clear cut most of the time. <a href="#fnref-4" class
 
 <li>
     <a href="/more-arguments">When your functions take the same arguments, consider using a class: counter-examples</a>
+
+
+
+<li>
+    <a href="/same-functions">When to use classes in Python? When you repeat similar sets of functions</a> <small class="text-gray">(this article)</small>
 
 
 </ul>
