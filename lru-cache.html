@@ -76,6 +76,27 @@ window.addEventListener('resize', set_vh);
 <p class="text-gray text-nowrap">
 
 
+
+<small>
+<span class="tooltip" data-tooltip="published on 2023-10-10">October 2023</span>
+∙ nine minute read
+∙
+</small><span class="share-icons">
+<a
+    class="share-icon twitter"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Python%20stdlib%20only%20priority-expiry%20LRU%20cache&url=https%3A//death.andgravity.com/lru-cache&via=_andgravity"
+>Twitter</a>
+<a
+    class="share-icon hacker-news"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/lru-cache&t=Python%20stdlib%20only%20priority-expiry%20LRU%20cache"
+>HN</a>
+<a
+    class="share-icon reddit"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/lru-cache&title=Python%20stdlib%20only%20priority-expiry%20LRU%20cache"
+>Reddit</a>
+</span>
+
+
 </p>
 
 
@@ -90,15 +111,515 @@ window.addEventListener('resize', set_vh);
 <div class="column col-sm-12 col-md-10 col-8">
 
 <p>It's not your fault I got nerdsniped,
-but today we're doing a
+but that doesn't matter.</p>
+<p>Hi, I'm Adrian, and today we're implementing a
 least recently used cache with priorities and expiry,
 using <strong>only the Python standard library</strong>.</p>
-<p>Because this is a common problem in bIG TEch CoDINg InTerVIEWS,
-we'll keep far away from the correct™ data structures;
-I repeat:
-we're <strong>not using heaps</strong>,
-and we're <strong>not using binary search trees</strong>.
+<p>This is a common problem in bIG TEch CoDINg InTerVIEWS,
+so we'll keep away from the correct™ data structures –
+this means <strong>no heaps</strong>, <strong>no binary search trees</strong>.
 But we'll end up with a decent solution anyway.</p>
+<section class="toc">
+<ul>
+<li><a href="#intro-requirements-api-etc">intro, requirements, api etc.</a></li>
+<li><a href="#basic">basic</a>
+<ul>
+<li><a href="#setup">setup</a></li>
+<li><a href="#set">set</a></li>
+<li><a href="#evict">evict</a></li>
+<li><a href="#get">get</a></li>
+<li><a href="#test">test</a></li>
+</ul>
+</li>
+<li><a href="#expires">expires</a>
+<ul>
+<li><a href="#set-1">set</a></li>
+<li><a href="#evict-1">evict</a></li>
+<li><a href="#priority-queue">priority queue</a></li>
+<li><a href="#more-tests">more tests</a></li>
+</ul>
+</li>
+<li><a href="#priorities">priorities</a>
+<ul>
+<li><a href="#tests">tests</a></li>
+<li><a href="#quality-of-life-refactoring">quality of life refactoring</a></li>
+</ul>
+</li>
+<li><a href="#least-recently-used">least recently used</a>
+<ul>
+<li><a href="#functools-lru-cache">functools.lru_cache</a></li>
+</ul>
+</li>
+</ul>
+</section>
+<h2 id="intro-requirements-api-etc">intro, requirements, api etc.<span class="headerlink"> <a href="#intro-requirements-api-etc" title="permalink">#</a></span></h2>
+<p>todo, see notes</p>
+<h2 id="basic">basic<span class="headerlink"> <a href="#basic" title="permalink">#</a></span></h2>
+<ul>
+<li>basic cache, no eviction, no priorities; cache holds objects directly; add test</li>
+</ul>
+<h3 id="setup">setup<span class="headerlink"> <a href="#setup" title="permalink">#</a></span></h3>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Cache</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">maxsize</span><span class="p">,</span> <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxsize</span> <span class="o">=</span> <span class="n">maxsize</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="n">time</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
+</code></pre></div>
+
+<ul>
+<li>we inject the time, so we can change it during tests</li>
+<li>we use monotonic time! time.time() returns wall clock, which can jump back and forth</li>
+<li>first algorithmic choice: we use a <a class="external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a> / <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table</a>, which gives O(1) search/insert/delete<ul>
+<li>note on theta</li>
+<li>link to nedbat big o notation talk</li>
+</ul>
+</li>
+</ul>
+<h3 id="set">set<span class="headerlink"> <a href="#set" title="permalink">#</a></span></h3>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">maxage</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">priority</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="n">now</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">maxsize</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">evict</span><span class="p">(</span><span class="n">now</span><span class="p">)</span>
+
+        <span class="n">expires</span> <span class="o">=</span> <span class="n">now</span> <span class="o">+</span> <span class="n">maxage</span>
+        <span class="n">item</span> <span class="o">=</span> <span class="n">Item</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">expires</span><span class="p">,</span> <span class="n">priority</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">item</span>
+</code></pre></div>
+
+<p>more choices</p>
+<ul>
+<li>we evict items when there's no more room to add stuff, and no earlier<ul>
+<li>specificaly, not in get() – we want it to be as fast as possible (optimize for cache hits)</li>
+<li>other, more complicated strategies are possible (e.g. periodic eviction would minimize memory usage)</li>
+</ul>
+</li>
+<li>if the key already is in the cache, we remove it and insert it again, instead of modifying things in-place<ul>
+<li>this way, theres exactly one code path for adding elements (less code =&gt; fewer bugs)</li>
+<li>will make thing a lot simpler later on when we have more than one data structure to keep track of</li>
+</ul>
+</li>
+</ul>
+<p>we store all the parameters associated with a key as a named tuple,
+since we'll most likely need them later on</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Item</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="n">key</span><span class="p">:</span> <span class="nb">object</span>
+    <span class="n">value</span><span class="p">:</span> <span class="nb">object</span>
+    <span class="n">expires</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">priority</span><span class="p">:</span> <span class="nb">int</span>
+</code></pre></div>
+
+<h3 id="evict">evict<span class="headerlink"> <a href="#evict" title="permalink">#</a></span></h3>
+<p>we'll implement a dummy evict(), so we have something to write tests against</p>
+<p>in a happy little coincidence,
+<a class="external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>s preserve insertion order,
+so when iterating over the cache,
+the oldest key will be first</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">evict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">now</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">key</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">))</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+</code></pre></div>
+
+<h3 id="get">get<span class="headerlink"> <a href="#get" title="permalink">#</a></span></h3>
+<p>finally, get() is trivial</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">item</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="n">item</span><span class="o">.</span><span class="n">expires</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">return</span> <span class="n">item</span><span class="o">.</span><span class="n">value</span>
+</code></pre></div>
+
+<h3 id="test">test<span class="headerlink"> <a href="#test" title="permalink">#</a></span></h3>
+<p>with everything in place, we can write a first test</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_basic</span><span class="p">():</span>
+    <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">FakeTime</span><span class="p">())</span>
+
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="kc">None</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;A&#39;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;A&#39;</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;B&#39;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;A&#39;</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;B&#39;</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;C&#39;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="kc">None</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;B&#39;</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;C&#39;</span>
+</code></pre></div>
+
+<p>even though there's no time-related logic yet,
+we use a fake time callable, to keep things nice and predictable</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">FakeTime</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">now</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">now</span> <span class="o">=</span> <span class="n">now</span>
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">now</span>
+</code></pre></div>
+
+<h2 id="expires">expires<span class="headerlink"> <a href="#expires" title="permalink">#</a></span></h2>
+<p>ok, most of the properties of our cache come from how and when stuff is evicted,
+so let's start with that.
+i'm sure there are smart people out there that can Think Really Hard™
+for a bit and then just come up with a complete solution,
+but I'm not one of them, so we'll do things one at a time.</p>
+<p>an important observation is that before we even get to the least recently used part,
+we have to kick out expired items (with the lowest expiry time),
+and then those with the lowest priority.
+so, we need a data structure that,
+given a collection of elements,
+can efficiently remove the smallest element.</p>
+<p>turns out, there is an <a class="external" href="https://en.wikipedia.org/wiki/Abstract_data_type">abstract data type</a> that does this,
+called a <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue">priority queue</a>.
+for now,
+let's honor its abstract nature,
+and not bother with an implementation
+– we'll just plug a yet to be defined priority queue class in,
+and define it after we have a full inventory of the methods we need.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">expires</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
+</code></pre></div>
+
+<h3 id="set-1">set<span class="headerlink"> <a href="#set-1" title="permalink">#</a></span></h3>
+<p>First, adding things.
+Since we need to get the <em>item</em> with the lowest expiry time,
+we cannot store just the time itself,
+we need a way to get back to the item.
+An <code>(expires, key)</code> tuple will do just fine
+– since tuples compare lexicographically,
+it'll be just like comparing by <code>expires</code> alone,
+but with <code>key</code> along for the ride.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">item</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">push</span><span class="p">((</span><span class="n">expires</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
+</code></pre></div>
+
+<p>Now, you may be tempted, as I was, to say
+&quot;hey, <code>Item</code> already is a tuple,
+if we make <code>expires</code> the first field,
+we can just use that.
+But let's be strong
+and hold off on optimizations until we have and <em>understand</em> a complete solution
+– <a class="external" href="https://wiki.c2.com/?MakeItWorkMakeItRightMakeItFast">make it work, make it right, make it fast</a>.</p>
+<h3 id="evict-1">evict<span class="headerlink"> <a href="#evict-1" title="permalink">#</a></span></h3>
+<p>Moving on to removing things.
+If the item is already cached,
+we also need to remove it from the expires queue,
+so it can be added back with the new expiry time.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+            <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">remove</span><span class="p">((</span><span class="n">item</span><span class="o">.</span><span class="n">expires</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
+            <span class="k">del</span> <span class="n">item</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">maxsize</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">evict</span><span class="p">(</span><span class="n">now</span><span class="p">)</span>
+</code></pre></div>
+
+<p>And now, we can use the expiry time to actually evict things.
+For this, we need two operations from our queue:
+to peek at the item that will expire next,
+so we can check if it's actually expired,
+and if yes, to pop it from the queue.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">evict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">now</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">initial_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span>
+
+        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+            <span class="n">expires</span><span class="p">,</span> <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">expires</span> <span class="o">&gt;</span> <span class="n">now</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span> <span class="o">==</span> <span class="n">initial_size</span><span class="p">:</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+</code></pre></div>
+
+<p>If there are no expired items,
+we still need to make room for at least one item;
+this should be one with the lowest priority,
+but we don't have that yet,
+so until then
+we just evict the item that will expire next a little early.</p>
+<h3 id="priority-queue">priority queue<span class="headerlink"> <a href="#priority-queue" title="permalink">#</a></span></h3>
+<p>ok, we need an implementation for the priority queue.
+it doesn't need to be fast,
+we'll think about that after we finish everything else;
+for now, we'll just keep our elements in a plain list.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">PriorityQueue</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="p">[]</span>
+</code></pre></div>
+
+<p>The easiest way to continually
+get the smallest value from a list
+is to keep the list sorted;
+the downside is that push is now O(n log n) at best
+(not sure we can say it's O(n) because the list is always sorted,
+it kinda depends on the implementation, and doesn't really matter).</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">push</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+</code></pre></div>
+
+<p>This makes <code>peek()</code> and <code>pop()</code> trivial to write;
+still, <code>pop()</code> is O(n),
+because shifting all items left by one position is.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">peek</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">pop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">rv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[:</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">return</span> <span class="n">rv</span>
+</code></pre></div>
+
+<p><code>remove()</code> is just as simple, and just as O(N),
+because we need to find the item,
+and then to shift the ones after it to cover the gap.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">remove</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+</code></pre></div>
+
+<p>We didn't need <em>is_empty</em>,
+but it's likely free in all implementations,
+so let's throw it in there;
+since it's a quasy-container,
+we'll use <a class="external" href="https://docs.python.org/3/reference/datamodel.html#object.__bool__">__bool__()</a> for it,
+so we can write stuff like <code>if pq: ...</code>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="fm">__bool__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+</code></pre></div>
+
+<p>OK, let's wrap this up with a quick test:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_priority_queue</span><span class="p">():</span>
+    <span class="n">pq</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
+    <span class="n">pq</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">pq</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+    <span class="n">pq</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">pq</span>
+    <span class="k">assert</span> <span class="n">pq</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="k">assert</span> <span class="n">pq</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="k">assert</span> <span class="n">pq</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span> <span class="o">==</span> <span class="mi">2</span>
+
+    <span class="k">assert</span> <span class="n">pq</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span>
+
+    <span class="k">assert</span> <span class="n">pq</span>
+    <span class="k">assert</span> <span class="n">pq</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span> <span class="o">==</span> <span class="mi">2</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+        <span class="n">pq</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">pq</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span> <span class="o">==</span> <span class="mi">2</span>
+
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">pq</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">IndexError</span><span class="p">):</span>
+        <span class="n">pq</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">IndexError</span><span class="p">):</span>
+        <span class="n">pq</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+</code></pre></div>
+
+<h3 id="more-tests">more tests<span class="headerlink"> <a href="#more-tests" title="permalink">#</a></span></h3>
+<p>At this point, the original Cache test should pass again.
+Let's add a few more to test expiry;
+first, that expired items are evicted
+(note how we're moving the time forward):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_expires</span><span class="p">():</span>
+    <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">FakeTime</span><span class="p">())</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="n">maxage</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="n">maxage</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;A&#39;</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;B&#39;</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">now</span> <span class="o">=</span> <span class="mi">15</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="kc">None</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;B&#39;</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;C&#39;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="kc">None</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;B&#39;</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;C&#39;</span>
+</code></pre></div>
+
+<p>Second, that adding an exiting item changes its expire time:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_update_expires</span><span class="p">():</span>
+    <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">FakeTime</span><span class="p">())</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="n">maxage</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="n">maxage</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">now</span> <span class="o">=</span> <span class="mi">5</span>
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="n">maxage</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">,</span> <span class="n">maxage</span><span class="o">=</span><span class="mi">6</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;X&#39;</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;Y&#39;</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">now</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="kc">None</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;Y&#39;</span>
+</code></pre></div>
+
+<h2 id="priorities">priorities<span class="headerlink"> <a href="#priorities" title="permalink">#</a></span></h2>
+<p>ok, let's do priorities next.
+once again, we need to kick out elements with the <em>lowest</em> priority;
+we already know how to do that, right?</p>
+<p>in <code>__init__()</code>, we also keep a priority queue of priorities:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">expires</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">priorities</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
+</code></pre></div>
+
+<p>in <code>set()</code>, we also add new items to the priority priority queue:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">item</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">push</span><span class="p">((</span><span class="n">expires</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">priorities</span><span class="o">.</span><span class="n">push</span><span class="p">((</span><span class="n">priority</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
+</code></pre></div>
+
+<p>and also remove already cached items:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+            <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">remove</span><span class="p">((</span><span class="n">item</span><span class="o">.</span><span class="n">expires</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">priorities</span><span class="o">.</span><span class="n">remove</span><span class="p">((</span><span class="n">item</span><span class="o">.</span><span class="n">priority</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
+            <span class="k">del</span> <span class="n">item</span>
+</code></pre></div>
+
+<p>in <code>evict()</code>, we also remove expired items from the priorities queue:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+            <span class="n">expires</span><span class="p">,</span> <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">expires</span> <span class="o">&gt;</span> <span class="n">now</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+            <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">priorities</span><span class="o">.</span><span class="n">remove</span><span class="p">((</span><span class="n">item</span><span class="o">.</span><span class="n">priority</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
+</code></pre></div>
+
+<p>and finally, if there are no expired items, 
+we remove one with the lowest priority:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span> <span class="o">==</span> <span class="n">initial_size</span><span class="p">:</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priorities</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+            <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">remove</span><span class="p">((</span><span class="n">item</span><span class="o">.</span><span class="n">expires</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
+</code></pre></div>
+
+<h3 id="tests">tests<span class="headerlink"> <a href="#tests" title="permalink">#</a></span></h3>
+<p>At this point, the existing tests pass;
+let's add a few more; one for eviction:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_priorities</span><span class="p">():</span>
+    <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">FakeTime</span><span class="p">())</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="n">priority</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="n">priority</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;A&#39;</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;B&#39;</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;C&#39;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;A&#39;</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="kc">None</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;C&#39;</span>
+</code></pre></div>
+
+<p>And one for updating the priority of existing items:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_update_priorities</span><span class="p">():</span>
+    <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">FakeTime</span><span class="p">())</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="n">priority</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="n">priority</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">,</span> <span class="n">priority</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;C&#39;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="kc">None</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;Y&#39;</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;C&#39;</span>
+</code></pre></div>
+
+<h3 id="quality-of-life-refactoring">quality of life refactoring<span class="headerlink"> <a href="#quality-of-life-refactoring" title="permalink">#</a></span></h3>
+<p>I know I said we'll postpone performance work 
+to after we have a full implementation.</p>
+<p>I have a different kind of optimization in mind – for readability.</p>
+<p>We're now deleting things in three different places,
+in slightly different ways,
+being careful to keep the three data structures in sync.
+Wouldn't it be nice to have all that logic in a single place?
+This may seem a bit premature,
+but through the magic of having written the entire code already,
+I know this bit is going to change quite a lot.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">_delete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="o">*</span><span class="n">_</span><span class="p">,</span> <span class="n">expires</span><span class="p">,</span> <span class="n">priority</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">remove</span><span class="p">((</span><span class="n">expires</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">priorities</span><span class="o">.</span><span class="n">remove</span><span class="p">((</span><span class="n">priority</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
+</code></pre></div>
+
+<p>Sure, it will be twice as slow during eviction,
+but the complexity will stay the same –
+the constant factor 2 in O(2n) gets removed, leaving us with O(n).
+Once we settle on a reasonably efficient implementation,
+we can go back to the unpacked version if needed (aren't tests nice?).</p>
+<p>The logic for handling already-cached item gets reduced to:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+</code></pre></div>
+
+<p>Likewise, the core of the eviction logic boils down to:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+            <span class="n">expires</span><span class="p">,</span> <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">expires</span> <span class="o">&gt;</span> <span class="n">now</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span> <span class="o">==</span> <span class="n">initial_size</span><span class="p">:</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priorities</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+</code></pre></div>
+
+<p>Neat!</p>
+<h2 id="least-recently-used">least recently used<span class="headerlink"> <a href="#least-recently-used" title="permalink">#</a></span></h2>
+<p>Say we don't know how to implement a LRU cache.</p>
+<p>We could google it.</p>
+<p>Or, we could look at an existing implementation.</p>
+<h3 id="functools-lru-cache">functools.lru_cache<span class="headerlink"> <a href="#functools-lru-cache" title="permalink">#</a></span></h3>
+<p>The closest thing in the standard library I can think of is <a class="external" href="https://docs.python.org/3/library/functools.html#functools.lru_cache">functools.lru_cache</a>.</p>
+<p>So, let's have a look.</p>
+<section class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>You can read the code of most Python stdlib modules
+ by following the <strong>Source code:</strong> link
+ at the top of the documentation page.</p>
+</section>
+<p>We see that:</p>
+<ul>
+<li><p><a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L479-L523">lru_cache()</a> passes most of the work to <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L525-L639">_lru_cache_wrapper()</a>.</p>
+</li>
+<li><p><a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L525-L639">_lru_cache_wrapper()</a> is ... weird. It sets up a bunch of variables,
+which are then used (and updated) by nested functions;
+what you're seeing here is an object in disguise,
+because <a class="external" href="https://web.archive.org/web/20170512101417/http://wiki.c2.com/?ClosuresAndObjectsAreEquivalent">closures and objects are equivalent</a>.
+But, let's not get distracted.</p>
+</li>
+<li><p><a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L525-L639">_lru_cache_wrapper()</a> sets up a <code>cache</code> dict,
+and a doubly linked list, 
+where each node is a <code>[prev, next, key, value]</code> list
+(another cheap way of defining an &quot;object&quot;).</p>
+</li>
+<li><p>TODO: move to end etc.,</p>
+</li>
+</ul>
+<!--  Look at functools lrucache, note linked list; note weird style, might be for performance, link to qntm.tweet about closures and objects; explain o1 good -->
 
 
 
