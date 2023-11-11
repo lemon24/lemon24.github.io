@@ -79,13 +79,14 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-10-10">October 2023</span>
-∙ nine minute read
+∙ 11 minute read
 ∙
 </small><span class="share-icons">
 <a
-    class="share-icon twitter"
-    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Python%20stdlib%20only%20priority-expiry%20LRU%20cache&url=https%3A//death.andgravity.com/lru-cache&via=_andgravity"
->Twitter</a>
+    class="share-icon pycoders"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+>PyCoder's Weekly</a>
 <a
     class="share-icon hacker-news"
     href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/lru-cache&t=Python%20stdlib%20only%20priority-expiry%20LRU%20cache"
@@ -94,6 +95,14 @@ window.addEventListener('resize', set_vh);
     class="share-icon reddit"
     href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/lru-cache&title=Python%20stdlib%20only%20priority-expiry%20LRU%20cache"
 >Reddit</a>
+<a
+    class="share-icon linkedin"
+    href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A//death.andgravity.com/lru-cache"
+>linkedin</a>
+<a
+    class="share-icon twitter"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Python%20stdlib%20only%20priority-expiry%20LRU%20cache&url=https%3A//death.andgravity.com/lru-cache&via=_andgravity"
+>Twitter</a>
 </span>
 
 
@@ -148,8 +157,16 @@ But we'll end up with a decent solution anyway.</p>
 <li><a href="#least-recently-used">least recently used</a>
 <ul>
 <li><a href="#functools-lru-cache">functools.lru_cache</a></li>
+<li><a href="#collections-ordereddict">collections.OrderedDict</a></li>
+<li><a href="#init">init</a></li>
+<li><a href="#set-2">set</a></li>
+<li><a href="#evict-2">evict</a></li>
+<li><a href="#delete">delete</a></li>
+<li><a href="#tests-1">tests</a></li>
+<li><a href="#get-1">get</a></li>
 </ul>
 </li>
+<li><a href="#make-it-fast">make it fast</a></li>
 </ul>
 </section>
 <h2 id="intro-requirements-api-etc">intro, requirements, api etc.<span class="headerlink"> <a href="#intro-requirements-api-etc" title="permalink">#</a></span></h2>
@@ -509,7 +526,7 @@ we already know how to do that, right?</p>
             <span class="bp">self</span><span class="o">.</span><span class="n">priorities</span><span class="o">.</span><span class="n">remove</span><span class="p">((</span><span class="n">item</span><span class="o">.</span><span class="n">priority</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
 </code></pre></div>
 
-<p>and finally, if there are no expired items, 
+<p>and finally, if there are no expired items,
 we remove one with the lowest priority:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span> <span class="o">==</span> <span class="n">initial_size</span><span class="p">:</span>
             <span class="n">_</span><span class="p">,</span> <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priorities</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
@@ -549,7 +566,7 @@ let's add a few more; one for eviction:</p>
 </code></pre></div>
 
 <h3 id="quality-of-life-refactoring">quality of life refactoring<span class="headerlink"> <a href="#quality-of-life-refactoring" title="permalink">#</a></span></h3>
-<p>I know I said we'll postpone performance work 
+<p>I know I said we'll postpone performance work
 to after we have a full implementation.</p>
 <p>I have a different kind of optimization in mind – for readability.</p>
 <p>We're now deleting things in three different places,
@@ -603,23 +620,141 @@ we can go back to the unpacked version if needed (aren't tests nice?).</p>
 </section>
 <p>We see that:</p>
 <ul>
-<li><p><a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L479-L523">lru_cache()</a> passes most of the work to <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L525-L639">_lru_cache_wrapper()</a>.</p>
-</li>
-<li><p><a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L525-L639">_lru_cache_wrapper()</a> is ... weird. It sets up a bunch of variables,
+<li><a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L479-L523">lru_cache()</a> passes most of the work to <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L525-L639">_lru_cache_wrapper()</a>.</li>
+<li><a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L525-L639">_lru_cache_wrapper()</a> is ... weird. It sets up a bunch of variables,
 which are then used (and updated) by nested functions;
 what you're seeing here is an object in disguise,
 because <a class="external" href="https://web.archive.org/web/20170512101417/http://wiki.c2.com/?ClosuresAndObjectsAreEquivalent">closures and objects are equivalent</a>.
-But, let's not get distracted.</p>
-</li>
-<li><p><a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L525-L639">_lru_cache_wrapper()</a> sets up a <code>cache</code> dict,
-and a doubly linked list, 
+But, let's not get distracted.</li>
+<li><a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L525-L639">_lru_cache_wrapper()</a> sets up a <code>cache</code> dict,
+and a doubly linked list,
 where each node is a <code>[prev, next, key, value]</code> list
-(another cheap way of defining an &quot;object&quot;).</p>
-</li>
-<li><p>TODO: move to end etc.,</p>
-</li>
+(another cheap way of defining an &quot;object&quot;).</li>
 </ul>
-<!--  Look at functools lrucache, note linked list; note weird style, might be for performance, link to qntm.tweet about closures and objects; explain o1 good -->
+<p>Indeed, the solution is a doubly linked list,
+because it allows us to move recently used items to one end in O(1):
+first, remove the node from its current position
+and splice its neighbors together,
+second, wedge it after the last element at the &quot;recently used&quot; end.</p>
+<p>Of note is that unlike <a class="external" href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache</a>,
+we need not one linked list,
+but one for each priority
+(and we need to keep track of their ends).</p>
+<p>But, before we turn our <code>Item</code> in a linked list node
+by making it mutable and adding prev/next links,
+let's look at another candidate.</p>
+<h3 id="collections-ordereddict">collections.OrderedDict<span class="headerlink"> <a href="#collections-ordereddict" title="permalink">#</a></span></h3>
+<p>If you search <a class="external" href="https://docs.python.org/3.12/search.html?q=LRU">for &quot;LRU&quot;</a> in the Python docs,
+the second result points to <a class="external" href="https://docs.python.org/3/library/collections.html#ordereddict-objects">OrderedDict objects</a>.</p>
+<blockquote>
+<p>Some differences from <a class="external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a> still remain:
+[...]
+The <a class="external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict">OrderedDict</a> algorithm can handle frequent reordering operations better than dict.
+[...] <strong>this makes it suitable for implementing various kinds of LRU caches</strong>.</p>
+</blockquote>
+<p>Specifically:</p>
+<blockquote>
+<p><a class="external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict">OrderedDict</a> has a <code>move_to_end()</code> method to efficiently reposition an element to an endpoint.</p>
+</blockquote>
+<p>Since regular <a class="external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>s preserve insertion order,
+one can emulate that with <code>d[k] = d.pop(k)</code>,
+and the docs say as much.
+I wonder what makes <code>move_to_end()</code> efficient;
+<a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/collections/__init__.py#L90">this comment</a> may shed some light:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">90</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="c1"># The internal self.__map dict maps keys to links in a doubly linked list.</span>
+</code></pre></div></td></tr></table></div>
+<p>Ha! Indeed, <code>move_to_end()</code> <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/collections/__init__.py#L188-L211">does exactly what we described above</a>.
+This is good news – it means we don't have to do it ourselves.</p>
+<h3 id="init">init<span class="headerlink"> <a href="#init" title="permalink">#</a></span></h3>
+<p>So, we need one OrderedDict (read: doubly linked list) for each priority,
+but we still need to keep track of which priority is lowest:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">expires</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
+</code></pre></div>
+
+<h3 id="set-2">set<span class="headerlink"> <a href="#set-2" title="permalink">#</a></span></h3>
+<p>The part of <code>set()</code> having to do with priorities becomes a bit more complicated:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">priority_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">priority_bucket</span><span class="p">:</span>
+            <span class="n">priority_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="p">[</span><span class="n">priority</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span>
+        <span class="n">priority_bucket</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+</code></pre></div>
+
+<h3 id="evict-2">evict<span class="headerlink"> <a href="#evict-2" title="permalink">#</a></span></h3>
+<p>The part of <code>evict()</code> that handles priorities needs to be updated as well,
+to remove the element at the beginning of bucket with the lowest priority.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span> <span class="o">==</span> <span class="n">initial_size</span><span class="p">:</span>
+            <span class="n">priority</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
+            <span class="n">priority_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">priority_bucket</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+</code></pre></div>
+
+<h3 id="delete">delete<span class="headerlink"> <a href="#delete" title="permalink">#</a></span></h3>
+<p>Deleting gets extra stuff too –
+after we delete the key from the bucket,
+we also clean up the bucket if it's empty.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">priority_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="p">[</span><span class="n">priority</span><span class="p">]</span>
+        <span class="k">del</span> <span class="n">priority_bucket</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">priority_bucket</span><span class="p">:</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="p">[</span><span class="n">priority</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span>
+</code></pre></div>
+
+<p>This isn't strictly needed,
+I'm doing it to release the memory held by the dict,
+since it seems <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Objects/dictnotes.txt#L93-L100">dicts are resized only when items are added, not removed</a>;
+but, if it's likely a priority would be reused soon,
+we could get away with doing nothing.</p>
+<h3 id="tests-1">tests<span class="headerlink"> <a href="#tests-1" title="permalink">#</a></span></h3>
+<p>At this point, existing tests should pass again,
+and we can add a new (failing) one for the LRU part:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_lru</span><span class="p">():</span>
+    <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">FakeTime</span><span class="p">())</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;A&#39;</span><span class="p">)</span>
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;B&#39;</span><span class="p">)</span>
+    <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;A&#39;</span>
+
+    <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;C&#39;</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;A&#39;</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="kc">None</span>
+    <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;C&#39;</span>
+</code></pre></div>
+
+<h3 id="get-1">get<span class="headerlink"> <a href="#get-1" title="permalink">#</a></span></h3>
+<p>... and with just one line at the end of <code>get()</code>,
+we can get it to pass:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="p">[</span><span class="n">item</span><span class="o">.</span><span class="n">priority</span><span class="p">]</span><span class="o">.</span><span class="n">move_to_end</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">item</span><span class="o">.</span><span class="n">value</span>
+</code></pre></div>
+
+<h2 id="make-it-fast">make it fast<span class="headerlink"> <a href="#make-it-fast" title="permalink">#</a></span></h2>
+<p>Let's make a quick recap of the priority queue methods we need so far and why:</p>
+<ul>
+<li><code>push()</code> – to add items</li>
+<li><code>peek()</code> – to see what expiry time or priority is lowest</li>
+<li><code>remove()</code> – to delete items</li>
+<li><code>pop()</code> – not used, but would be without <a class="anchor" href="#quality-of-life-refactoring">the <code>_delete()</code> refactoring</a></li>
+</ul>
+<p>There are two obeservations we can make on top of this.</p>
+<p>First, the <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue">priority queue</a> Wikipedia page does not mention any <code>remove()</code> operation.</p>
+<p>Second, even without <code>_delete()</code>,
+we'd only be able to <code>pop()</code> from either the expiry or the priorities queue,
+and we'd still be forced to <code>remove()</code> the item from the other.</p>
+<p>Indeed, <strong>this is what makes the problem difficult</strong> –
+we need to maintain not one, but <em>two</em> independent priority queues,
+preventing us from using data structures commonly used to implement them.</p>
+<hr />
+<p>if you search <a class="external" href="https://docs.python.org/3.12/search.html?q=priority+queue">for &quot;priority queue&quot;</a>,
+you'll find <a class="external" href="https://docs.python.org/3/library/heapq.html">heapq</a></p>
+<!-- TODO: link to output, somehow -->
+<p>talk about how docs mention tuples,
+and mention removal, and how we could do that</p>
 
 
 
