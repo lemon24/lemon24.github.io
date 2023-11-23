@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-10-10">October 2023</span>
-∙ 12 minute read
+∙ 16 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -119,8 +119,8 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>It's not your fault I got nerdsniped,
-but that doesn't matter.</p>
+<p><em>It's not your fault I got nerdsniped,
+but that doesn't matter.</em></p>
 <p>Hi, I'm Adrian, and today we're implementing a
 least recently used cache with priorities and expiry,
 using <strong>only the Python standard library</strong>.</p>
@@ -169,8 +169,12 @@ But we'll end up with a decent solution anyway.</p>
 <li><a href="#make-it-fast">make it fast</a>
 <ul>
 <li><a href="#heapq">heapq</a></li>
+<li><a href="#bisect">bisect</a></li>
+<li><a href="#self-balancing-binary-trees">self-balancing binary trees</a></li>
+<li><a href="#sorted-containers">Sorted Containers</a></li>
 </ul>
 </li>
+<li><a href="#making-it-stdlib-only">making it stdlib only</a></li>
 </ul>
 </section>
 <h2 id="intro-requirements-api-etc">intro, requirements, api etc.<span class="headerlink"> <a href="#intro-requirements-api-etc" title="permalink">#</a></span></h2>
@@ -762,17 +766,309 @@ you'll find <a class="external" href="https://docs.python.org/3/library/heapq.ht
 </blockquote>
 <!--
 
-[Wikipedia][priority queue] clarifies:
+[Wikipedia][priority queue] mostly agrees:
 
-> While priority queues are often implemented using heaps, 
+> While priority queues are often implemented using [heaps][heap],
 > they are conceptually distinct from heaps. [...]
 
 -->
+<p>ok, reading through the heapq documentation,
+we find <em>extensive</em> <a class="external" href="https://docs.python.org/3/library/heapq.html#priority-queue-implementation-notes">notes on priority queues</a>
+(<a class="internal" href="/output">good docs are nice like that</a>).
+particularly interesting are
+using <em>(priority, item)</em> tuples (we're already doing this!)
+and <em>removing entries</em>:</p>
+<blockquote>
+<p>Removing the entry or changing its priority is more difficult
+because it would break the heap structure invariants.
+So, a possible solution is to mark the entry as removed
+and add a new entry with the revised priority.</p>
+</blockquote>
+<p>This workaround is needed because while
+<a class="external" href="https://stackoverflow.com/questions/10162679/python-delete-element-from-heap/10163422#10163422">removing the i-th element can be done in O(log n)</a>,
+finding the index of the element is O(n).
+To summarize, we have:</p>
+<table class="table">
+<thead>
+<tr>
+  <th></th>
+  <th>naive (sort)</th>
+  <th>heapq</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>push()</td>
+  <td>O(n log n)</td>
+  <td>O(log n)</td>
+</tr>
+<tr>
+  <td>peek()</td>
+  <td>O(1)</td>
+  <td>O(1)</td>
+</tr>
+<tr>
+  <td>pop()</td>
+  <td>O(n)</td>
+  <td>O(log n)</td>
+</tr>
+<tr>
+  <td>remove()</td>
+  <td>O(n)</td>
+  <td>O(n)</td>
+</tr>
+</tbody>
+</table>
+<p>Nevertheless, with a few assumptions, the workaround could work:</p>
+<ul>
+<li>we can assume priorities are static,
+so we never need to remove a bucket</li>
+<li>marked-to-be-removed expiry times will eventually be
+pop()-ed anyway when they expire;
+we can assume expiry time doesn't change for a lot of items;
+we can also assume most evictions are of expired items,
+and not because of priority
+(which causes removed entries to accumulate in the expiry queue)</li>
+</ul>
+<p>...but, that's maybe too many assumptions for my liking.</p>
+<h3 id="bisect">bisect<span class="headerlink"> <a href="#bisect" title="permalink">#</a></span></h3>
+<p>One way of finding an element in better than O(n) is <a class="external" href="https://docs.python.org/3/library/bisect.html">bisect</a>, which:</p>
+<blockquote>
+<p>[...] provides support for maintaining a list in sorted order
+without having to sort the list after each insertion.</p>
+</blockquote>
+<p>This looks like it could provide an improvement
+to our <a class="anchor" href="#priority-queue">naive implementation</a>;
+however, reading further to <a class="external" href="https://docs.python.org/3/library/bisect.html#performance-notes">Performance Notes</a>,
+we find that:</p>
+<blockquote>
+<p>The insort() functions are O(n) because the logarithmic search step
+is dominated by the linear time insertion step.</p>
+</blockquote>
+<p>Now, that's still better than the naive solution.</p>
+<p>While we're here, there's an unrelated improvement that applies to both.
+With a sorted list, pop() is O(n) only because
+we need to shift all elements after index 0 to cover the gap;
+if the list was in <em>reverse</em> order,
+we'd pop() <em>from the end</em>,
+<a class="external" href="https://wiki.python.org/moin/TimeComplexity">which is O(1)</a>,
+because there's no gap to cover. So:</p>
+<table class="table">
+<thead>
+<tr>
+  <th></th>
+  <th>naive (sort)</th>
+  <th>heapq</th>
+  <th>bisect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>push()</td>
+  <td>O(n log n)</td>
+  <td>O(log n)</td>
+  <td>O(log n) + <strong>O(n)</strong></td>
+</tr>
+<tr>
+  <td>peek()</td>
+  <td>O(1)</td>
+  <td>O(1)</td>
+  <td>O(1)</td>
+</tr>
+<tr>
+  <td>pop()</td>
+  <td>O(1)</td>
+  <td>O(log n)</td>
+  <td>O(1)</td>
+</tr>
+<tr>
+  <td>remove()</td>
+  <td>O(n)</td>
+  <td>O(n)</td>
+  <td>O(log n) + <strong>O(n)</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Further down in the docs, there's a <em>see also</em> box:</p>
+<blockquote>
+<p><a class="external" href="https://grantjenks.com/docs/sortedcollections/">Sorted Collections</a> is a high performance module
+that uses <em>bisect</em> to managed sorted collections of data.</p>
+</blockquote>
+<p>Not in stdlib, moving along... ¯\_(ツ)_/¯</p>
+<h3 id="self-balancing-binary-trees">self-balancing binary trees<span class="headerlink"> <a href="#self-balancing-binary-trees" title="permalink">#</a></span></h3>
+<p>OK, I kinda ran out of ideas,
+the <a class="external" href="https://docs.python.org/3/library/datatypes.html">Data Types</a> section of the docs
+doesn't seem to have anything else that may help.</p>
+<p>We have two options.
+We could try to find some data structure
+that keeps some elements in sorted order
+that's can do better than <a class="anchor" href="#bisect">bisect</a>.
+Or, we could cheat and
+continue reading the Wikipedia <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue">priority queue</a> page.
+Both paths end up in the same place.</p>
+<p>Skipping past the <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue#Naive_implementations">naive implementations</a>,
+to the <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue#Usual_implementation">usual implementation</a>, we find that:</p>
+<blockquote>
+<p>To improve performance, priority queues are typically based on a <a class="external" href="https://en.wikipedia.org/wiki/Heap_(data_structure)">heap</a>, [...]</p>
+</blockquote>
+<p>Already looked into that, doesn't work for us. Next:</p>
+<blockquote>
+<p>Alternatively, when a <a class="external" href="https://en.wikipedia.org/wiki/Self-balancing_binary_search_tree">self-balancing binary search tree</a> is used,
+insertion and removal also take O(log n) time [...]</p>
+</blockquote>
+<p>There, that's what we were looking for!
+(In case you're actually preparing for an interview,
+this is likely also what your interviewer is looking for.)</p>
+<table class="table">
+<thead>
+<tr>
+  <th></th>
+  <th>naive (sort)</th>
+  <th>heapq</th>
+  <th>bisect</th>
+  <th>self-balancing BST</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>push()</td>
+  <td>O(n log n)</td>
+  <td>O(log n)</td>
+  <td>O(log n) + <strong>O(n)</strong></td>
+  <td>O(log n)</td>
+</tr>
+<tr>
+  <td>peek()</td>
+  <td>O(1)</td>
+  <td>O(1)</td>
+  <td>O(1)</td>
+  <td>O(log n)</td>
+</tr>
+<tr>
+  <td>pop()</td>
+  <td>O(1)</td>
+  <td>O(log n)</td>
+  <td>O(1)</td>
+  <td>O(log n)</td>
+</tr>
+<tr>
+  <td>remove()</td>
+  <td>O(n)</td>
+  <td>O(log n)</td>
+  <td>O(log n) + <strong>O(n)</strong></td>
+  <td>O(log n)</td>
+</tr>
+</tbody>
+</table>
+<p>OK, but there's no self-balancing BST implementation in the stdlib,
+and I sure as hell am not implementing one right now,
+I still have flashbacks from when I tried to do a red-black tree
+and two hours later it still had bugs
+(I mean, <a class="external" href="https://en.wikipedia.org/wiki/Red%E2%80%93black_tree#Operations">just look at how long this explanation is!</a>).</p>
+<!-- TODO and there's other, more complicated data structures that mix trees with something else -->
+<p>After some googling we find, among others, <a class="external" href="https://pypi.org/project/bintrees/">bintrees</a>,
+which looks like a mature library with various sorts of binary trees
+...except:</p>
+<blockquote>
+<p>Bintrees Development Stopped</p>
+<p>Use <em>sortedcontainers</em> instead: <a class="external" href="https://pypi.python.org/pypi/sortedcontainers">https://pypi.python.org/pypi/sortedcontainers</a></p>
+</blockquote>
+<p>Sounds familiar, doesn't it?</p>
+<h3 id="sorted-containers">Sorted Containers<span class="headerlink"> <a href="#sorted-containers" title="permalink">#</a></span></h3>
+<p>Let's go back to that <a class="external" href="https://grantjenks.com/docs/sortedcollections/">Sorted Collections</a> library <a class="external" href="https://docs.python.org/3/library/bisect.html">bisect</a> was recommending:</p>
+<blockquote>
+<p>Depends on the <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a> module.</p>
+</blockquote>
 <p>(￢‿￢ )</p>
-<p>ಠ_ಠ</p>
-<!-- TODO: link to output, somehow -->
-<p>talk about how docs mention tuples,
-and mention removal, and how we could do that</p>
+<p>Oh, I remember, I remember now...</p>
+<p>I'm not salty because the red-black tree took two hours to implement.</p>
+<p>I'm salty because after spending all that time,
+I find that <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a>,
+a pure Python library,<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
+is <em>faster</em> in practice than
+fancy self-balancing binary search trees implemented in C!</p>
+<p>It has <a class="external" href="https://grantjenks.com/docs/sortedcontainers/performance.html">extensive benchmarks</a> to prove it,
+and simulated workload benchmarks for our own use case,
+<a class="external" href="https://grantjenks.com/docs/sortedcontainers/performance-workload.html#priority-queue">priority queues</a>
+– so yeah, while the interview answer is &quot;self-balancing BSTs&quot;,
+the <em>actual</em> answer is <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a>.</p>
+<hr />
+<p>So, how does it work?</p>
+<p>Well, there's an <a class="external" href="https://grantjenks.com/docs/sortedcontainers/implementation.html">extensive explanation</a> too
+(<a class="internal" href="/output#good-libraries-educate">good libraries educate</a>);</p>
+<blockquote>
+<p>The <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a> internal implementation is based on a couple observations. The first is that Python’s <em>list</em> is fast, <em>really fast</em>. [...] The second is that <em>bisect.insort</em> is fast. This is somewhat counter-intuitive since it involves shifting a series of items in a list. But modern processors do this really well. A lot of time has been spent optimizing mem-copy/mem-move-like operations both in hardware and software.</p>
+<p>But using only one list and <em>bisect.insort</em> would produce sluggish behavior for lengths exceeding ten thousand. So the implementation of <a class="external" href="https://grantjenks.com/docs/sortedcontainers/sortedlist.html">Sorted List</a> uses a list of lists to store elements. [...]</p>
+</blockquote>
+<p>There's also a comparison with trees, which I'll summarize:
+fewer memory allocations,
+better cache locality,
+lower memory overhead,
+and faster iteration.</p>
+<p>Of course, there are more details,
+but I think that gives you a decent idea of how and why it works,
+enough that with a bit of tinkering
+you might be able to implement it yourself.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
+<p>Are you sold? I know I am!</p>
+<h2 id="making-it-stdlib-only">making it stdlib only<span class="headerlink"> <a href="#making-it-stdlib-only" title="permalink">#</a></span></h2>
+<p>But we can't use <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a>, and we don't want to implement it ourselves.</p>
+<p>Let's update our table one last time:</p>
+<table class="table">
+<thead>
+<tr>
+  <th></th>
+  <th>naive (sort)</th>
+  <th>heapq</th>
+  <th>bisect</th>
+  <th>bisect &lt;10k</th>
+  <th>BST</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>push()</td>
+  <td>O(n log n)</td>
+  <td>O(log n)</td>
+  <td>O(log n) + O(n)</td>
+  <td>O(log n)</td>
+  <td>O(log n)</td>
+</tr>
+<tr>
+  <td>peek()</td>
+  <td>O(1)</td>
+  <td>O(1)</td>
+  <td>O(1)</td>
+  <td>O(1)</td>
+  <td>O(log n)</td>
+</tr>
+<tr>
+  <td>pop()</td>
+  <td>O(1)</td>
+  <td>O(log n)</td>
+  <td>O(1)</td>
+  <td>O(1)</td>
+  <td>O(log n)</td>
+</tr>
+<tr>
+  <td>remove()</td>
+  <td>O(n)</td>
+  <td>O(log n)</td>
+  <td>O(log n) + O(n)</td>
+  <td>O(log n)</td>
+  <td>O(log n)</td>
+</tr>
+</tbody>
+</table>
+<p>TODO</p>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p><a class="external" href="https://docs.python.org/3/library/bisect.html">bisect</a> itself has
+<a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/bisect.py#L110-L114">a fast C implementation</a>,
+so I guess <em>technically</em> it's not pure Python.
+But given that stdlib is already there, does that count? <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p><a class="external" href="https://peps.python.org/pep-0020/">If the implementation is easy to explain, it may be a good idea.</a> <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
 
 
 
