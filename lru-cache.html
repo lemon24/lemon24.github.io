@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-10-10">October 2023</span>
-∙ 16 minute read
+∙ 17 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -308,7 +308,7 @@ so, we need a data structure that,
 given a collection of elements,
 can efficiently remove the smallest element.</p>
 <p>turns out, there is an <a class="external" href="https://en.wikipedia.org/wiki/Abstract_data_type">abstract data type</a> that does this,
-called a <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue">priority queue</a>.
+called a <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue">priority queue</a>.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
 for now,
 let's honor its abstract nature,
 and not bother with an implementation
@@ -753,7 +753,7 @@ we can get it to pass:</p>
 <p>First, the <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue">priority queue</a> Wikipedia page does not mention any <code>remove()</code> operation.</p>
 <p>Second, even if we unpack <code>_delete()</code>,
 we'll only <code>pop()</code> an item from either the expiry <em>or</em> the priorities queue,
-and still have to <code>remove()</code> itfrom the other.</p>
+and still have to <code>remove()</code> it from the other.</p>
 <p>Indeed, <strong>this is what makes the problem difficult</strong> –
 we need to maintain not one, but <em>two</em> independent priority queues,
 preventing us from using data structures commonly used to implement them.</p>
@@ -902,7 +902,7 @@ doesn't seem to have anything else that may help.</p>
 <p>We have two options.
 We could try to find some data structure
 that keeps some elements in sorted order
-that's can do better than <a class="anchor" href="#bisect">bisect</a>.
+that can do better than <a class="anchor" href="#bisect">bisect</a>.
 Or, we could cheat and
 continue reading the Wikipedia <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue">priority queue</a> page.
 Both paths end up in the same place.</p>
@@ -984,7 +984,7 @@ which looks like a mature library with various sorts of binary trees
 <p>I'm not salty because the red-black tree took two hours to implement.</p>
 <p>I'm salty because after spending all that time,
 I find that <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a>,
-a pure Python library,<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
+a pure Python library,<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
 is <em>faster</em> in practice than
 fancy self-balancing binary search trees implemented in C!</p>
 <p>It has <a class="external" href="https://grantjenks.com/docs/sortedcontainers/performance.html">extensive benchmarks</a> to prove it,
@@ -1008,11 +1008,11 @@ and faster iteration.</p>
 <p>Of course, there are more details,
 but I think that gives you a decent idea of how and why it works,
 enough that with a bit of tinkering
-you might be able to implement it yourself.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
+you might be able to implement it yourself.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
 <p>Are you sold? I know I am!</p>
 <h2 id="making-it-stdlib-only">making it stdlib only<span class="headerlink"> <a href="#making-it-stdlib-only" title="permalink">#</a></span></h2>
 <p>But we can't use <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a>, and we don't want to implement it ourselves.</p>
-<p>Let's update our table one last time:</p>
+<p>We did learn something, though – let's update that table one last time:</p>
 <table class="table">
 <thead>
 <tr>
@@ -1029,7 +1029,7 @@ you might be able to implement it yourself.<sup class="footnote-ref" id="fnref-2
   <td>push()</td>
   <td>O(n log n)</td>
   <td>O(log n)</td>
-  <td>O(log n) + O(n)</td>
+  <td>O(log n) + <strong>O(n)</strong></td>
   <td>O(log n)</td>
   <td>O(log n)</td>
 </tr>
@@ -1053,20 +1053,45 @@ you might be able to implement it yourself.<sup class="footnote-ref" id="fnref-2
   <td>remove()</td>
   <td>O(n)</td>
   <td>O(log n)</td>
-  <td>O(log n) + O(n)</td>
+  <td>O(log n) + <strong>O(n)</strong></td>
   <td>O(log n)</td>
   <td>O(log n)</td>
 </tr>
 </tbody>
 </table>
-<p>TODO</p>
+<p>We're back to making assumptions, 
+but this time we'll work hard to make them reasonable.</p>
+<ol>
+<li>Do we really need more than 10k priorities in practice?
+ <strong>Likely no</strong>, let's just cap them at 10k.</li>
+<li>Do we really need more than 10k expiry times in practice?
+ <strong>Maybe</strong> – 
+ with a granularity of 1 second,
+ we get a maximum time of 2.7 hours,
+ which seems a bit short;
+ with 10 seconds,
+ we get 27 hours,
+ which may just work.</li>
+</ol>
+<p>OK, one more leap and we're done.
+There are two things we don't like about 10k expiry times:</p>
+<ul>
+<li>with high granularity, the maximum time is too short</li>
+<li>with low granularity, the granularity is too low;
+this is especially a problem for short times –
+rounding 1 to 10 seconds is much worse than
+rounding 2001 to 2010 seconds</li>
+</ul>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p><a class="external" href="https://docs.python.org/3/library/bisect.html">bisect</a> itself has
+<li id="fn-1"><p>This early on, the name doesn't really matter,
+but we'll go with the correct, descriptive one;
+in my first draft of the code, it was called MagicDS ✨ <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p><a class="external" href="https://docs.python.org/3/library/bisect.html">bisect</a> itself has
 <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/bisect.py#L110-L114">a fast C implementation</a>,
 so I guess <em>technically</em> it's not pure Python.
-But given that stdlib is already there, does that count? <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p><a class="external" href="https://peps.python.org/pep-0020/">If the implementation is easy to explain, it may be a good idea.</a> <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+But given that stdlib is already there, does that count? <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p><a class="external" href="https://peps.python.org/pep-0020/">If the implementation is easy to explain, it may be a good idea.</a> <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
