@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-10-10">October 2023</span>
-∙ 20 minute read
+∙ 21 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -177,8 +177,11 @@ But we'll end up with a decent solution anyway.</p>
 <li><a href="#making-it-stdlib-only">making it stdlib only</a>
 <ul>
 <li><a href="#expires-buckets">expires buckets</a></li>
+<li><a href="#bisect-1">bisect</a></li>
 </ul>
 </li>
+<li><a href="#conclusion">conclusion</a></li>
+<li><a href="#bonus-bucket-queue">bonus: bucket queue</a></li>
 </ul>
 </section>
 <h2 id="intro-requirements-api-etc">intro, requirements, api etc.<span class="headerlink"> <a href="#intro-requirements-api-etc" title="permalink">#</a></span></h2>
@@ -1013,7 +1016,6 @@ and faster iteration.</p>
 but I think that gives you a decent idea of how and why it works,
 enough that with a bit of tinkering
 you might be able to implement it yourself.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
-<p>Are you sold? I know I am!</p>
 <h2 id="making-it-stdlib-only">making it stdlib only<span class="headerlink"> <a href="#making-it-stdlib-only" title="permalink">#</a></span></h2>
 <p>But <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a> is not in stdlib,
 and we don't want to implement it ourselves.</p>
@@ -1129,8 +1131,8 @@ The part that's trickier is rounding <code>maxage</code> to the next power of tw
 <span class="go">[1, 2, 4, 4, 16, 16, 32]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">log_bucket</span><span class="p">(</span><span class="mi">2000</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">17</span><span class="p">]]</span>
 <span class="go">[2001, 2002, 2004, 2004, 2016, 2016, 2048]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">log_bucket</span><span class="p">(</span><span class="mi">2013</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">]]</span>
-<span class="go">[2014, 2016, 2016, 2020]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">log_bucket</span><span class="p">(</span><span class="mi">2013</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">17</span><span class="p">]]</span>
+<span class="go">[2014, 2016, 2016, 2020, 2032, 2032, 2048]</span>
 </code></pre></div>
 <p>Looking good!</p>
 <p>There are two sources of error –
@@ -1167,6 +1169,7 @@ let's confirm our reasoning.</p>
         <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
     <span class="p">)</span>
 </code></pre></div>
+
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">max_error</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10_000</span><span class="p">)</span>
 <span class="go">0.9997558891736849</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">max_error</span><span class="p">(</span><span class="mi">2000</span><span class="p">,</span> <span class="mi">10_000</span><span class="p">)</span>
@@ -1178,13 +1181,15 @@ let's confirm our reasoning.</p>
 <p>So, how do we make the error smaller?
 Instead of rounding to the next power of two,
 we could round to the next half of a power of two,
-or a quarter, or an eighth...</p>
+or a quarter, or an eighth...
+which means subtracting from the power of two:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">log_bucket</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">maxage</span><span class="p">,</span> <span class="n">shift</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
     <span class="n">next_power</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">log2</span><span class="p">(</span><span class="n">maxage</span><span class="p">)</span> <span class="o">-</span> <span class="n">shift</span><span class="p">))</span>
     <span class="n">expires</span> <span class="o">=</span> <span class="n">now</span> <span class="o">+</span> <span class="n">maxage</span>
     <span class="n">bucket</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">expires</span> <span class="o">/</span> <span class="n">next_power</span><span class="p">)</span> <span class="o">*</span> <span class="n">next_power</span>
     <span class="k">return</span> <span class="n">bucket</span>
 </code></pre></div>
+
 <p>It seems to be working:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">([</span><span class="n">log_bucket</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">17</span><span class="p">]])</span>
@@ -1217,6 +1222,7 @@ I wonder how many buckets is...</p>
     <span class="n">buckets</span> <span class="o">=</span> <span class="p">{</span><span class="n">log_bucket</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">seconds</span><span class="p">)}</span>
     <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">buckets</span><span class="p">)</span>
 </code></pre></div>
+
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">max_buckets</span><span class="p">(</span><span class="mi">3600</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span>
 <span class="go">730</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">max_buckets</span><span class="p">(</span><span class="mi">3600</span> <span class="o">*</span> <span class="mi">24</span> <span class="o">*</span> <span class="mi">31</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span>
@@ -1270,6 +1276,133 @@ why not have priority work in the same way?</p>
         <span class="n">item</span> <span class="o">=</span> <span class="n">Item</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">expires</span><span class="p">,</span> <span class="n">priority</span><span class="p">)</span>
 </code></pre></div>
 
+<h3 id="bisect-1">bisect<span class="headerlink"> <a href="#bisect-1" title="permalink">#</a></span></h3>
+<p>Time to implement the priority queue.</p>
+<p>We use <a class="external" href="https://docs.python.org/3/library/bisect.html#bisect.insort">insort()</a> to do so:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">push</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="n">bisect</span><span class="o">.</span><span class="n">insort</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">operator</span><span class="o">.</span><span class="n">neg</span><span class="p">)</span>
+</code></pre></div>
+
+<p>... but remember we need to maintain the list in reversed order,
+so the smallest element is at the end;
+using <a class="external" href="https://docs.python.org/3/library/operator.html#operator.neg">operator.neg()</a> works here,
+but limits values to numeric values (that support <code>-obj</code>)</p>
+<ul>
+<li>so it can't be used with tuples anymore</li>
+<li>it's OK, now we're storing the values somewhere else</li>
+<li>alternatively, 
+we could make <a class="external" href="https://stackoverflow.com/a/24414594">a wrapper that reverses the sequence</a>,
+but that's overkill</li>
+</ul>
+<p><code>peek()</code> and <code>pop()</code> are trivial, as expected:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">peek</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">pop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+</code></pre></div>
+
+<p>Finally, <code>remove()</code>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">remove</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">item</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">peek</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+            <span class="k">return</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect_left</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="o">-</span><span class="n">item</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">operator</span><span class="o">.</span><span class="n">neg</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="n">item</span><span class="p">:</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">return</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span>
+</code></pre></div>
+
+<p>We add a fast path for removing an element that's at the end
+(although it may be premature optimization).
+The rest of the method is based on the <code>index()</code> recipe
+from <a class="external" href="https://docs.python.org/3/library/bisect.html#searching-sorted-lists">Searching Sorted Lists</a>,
+with minor modifications to account for the reversed order.</p>
+<p>And that's it, we're done!</p>
+<p>Here's <a class="attachment" href="/_file/lru-cache/50-bisect.py">the final version of the code</a>.</p>
+<h2 id="conclusion">conclusion<span class="headerlink"> <a href="#conclusion" title="permalink">#</a></span></h2>
+<p>TODO</p>
+<p><strong>Learned something new today?</strong> Share this with others, it really helps! <span class="text-large">
+<span class="share-icons">
+<a
+    class="share-icon pycoders color"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+>PyCoder's Weekly</a>
+<a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/lru-cache&t=Python%20stdlib%20only%20priority-expiry%20LRU%20cache"
+>HN</a>
+<a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/lru-cache&title=Python%20stdlib%20only%20priority-expiry%20LRU%20cache"
+>Reddit</a>
+<a
+    class="share-icon linkedin color"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/lru-cache"
+>linkedin</a>
+<a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Python%20stdlib%20only%20priority-expiry%20LRU%20cache&url=https%3A//death.andgravity.com/lru-cache&via=_andgravity"
+>Twitter</a>
+</span>
+</span></p>
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=lru-cache"
+    method="post"
+    id="embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
+<p>TODO: other article</p>
+<h2 id="bonus-bucket-queue">bonus: bucket queue<span class="headerlink"> <a href="#bonus-bucket-queue" title="permalink">#</a></span></h2>
+<p>TODO</p>
+<p>past usual implementations</p>
+<p>https://en.wikipedia.org/wiki/Bucket_queue</p>
+<p>https://en.wikipedia.org/wiki/Priority_queue#Specialized_heaps</p>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>This early on, the name doesn't really matter,
