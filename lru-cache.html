@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-10-10">October 2023</span>
-∙ 21 minute read
+∙ 24 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -130,7 +130,7 @@ this means <!-- **no heaps**, --> <strong>no binary search trees</strong>.
 But we'll end up with a decent solution anyway.</p>
 <section class="toc">
 <ul>
-<li><a href="#intro-requirements-api-etc">intro, requirements, api etc.</a></li>
+<li><a href="#requirements-and-api">requirements and api</a></li>
 <li><a href="#basic">basic</a>
 <ul>
 <li><a href="#setup">setup</a></li>
@@ -184,8 +184,70 @@ But we'll end up with a decent solution anyway.</p>
 <li><a href="#bonus-bucket-queue">bonus: bucket queue</a></li>
 </ul>
 </section>
-<h2 id="intro-requirements-api-etc">intro, requirements, api etc.<span class="headerlink"> <a href="#intro-requirements-api-etc" title="permalink">#</a></span></h2>
-<p>todo, see notes</p>
+<h2 id="requirements-and-api">requirements and api<span class="headerlink"> <a href="#requirements-and-api" title="permalink">#</a></span></h2>
+<p>So, say you're at an interview,
+and you're asked to implement a priority-expiry LRU cache.</p>
+<p>There may be additional explanations,
+but with some aspects deliberately vague.
+The name is pretty self-explanatory, though,
+so let's reconstruct the requirements from the name alone.</p>
+<p>A <em>cache</em> is a thing that stores data
+so that it can be reused in the future
+(usually the result of some computation or retrieval).
+Each piece of data has an associated key
+that's used to retrieve the data.
+Most caches are <em>bounded</em> in some way;
+easiest is to limit the number of items.</p>
+<p>The rest of the words have to do with <em>eviction</em>
+– how and when they're removed from the cache.</p>
+<ul>
+<li><em>priority</em> means each item has an associated priority;
+when the cache fills up,
+we evict items with the lowest priority first.</li>
+<li><em>expiry</em> means each item has a maximum age;
+if it's older than that, we evict it;
+it stands to reason that expired items are removed
+regardless of their priority.</li>
+<li><em>LRU</em> stands for <em>least recently used</em>,
+which means that all other things being equal,
+we evict items that haven't been used recently (relative to others).</li>
+</ul>
+<p>The problem may suggest an API;
+we can reconstruct that from first principles too.</p>
+<p>Since the cache is essentially a key-value store,
+we may be tempted to use a dict-like interface (a mapping),
+but that has a few limitations;
+first, when setting items we need to to pass metadata;
+second, mappings have more methods than we actually care to implement.</p>
+<p>So, we're left with a very limited set of required methods:</p>
+<ul>
+<li>set(key, value, maxage, priority)</li>
+<li>get(key) -&gt; value or none</li>
+</ul>
+<p>Some versions of the problem may also suggest the following:</p>
+<ul>
+<li>delete(key) – this allows end users to invalidate specific items
+for some reason external to the cache;
+this isn't strictly necessary, 
+but we'll end up with it as part of refactoring</li>
+<li>evict(now) – not strictly necessary either,
+but it hints eviction is a separate bit of logic,
+and may come in handy for testing</li>
+</ul>
+<p>I've left types out on purpose, 
+since they warrant their own discussion:</p>
+<ul>
+<li>key – usually, the key is a string,
+but for a local, in-memory cache,
+we can relax this to any <a class="external" href="https://docs.python.org/3/glossary.html#term-hashable">hashable</a> value</li>
+<li>value – for an in-memory cache, any kind of object is fine</li>
+<li>maxage and priority – a number should do for these;
+integer hints at a simpler solution,
+float at a more general one;
+limits on these numbers are important too,
+as we'll see soon enough</li>
+</ul>
+<p>TODO: clarifying questions</p>
 <h2 id="basic">basic<span class="headerlink"> <a href="#basic" title="permalink">#</a></span></h2>
 <ul>
 <li>basic cache, no eviction, no priorities; cache holds objects directly; add test</li>
@@ -1290,7 +1352,7 @@ but limits values to numeric values (that support <code>-obj</code>)</p>
 <ul>
 <li>so it can't be used with tuples anymore</li>
 <li>it's OK, now we're storing the values somewhere else</li>
-<li>alternatively, 
+<li>alternatively,
 we could make <a class="external" href="https://stackoverflow.com/a/24414594">a wrapper that reverses the sequence</a>,
 but that's overkill</li>
 </ul>
@@ -1322,7 +1384,30 @@ with minor modifications to account for the reversed order.</p>
 <p>And that's it, we're done!</p>
 <p>Here's <a class="attachment" href="/_file/lru-cache/50-bisect.py">the final version of the code</a>.</p>
 <h2 id="conclusion">conclusion<span class="headerlink"> <a href="#conclusion" title="permalink">#</a></span></h2>
-<p>TODO</p>
+<ul>
+<li>usually they ask you to walk through and <em>implement</em> it in an hour, that's fucking delusional ||  I've heard you're supposed to impement this one in an hour, which is delusional<ul>
+<li>hopefully, reasonable interviewers wont' actually ask you to implement the rb tree on the spot; explaining what you would use and why should be enough (again, for reasonable interviewers)</li>
+</ul>
+</li>
+<li>it is good to have a basic knowledge of big o etc</li>
+<li>but what big o notation says and what happens in practice can differ quite a lot<ul>
+<li>be sure to measure / profile (link to profiling into)</li>
+<li>be sure to think of limits; sometimes the n in o(n) is small enough you can do smth else</li>
+</ul>
+</li>
+<li>you don't need to know how to implement all the data structure<ul>
+<li>however, it is useful to have a cursory knowledge of them existing, and of their properties</li>
+<li>think of it as knowing which tools exist in that particular</li>
+<li>&quot;Wikipedia says so&quot; is sometimes a good answer, 
+you don't need to understand how it works if the specs fit the requirements</li>
+</ul>
+</li>
+<li>good docs educate (link)<ul>
+<li>the python docs already covered a lot of what we needed</li>
+<li>but, that's not in the api docs you see in your ide, you need to go and read the docs</li>
+</ul>
+</li>
+</ul>
 <p><strong>Learned something new today?</strong> Share this with others, it really helps! <span class="text-large">
 <span class="share-icons">
 <a
