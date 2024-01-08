@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-10-10">October 2023</span>
-∙ 24 minute read
+∙ 23 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -225,7 +225,7 @@ but we'll end up with it as part of refactoring</li>
 but hints eviction is a separate bit of logic,
 and may come in handy for testing</li>
 </ul>
-<p>Types warrant their own discussion:</p>
+<p>Types deserve their own discussion:</p>
 <ul>
 <li><code>key</code> – usually, the key is a string,
 but we can relax this to any <a class="external" href="https://docs.python.org/3/glossary.html#term-hashable">hashable</a> value</li>
@@ -240,18 +240,23 @@ as we'll see soon enough</li>
 <p>TODO: clarifying questions</p>
 </section>
 <h2 id="a-minimal-plausible-solution">A minimal plausible solution<span class="headerlink"> <a href="#a-minimal-plausible-solution" title="permalink">#</a></span></h2>
-<p>Like <a class="internal" href="/pwned#a-minimal-plausible-solution">many times before</a>,
-we'll take an iterative, <a class="external" href="https://hintjens.gitbooks.io/scalable-c/content/chapter1.html#problem-what-do-we-do-next">problem-solution</a> approach.
-Right now we don't have <em>any</em> solution,
-so we start with <a class="external" href="https://wiki.c2.com/?DoTheSimplestThingThatCouldPossiblyWork">the simplest thing that could possibly work</a>.</p>
-<p>Here, this means a basic cache, with no eviction and no priorities.
-We can then write some basic tests,
-to make sure adding more stuff isn't not breaking anything.</p>
-<p>TODO: interview question,
-make it very clear that's what you're doing,
-&quot;The 'if you're not sure what to do yet' part tends to be forgotten.&quot; in simplest thing</p>
+<p>I'm sure there are a lot smart people out there 
+that can Think Really Hard™ 
+and just come up with a solution,
+but I'm not one of them, 
+so we'll take an iterative, <a class="external" href="https://hintjens.gitbooks.io/scalable-c/content/chapter1.html#problem-what-do-we-do-next">problem-solution</a> approach to this.</p>
+<p>Since right now we don't have <em>any</em> solution,
+we start with <a class="external" href="https://wiki.c2.com/?DoTheSimplestThingThatCouldPossiblyWork">the simplest thing that could possibly work</a><sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
+– a basic cache with no fancy eviction and no priorities;
+we can then write some tests against that,
+to know if we break anything going forward.</p>
+<section class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>TODO: interview question, make it very clear that's what you're doing,</p>
+</section>
 <!-- ## setup -->
-<p>We start with a class to hold the various things we need to keep track of:</p>
+<p>A class holds all the things we need
+and gives us something to stick the API on:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Cache</span><span class="p">:</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">maxsize</span><span class="p">,</span> <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">):</span>
@@ -261,12 +266,13 @@ make it very clear that's what you're doing,
         <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
 </code></pre></div>
 
-<p>With choosing a <a class="external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a> for the actual cache,
-we've made our first algorithmic choice –
-a <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table</a> gives us O(1) search/insert/delete on average.</p>
+<p>And this is our first algorithmic choice:
+a <a class="external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a> (backed by a <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table</a>)
+provides O(1) search / insert / delete on average.</p>
 <section class="admonition tip">
 <p class="admonition-title">Tip</p>
 <p>Given the problem we're solving,
+ and the context we're solving it in,
  we kinda <em>have to</em> talk about <a class="external" href="https://en.wikipedia.org/wiki/Time_complexity">time complexity</a>.
  Ned Batchelder's
  <a class="external" href="https://nedbatchelder.com/text/bigo.html">Big-O: How Code Slows as Data Grows</a>
@@ -274,8 +280,7 @@ a <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table
  (text and video available).</p>
 </section>
 <!-- ## set -->
-<hr />
-<p><code>set()</code> brings about more choices:</p>
+<p><code>set()</code> leads to more choices:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">maxage</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">priority</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
         <span class="n">now</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
 
@@ -290,17 +295,17 @@ a <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table
         <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">item</span>
 </code></pre></div>
 
-<p>First, we only evict items when there's no more room left –
-specifically, we don't evict in <code>get()</code>, since we want it to be fast.
-More complicated strategies are possible,
-for example evicting expired items periodically would minimize memory usage.</p>
+<p>First, we evict items only if there's no more room left.
+There are other ways of doing this;
+for example, evicting expired items periodically
+would minimize memory usage.</p>
 <p>Second, if the key is already in the cache,
-we remove it and insert it again
-instead of modifying things in place.
+we remove and insert it again,
+instead of updating things in place.
 This way, there's only one code path for adding elements,
-which will make things a lot simpler later on
-when we have multiple data structures to keep track of.</p>
-<p>We store the parameters associated with a key as a named tuple:</p>
+which will make it a lot easier to 
+keep multiple data structures in sync later on.</p>
+<p>We use a named tuple to store the parameters associated with a key:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Item</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
     <span class="n">key</span><span class="p">:</span> <span class="nb">object</span>
     <span class="n">value</span><span class="p">:</span> <span class="nb">object</span>
@@ -309,12 +314,10 @@ when we have multiple data structures to keep track of.</p>
 </code></pre></div>
 
 <!-- ## evict -->
-<hr />
-<p>For now, <code>evict()</code> will evict an arbitrary item.
-In a happy little coincidence,
+<p>For now, we just evict an arbitrary item;
+in a happy little coincidence,
 <a class="external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>s preserve insertion order,
-so when iterating over the cache,
-the oldest key is first.</p>
+so we can get the oldest key by iterating over the cache.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">evict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">now</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
             <span class="k">return</span>
@@ -324,7 +327,6 @@ the oldest key is first.</p>
 </code></pre></div>
 
 <!-- ## get -->
-<hr />
 <p>Finally, <code>get()</code> is trivial:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
         <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
@@ -338,7 +340,7 @@ the oldest key is first.</p>
 </code></pre></div>
 
 <hr />
-<p>With everything in place, we can write a first test:</p>
+<p>With everything in place, here's the first test:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_basic</span><span class="p">():</span>
     <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">FakeTime</span><span class="p">())</span>
 
@@ -357,8 +359,8 @@ the oldest key is first.</p>
     <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;C&#39;</span>
 </code></pre></div>
 
-<p>Even though there's no time logic yet,
-we use a fake time to make things predictable:</p>
+<p>To make things predictable, 
+we inject a fake time implementation:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">FakeTime</span><span class="p">:</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">now</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">now</span> <span class="o">=</span> <span class="n">now</span>
@@ -366,15 +368,19 @@ we use a fake time to make things predictable:</p>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">now</span>
 </code></pre></div>
 
-<p>Also, we inject the time, so we can fake it during tests,
-and we use <a class="external" href="https://docs.python.org/3/library/time.html#time.monotonic">monotonic()</a> time
-– <a class="external" href="https://docs.python.org/3/library/time.html#time.time">time()</a> can jump back and forth with system clock updates.</p>
+<!--    
+
+Also, we inject the time, so we can fake it during tests,
+and we use [monotonic()] time
+– [time()] can jump back and forth with system clock updates.
+
+[time()]: https://docs.python.org/3/library/time.html#time.time
+[monotonic()]: https://docs.python.org/3/library/time.html#time.monotonic
+
+-->
 <h2 id="expires">expires<span class="headerlink"> <a href="#expires" title="permalink">#</a></span></h2>
 <p>ok, most of the properties of our cache come from how and when stuff is evicted,
-so let's start with that.
-i'm sure there are smart people out there that can Think Really Hard™
-for a bit and then just come up with a complete solution,
-but I'm not one of them, so we'll do things one at a time.</p>
+so let's start with that.</p>
 <p>an important observation is that before we even get to the least recently used part,
 we have to kick out expired items (with the lowest expiry time),
 and then those with the lowest priority.
@@ -382,7 +388,7 @@ so, we need a data structure that,
 given a collection of elements,
 can efficiently remove the smallest element.</p>
 <p>turns out, there is an <a class="external" href="https://en.wikipedia.org/wiki/Abstract_data_type">abstract data type</a> that does this,
-called a <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue">priority queue</a>.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
+called a <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue">priority queue</a>.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
 for now,
 let's honor its abstract nature,
 and not bother with an implementation
@@ -1058,7 +1064,7 @@ which looks like a mature library with various sorts of binary trees
 <p>I'm not salty because the red-black tree took two hours to implement.</p>
 <p>I'm salty because after spending all that time,
 I find that <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a>,
-a pure Python library,<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
+a pure Python library,<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>
 is <em>faster</em> in practice than
 fancy self-balancing binary search trees implemented in C!</p>
 <p>It has <a class="external" href="https://grantjenks.com/docs/sortedcontainers/performance.html">extensive benchmarks</a> to prove it,
@@ -1082,7 +1088,7 @@ and faster iteration.</p>
 <p>Of course, there are more details,
 but I think that gives you a decent idea of how and why it works,
 enough that with a bit of tinkering
-you might be able to implement it yourself.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
+you might be able to implement it yourself.<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup></p>
 <h2 id="making-it-stdlib-only">making it stdlib only<span class="headerlink"> <a href="#making-it-stdlib-only" title="permalink">#</a></span></h2>
 <p>But <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a> is not in stdlib,
 and we don't want to implement it ourselves.</p>
@@ -1495,14 +1501,15 @@ you don't need to understand how it works if the specs fit the requirements</li>
 <p>https://en.wikipedia.org/wiki/Priority_queue#Specialized_heaps</p>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>This early on, the name doesn't really matter,
+<li id="fn-1"><p>Note the subtitle: <em>if you're not sure what to do yet</em>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>This early on, the name doesn't really matter,
 but we'll go with the correct, descriptive one;
-in my first draft of the code, it was called MagicDS ✨ <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p><a class="external" href="https://docs.python.org/3/library/bisect.html">bisect</a> itself has
+in my first draft of the code, it was called MagicDS ✨ <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p><a class="external" href="https://docs.python.org/3/library/bisect.html">bisect</a> itself has
 <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/bisect.py#L110-L114">a fast C implementation</a>,
 so I guess <em>technically</em> it's not pure Python.
-But given that stdlib is already there, does that count? <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-3"><p><a class="external" href="https://peps.python.org/pep-0020/">If the implementation is easy to explain, it may be a good idea.</a> <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
+But given that stdlib is already there, does that count? <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-4"><p><a class="external" href="https://peps.python.org/pep-0020/">If the implementation is easy to explain, it may be a good idea.</a> <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
