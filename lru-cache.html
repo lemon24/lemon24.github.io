@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2023-10-10">October 2023</span>
-∙ 23 minute read
+∙ 22 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -140,13 +140,13 @@ but we'll end up with a decent solution anyway!</p>
 </li>
 <li><a href="#problem-low-priority-items-second">Problem: ...low priority items second</a>
 <ul>
-<li><a href="#quality-of-life-refactoring">quality of life refactoring</a></li>
+<li><a href="#problem-we-re-deleting-items-in-three-places">Problem: we're deleting items in three places</a></li>
 </ul>
 </li>
 <li><a href="#problem-least-recently-used-items-last">Problem: ...least recently used items last</a>
 <ul>
-<li><a href="#functools-lru-cache">functools.lru_cache</a></li>
-<li><a href="#collections-ordereddict">collections.OrderedDict</a></li>
+<li><a href="#functools-lru-cache">functools.lru_cache()</a></li>
+<li><a href="#ordereddict">OrderedDict</a></li>
 </ul>
 </li>
 <li><a href="#make-it-fast">make it fast</a>
@@ -168,7 +168,7 @@ but we'll end up with a decent solution anyway!</p>
 </ul>
 </section>
 <h2 id="requirements">Requirements<span class="headerlink"> <a href="#requirements" title="permalink">#</a></span></h2>
-<p>So you're at an interview and 
+<p>So you're at an interview and
 have to implement a <em>priority-expiry LRU cache</em>.</p>
 <p>Maybe you get more details,
 but maybe the problem is deliberately vague;
@@ -191,7 +191,7 @@ we evict items with the lowest priority first.</li>
 if it's older than that,
 it is <em>expired</em>,
 so we don't return it to the user.
-It stands to reason expired items are evicted 
+It stands to reason expired items are evicted
 regardless of their priority or how full the cache is.</li>
 <li>All other things being equal,
 we evict items <em>least recently used</em>
@@ -230,10 +230,10 @@ as we'll see soon enough</li>
 <p>TODO: clarifying questions</p>
 </section>
 <h2 id="a-minimal-plausible-solution">A minimal plausible solution<span class="headerlink"> <a href="#a-minimal-plausible-solution" title="permalink">#</a></span></h2>
-<p>I'm sure there are a lot smart people out there 
-that can Think Really Hard™ 
+<p>I'm sure there are a lot smart people out there
+that can Think Really Hard™
 and just come up with a solution,
-but I'm not one of them, 
+but I'm not one of them,
 so we'll take an iterative, <a class="external" href="https://hintjens.gitbooks.io/scalable-c/content/chapter1.html#problem-what-do-we-do-next">problem-solution</a> approach to this.</p>
 <p>Since right now we don't have <em>any</em> solution,
 we start with <a class="external" href="https://wiki.c2.com/?DoTheSimplestThingThatCouldPossiblyWork">the simplest thing that could possibly work</a><sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
@@ -286,14 +286,14 @@ provides average <strong>O(1)</strong> search / insert / delete.</p>
 </code></pre></div>
 
 <p>First, we evict items only if there's no more room left.
-There are other ways of doing this;
+(There are other ways of doing this;
 for example,
-evicting expired items periodically minimizes memory usage.</p>
+evicting expired items periodically minimizes memory usage.)</p>
 <p>Second, if the key is already in the cache,
 we remove and insert it again,
 instead of updating things in place.
 This way, there's only one code path for setting items,
-which will make it a lot easier to 
+which will make it a lot easier to
 keep multiple data structures in sync later on.</p>
 <p>We use a named tuple to store the parameters associated with a key:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Item</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
@@ -349,7 +349,7 @@ so when iterating over the cache, the oldest key is first.</p>
     <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;C&#39;</span>
 </code></pre></div>
 
-<p>To make things predictable, 
+<p>To make things predictable,
 we inject a fake time implementation:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">FakeTime</span><span class="p">:</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">now</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
@@ -358,7 +358,7 @@ we inject a fake time implementation:</p>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">now</span>
 </code></pre></div>
 
-<!--    
+<!--
 
 Also, we inject the time, so we can fake it during tests,
 and we use [monotonic()] time
@@ -399,10 +399,10 @@ but with <code>key</code> along for the ride; in <code>set()</code>, we add:</p>
 &quot;hey, the item's already a tuple,
 if we make <code>expires</code> the first field,
 we can use the item itself&quot;,
-but let's delay optimizations 
+but let's delay optimizations
 until we have and <em>understand</em> a full solution –
 <a class="external" href="https://wiki.c2.com/?MakeItWorkMakeItRightMakeItFast">make it work, make it right, make it fast</a>.</p>
-<p>Still in <code>set()</code>, 
+<p>Still in <code>set()</code>,
 if the key is already in the cache,
 we also remove and insert it from the expires queue,
 so it's added back with the new expiry time.</p>
@@ -415,7 +415,7 @@ so it's added back with the new expiry time.</p>
 </code></pre></div>
 
 <!-- ## evict -->
-<p>Now we can move on to evicting things;
+<p>Moving on to evicting things;
 for this, we need two operations:
 first peek at the item that expires next
 to see if it's expired, then, if it is, pop it from the queue.
@@ -444,8 +444,7 @@ since we're not handling priorities yet,
 we'll evict the item that expires next a little early.</p>
 <p><a id="priority-queue"></a></p>
 <h3 id="problem-name-priorityqueue-is-not-defined">Problem: name PriorityQueue is not defined<span class="headerlink"> <a href="#problem-name-priorityqueue-is-not-defined" title="permalink">#</a></span></h3>
-<p>Some tests for the code we wrote would be really nice,
-but nothing works because we're missing one PriorityQueue class.
+<p>OK, to get the code working again, we need a PriorityQueue class.
 It doesn't need to be fast,
 we can deal with that after we finish everything else;
 for now, let's just keep our elements in a plain list.</p>
@@ -484,13 +483,13 @@ and then shift the ones after it to cover the gap.</p>
 </code></pre></div>
 
 <p>We didn't use the <em>is empty</em> operation,
-but it should be O(1) regardless of implementation, 
+but it should be O(1) regardless of implementation,
 so let's throw it in anyway:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="fm">__bool__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
 </code></pre></div>
 
-<p>OK, let's wrap this up with a quick test:</p>
+<p>OK, let's wrap up with a quick test:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_priority_queue</span><span class="p">():</span>
     <span class="n">pq</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
     <span class="n">pq</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
@@ -520,7 +519,7 @@ so let's throw it in anyway:</p>
 
 <!-- ## more tests -->
 <hr />
-<p>Now the existing tests pass again,
+<p>Now the existing tests pass,
 and we can add more –
 first, that expired items are evicted
 (note how we're moving the time forward):</p>
@@ -561,22 +560,21 @@ first, that expired items are evicted
 </code></pre></div>
 
 <h2 id="problem-low-priority-items-second">Problem: ...low priority items second<span class="headerlink"> <a href="#problem-low-priority-items-second" title="permalink">#</a></span></h2>
-<p>ok, let's do priorities next.
-once again, we need to kick out elements with the <em>lowest</em> priority;
-we already know how to do that, right?</p>
-<p>in <code>__init__()</code>, we also keep a priority queue of priorities:</p>
+<p>Next up, kick out items by priority –
+shouldn't be too hard, right?</p>
+<p>In <code>__init__()</code>, add another priority queue for priorities:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">expires</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">priorities</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
 </code></pre></div>
 
-<p>in <code>set()</code>, we also add new items to the priority priority queue:</p>
+<p>In <code>set()</code>, add new items to the priorities queue:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">item</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">push</span><span class="p">((</span><span class="n">expires</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">priorities</span><span class="o">.</span><span class="n">push</span><span class="p">((</span><span class="n">priority</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
 </code></pre></div>
 
-<p>and also remove already cached items:</p>
+<p>...and remove already-cached items:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
             <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">remove</span><span class="p">((</span><span class="n">item</span><span class="o">.</span><span class="n">expires</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
@@ -584,7 +582,7 @@ we already know how to do that, right?</p>
             <span class="k">del</span> <span class="n">item</span>
 </code></pre></div>
 
-<p>in <code>evict()</code>, we also remove expired items from the priorities queue:</p>
+<p>In <code>evict()</code>, remove expired items from the priorities queue:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
             <span class="n">expires</span><span class="p">,</span> <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">expires</span> <span class="o">&gt;</span> <span class="n">now</span><span class="p">:</span>
@@ -594,8 +592,8 @@ we already know how to do that, right?</p>
             <span class="bp">self</span><span class="o">.</span><span class="n">priorities</span><span class="o">.</span><span class="n">remove</span><span class="p">((</span><span class="n">item</span><span class="o">.</span><span class="n">priority</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
 </code></pre></div>
 
-<p>and finally, if there are no expired items,
-we remove one with the lowest priority:</p>
+<p>...and finally, if none are expired,
+remove the one with the lowest priority:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span> <span class="o">==</span> <span class="n">initial_size</span><span class="p">:</span>
             <span class="n">_</span><span class="p">,</span> <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priorities</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
             <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
@@ -603,8 +601,7 @@ we remove one with the lowest priority:</p>
 </code></pre></div>
 
 <!-- ## tests -->
-<p>At this point, the existing tests pass;
-let's add a few more; one for eviction:</p>
+<p>Add one test for eviction by priority:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_priorities</span><span class="p">():</span>
     <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">FakeTime</span><span class="p">())</span>
 
@@ -619,7 +616,7 @@ let's add a few more; one for eviction:</p>
     <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;C&#39;</span>
 </code></pre></div>
 
-<p>And one for updating the priority of existing items:</p>
+<p>...and one for updating the priority of existing items:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_update_priorities</span><span class="p">():</span>
     <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">FakeTime</span><span class="p">())</span>
 
@@ -633,34 +630,35 @@ let's add a few more; one for eviction:</p>
     <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;C&#39;</span>
 </code></pre></div>
 
-<h3 id="quality-of-life-refactoring">quality of life refactoring<span class="headerlink"> <a href="#quality-of-life-refactoring" title="permalink">#</a></span></h3>
-<p>I know I said we'll postpone performance work
-to after we have a full implementation.</p>
-<p>I have a different kind of optimization in mind – for readability.</p>
-<p>We're now deleting things in three different places,
-in slightly different ways,
-being careful to keep the three data structures in sync.
-Wouldn't it be nice to have all that logic in a single place?
-This may seem a bit premature,
-but through the magic of having written the entire code already,
-I know this bit is going to change quite a lot.</p>
+<p><a id="delete-refactoring"></a></p>
+<h3 id="problem-we-re-deleting-items-in-three-places">Problem: we're deleting items in three places<span class="headerlink"> <a href="#problem-we-re-deleting-items-in-three-places" title="permalink">#</a></span></h3>
+<p>I said we'll postpone performance optimizations
+until we have a complete solution,
+but I have a different kind of optimization in mind – for readability.</p>
+<p>We're deleting items in three slightly different ways,
+careful to keep three data structures in sync each time;
+it would be nice to do it only once.
+While it may seem premature,
+through the magic of having written the article already,
+I'm confident it'll pay off.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
         <span class="o">*</span><span class="n">_</span><span class="p">,</span> <span class="n">expires</span><span class="p">,</span> <span class="n">priority</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">remove</span><span class="p">((</span><span class="n">expires</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">priorities</span><span class="o">.</span><span class="n">remove</span><span class="p">((</span><span class="n">priority</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
 </code></pre></div>
 
-<p>Sure, it will be twice as slow during eviction,
-but the complexity will stay the same –
-the constant factor 2 in O(2n) gets removed, leaving us with O(n).
-Once we settle on a reasonably efficient implementation,
-we can go back to the unpacked version if needed (aren't tests nice?).</p>
-<p>The logic for handling already-cached item gets reduced to:</p>
+<p>Sure, eviction is twice as slow,
+but the complexity stays the the same –
+the constant factor in <strong>O(2n)</strong> gets removed, leaving us with <strong>O(n)</strong>.
+If needed, we can go back to the unpacked version
+once we have a reasonably efficient implementation
+(that's what tests are for).</p>
+<p>Deleting already-cached items is shortened to:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
 </code></pre></div>
 
-<p>Likewise, the core of the eviction logic boils down to:</p>
+<p>Idem for the core eviction logic:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
             <span class="n">expires</span><span class="p">,</span> <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">expires</span> <span class="o">&gt;</span> <span class="n">now</span><span class="p">:</span>
@@ -674,66 +672,58 @@ we can go back to the unpacked version if needed (aren't tests nice?).</p>
 
 <p>Neat!</p>
 <h2 id="problem-least-recently-used-items-last">Problem: ...least recently used items last<span class="headerlink"> <a href="#problem-least-recently-used-items-last" title="permalink">#</a></span></h2>
-<p>Say we don't know how to implement a LRU cache.</p>
-<p>We could google it.</p>
-<p>Or, we could look at an existing implementation.</p>
-<h3 id="functools-lru-cache">functools.lru_cache<span class="headerlink"> <a href="#functools-lru-cache" title="permalink">#</a></span></h3>
-<p>The closest thing in the standard library I can think of is <a class="external" href="https://docs.python.org/3/library/functools.html#functools.lru_cache">functools.lru_cache</a>.</p>
-<p>So, let's have a look.</p>
+<p>So, how does one implement a least recently used cache?</p>
+<p>We could google it... 
+or, we could look at an existing implementation.</p>
+<h3 id="functools-lru-cache">functools.lru_cache()<span class="headerlink"> <a href="#functools-lru-cache" title="permalink">#</a></span></h3>
+<p>Standard library <a class="external" href="https://docs.python.org/3/library/functools.html#functools.lru_cache">functools.lru_cache()</a> comes to mind first;
+let's have a look.</p>
 <section class="admonition tip">
 <p class="admonition-title">Tip</p>
-<p>You can read the code of most Python stdlib modules
+<p>You can read the code of stdlib modules
  by following the <strong>Source code:</strong> link
- at the top of the documentation page.</p>
+ at the top of each documentation page.</p>
 </section>
-<p>We see that:</p>
-<ul>
-<li><a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L479-L523">lru_cache()</a> passes most of the work to <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L525-L639">_lru_cache_wrapper()</a>.</li>
-<li><a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L525-L639">_lru_cache_wrapper()</a> is ... weird. It sets up a bunch of variables,
-which are then used (and updated) by nested functions;
-what you're seeing here is an object in disguise,
-because <a class="external" href="https://web.archive.org/web/20170512101417/http://wiki.c2.com/?ClosuresAndObjectsAreEquivalent">closures and objects are equivalent</a>.
-But, let's not get distracted.</li>
-<li><a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L525-L639">_lru_cache_wrapper()</a> sets up a <code>cache</code> dict,
-and a doubly linked list,
-where each node is a <code>[prev, next, key, value]</code> list
-(another cheap way of defining an &quot;object&quot;).</li>
-</ul>
-<p>Indeed, the solution is a doubly linked list,
-because it allows us to move recently used items to one end in O(1):
-first, remove the node from its current position
-and splice its neighbors together,
-second, wedge it after the last element at the &quot;recently used&quot; end.</p>
-<p>Of note is that unlike <a class="external" href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache</a>,
-we need not one linked list,
-but one for each priority
-(and we need to keep track of their ends).</p>
-<p>But, before we turn our <code>Item</code> in a linked list node
-by making it mutable and adding prev/next links,
-let's look at another candidate.</p>
-<h3 id="collections-ordereddict">collections.OrderedDict<span class="headerlink"> <a href="#collections-ordereddict" title="permalink">#</a></span></h3>
-<p>If you search <a class="external" href="https://docs.python.org/3.12/search.html?q=LRU">for &quot;LRU&quot;</a> in the Python docs,
-the second result points to <a class="external" href="https://docs.python.org/3/library/collections.html#ordereddict-objects">OrderedDict objects</a>.</p>
+<p><a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L479-L523">lru_cache()</a> delegates to <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/functools.py#L525-L639">_lru_cache_wrapper()</a>,
+which sets up a bunch of variables to be used by nested functions.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>
+Among the variables is
+a <code>cache</code> dict
+and a doubly linked list
+where nodes are [prev, next, key, value] lists.<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup></p>
+<p><a id="dll"></a></p>
+<p>And that's the answer – 
+a doubly linked list allows tracking item use in <strong>O(1)</strong>:
+each time a node is used, 
+remove it from its current position and plop it at the &quot;recently used&quot; end;
+whatever's at the other end will be the least recently used item.</p>
+<p>Unlike <a class="external" href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache()</a>,
+we need one doubly linked list <em>for each priority</em>.</p>
+<p>But, before making <code>Item</code> mutable and giving it prev/next links,
+let's dive deeper.</p>
+<h3 id="ordereddict">OrderedDict<span class="headerlink"> <a href="#ordereddict" title="permalink">#</a></span></h3>
+<p>If you <a class="external" href="https://docs.python.org/3.12/search.html?q=LRU">search the docs</a> for &quot;LRU&quot;, 
+the next result after lru_cache() 
+is <a class="external" href="https://docs.python.org/3/library/collections.html#ordereddict-objects">OrderedDict</a>.</p>
 <blockquote>
 <p>Some differences from <a class="external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a> still remain:
 [...]
 The <a class="external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict">OrderedDict</a> algorithm can handle frequent reordering operations better than dict.
-[...] <strong>this makes it suitable for implementing various kinds of LRU caches</strong>.</p>
+[...] this makes it suitable for implementing various kinds of LRU caches.</p>
 </blockquote>
 <p>Specifically:</p>
 <blockquote>
 <p><a class="external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict">OrderedDict</a> has a <code>move_to_end()</code> method to efficiently reposition an element to an endpoint.</p>
 </blockquote>
-<p>Since regular <a class="external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>s preserve insertion order,
-one can emulate that with <code>d[k] = d.pop(k)</code>,
-and the docs say as much.
-I wonder what makes <code>move_to_end()</code> efficient;
-<a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/collections/__init__.py#L90">this comment</a> may shed some light:</p>
+<p>Indeed, since <a class="external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>s preserve insertion order,
+you can use <code>d[k] = d.pop(k)</code> to move items to the end.</p>
+<p>What makes <a class="external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict.move_to_end">move_to_end()</a> better, then?
+<a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/collections/__init__.py#L90">This comment</a> may shed some light:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">90</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="c1"># The internal self.__map dict maps keys to links in a doubly linked list.</span>
 </code></pre></div></td></tr></table></div>
-<p>Ha! Indeed, <code>move_to_end()</code> <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/collections/__init__.py#L188-L211">does exactly what we described above</a>.
-This is good news – it means we don't have to do it ourselves.</p>
+<p>Ha, that's <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/collections/__init__.py#L188-L211">exactly</a> what we described <a class="anchor" href="#dll">above</a>!</p>
 <!-- ## init -->
+<hr />
+<!-- FIXME: continue from here -->
 <p>So, we need one OrderedDict (read: doubly linked list) for each priority,
 but we still need to keep track of which priority is lowest:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
@@ -807,7 +797,7 @@ we can get it to pass:</p>
 <li><code>push()</code> – to add items</li>
 <li><code>peek()</code> – to check what items have the lowest expiry time or priority</li>
 <li><code>remove()</code> – to delete items</li>
-<li><code>pop()</code> – not used, but would be without <a class="anchor" href="#quality-of-life-refactoring">the <code>delete()</code> refactoring</a></li>
+<li><code>pop()</code> – not used, but would be without <a class="anchor" href="#delete-refactoring">the <code>delete()</code> refactoring</a></li>
 </ul>
 <p>There are two observations we can make on top of this.</p>
 <p>First, the <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue">priority queue</a> Wikipedia page does not mention any <code>remove()</code> operation.</p>
@@ -1044,7 +1034,7 @@ which looks like a mature library with various sorts of binary trees
 <p>I'm not salty because the red-black tree took two hours to implement.</p>
 <p>I'm salty because after spending all that time,
 I find that <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a>,
-a pure Python library,<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>
+a pure Python library,<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup>
 is <em>faster</em> in practice than
 fancy self-balancing binary search trees implemented in C!</p>
 <p>It has <a class="external" href="https://grantjenks.com/docs/sortedcontainers/performance.html">extensive benchmarks</a> to prove it,
@@ -1068,7 +1058,7 @@ and faster iteration.</p>
 <p>Of course, there are more details,
 but I think that gives you a decent idea of how and why it works,
 enough that with a bit of tinkering
-you might be able to implement it yourself.<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup></p>
+you might be able to implement it yourself.<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup></p>
 <h2 id="making-it-stdlib-only">making it stdlib only<span class="headerlink"> <a href="#making-it-stdlib-only" title="permalink">#</a></span></h2>
 <p>But <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a> is not in stdlib,
 and we don't want to implement it ourselves.</p>
@@ -1485,11 +1475,15 @@ you don't need to understand how it works if the specs fit the requirements</li>
 <li id="fn-2"><p>This early on, the name doesn't really matter,
 but we'll go with the correct, descriptive one;
 in the first draft of the code, it was called MagicDS. ✨ <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-3"><p><a class="external" href="https://docs.python.org/3/library/bisect.html">bisect</a> itself has
+<li id="fn-3"><p>You have to admit this is at least a bit weird;
+what you're looking at is an object in a trench coat,
+at least if you think <a class="external" href="https://web.archive.org/web/20170512101417/http://wiki.c2.com/?ClosuresAndObjectsAreEquivalent">closures and objects are equivalent</a>. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-4"><p>Another way of getting an &quot;object&quot; on the cheap. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-5"><p><a class="external" href="https://docs.python.org/3/library/bisect.html">bisect</a> itself has
 <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/bisect.py#L110-L114">a fast C implementation</a>,
 so I guess <em>technically</em> it's not pure Python.
-But given that stdlib is already there, does that count? <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-4"><p><a class="external" href="https://peps.python.org/pep-0020/">If the implementation is easy to explain, it may be a good idea.</a> <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
+But given that stdlib is already there, does that count? <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-6"><p><a class="external" href="https://peps.python.org/pep-0020/">If the implementation is easy to explain, it may be a good idea.</a> <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
