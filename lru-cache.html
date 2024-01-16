@@ -149,15 +149,16 @@ but we'll end up with a decent solution anyway!</p>
 <li><a href="#ordereddict">OrderedDict</a></li>
 </ul>
 </li>
-<li><a href="#make-it-fast">make it fast</a>
+<li><a href="#problem-our-priority-queue-is-slow">Problem: our priority queue is slow</a>
 <ul>
 <li><a href="#heapq">heapq</a></li>
 <li><a href="#bisect">bisect</a></li>
-<li><a href="#self-balancing-binary-trees">self-balancing binary trees</a></li>
+<li><a href="#pop-optimization">pop() optimization</a></li>
+<li><a href="#binary-search-trees">Binary search trees</a></li>
 <li><a href="#sorted-containers">Sorted Containers</a></li>
 </ul>
 </li>
-<li><a href="#making-it-stdlib-only">making it stdlib only</a>
+<li><a href="#problem-sorted-containers-is-not-in-the-standard-library-either">Problem: Sorted Containers is not in the standard library either</a>
 <ul>
 <li><a href="#expires-buckets">expires buckets</a></li>
 <li><a href="#bisect-1">bisect</a></li>
@@ -455,7 +456,7 @@ for now, let's just keep our elements in a plain list.</p>
 </code></pre></div>
 
 <p>The easiest way to get the smallest value is to keep the list sorted;
-the downside is that <code>push()</code> is now <strong>O(n log n)</strong>
+the downside is that <code>push()</code> is now <strong>O(n log n)</strong>
 – although, because the list is always sorted,
 it can be as good as <strong>O(n)</strong> depending on the <a class="external" href="https://en.wikipedia.org/wiki/Timsort">implementation</a>.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">push</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
@@ -630,7 +631,6 @@ remove the one with the lowest priority:</p>
     <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;C&#39;</span>
 </code></pre></div>
 
-<p><a id="delete-refactoring"></a></p>
 <h3 id="problem-we-re-deleting-items-in-three-places">Problem: we're deleting items in three places<span class="headerlink"> <a href="#problem-we-re-deleting-items-in-three-places" title="permalink">#</a></span></h3>
 <p>I said we'll postpone performance optimizations
 until we have a complete solution,
@@ -696,12 +696,12 @@ a doubly linked list allows tracking item use in <strong>O(1)</strong>:
 each time a node is used, 
 remove it from its current position and plop it at the &quot;recently used&quot; end;
 whatever's at the other end will be the least recently used item.</p>
-<p>Unlike <a class="external" href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache()</a>,
+<p>Note that, unlike <a class="external" href="https://docs.python.org/3/library/functools.html#functools.lru_cache">lru_cache()</a>,
 we need one doubly linked list <em>for each priority</em>.</p>
 <p>But, before making <code>Item</code> mutable and giving it prev/next links,
 let's dive deeper.</p>
 <h3 id="ordereddict">OrderedDict<span class="headerlink"> <a href="#ordereddict" title="permalink">#</a></span></h3>
-<p>If you <a class="external" href="https://docs.python.org/3.12/search.html?q=LRU">search the docs</a> for &quot;LRU&quot;, 
+<p>If you <a class="external" href="https://docs.python.org/3.12/search.html?q=LRU">search the docs for &quot;LRU&quot;</a>, 
 the next result after lru_cache() 
 is <a class="external" href="https://docs.python.org/3/library/collections.html#ordereddict-objects">OrderedDict</a>.</p>
 <blockquote>
@@ -714,26 +714,24 @@ The <a class="external" href="https://docs.python.org/3/library/collections.html
 <blockquote>
 <p><a class="external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict">OrderedDict</a> has a <code>move_to_end()</code> method to efficiently reposition an element to an endpoint.</p>
 </blockquote>
-<p>Indeed, since <a class="external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>s preserve insertion order,
-you can use <code>d[k] = d.pop(k)</code> to move items to the end.</p>
-<p>What makes <a class="external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict.move_to_end">move_to_end()</a> better, then?
+<p>Since <a class="external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>s preserve insertion order,
+you can use <code>d[k] = d.pop(k)</code> to move items to the end...
+What makes <a class="external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict.move_to_end">move_to_end()</a> better, then?
 <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/collections/__init__.py#L90">This comment</a> may shed some light:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">90</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="c1"># The internal self.__map dict maps keys to links in a doubly linked list.</span>
 </code></pre></div></td></tr></table></div>
-<p>Ha, that's <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/collections/__init__.py#L188-L211">exactly</a> what we described <a class="anchor" href="#dll">above</a>!</p>
-<!-- ## init -->
+<p>Indeed, move_to_end() <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/collections/__init__.py#L188-L211">does exactly</a> what we described <a class="anchor" href="#dll">above</a> –
+this is good news, it means we don't have to do it ourselves!</p>
 <hr />
-<!-- FIXME: continue from here -->
 <p>So, we need one OrderedDict (read: doubly linked list) for each priority,
-but we still need to keep track of which priority is lowest:</p>
+but still need to keep track the lowest priority:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">expires</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
 </code></pre></div>
 
-<!-- ## set -->
-<p>The part of <code>set()</code> having to do with priorities becomes a bit more complicated:</p>
+<p>Handling priorities in <code>set()</code> gets a bit more complicated:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">priority_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">priority_bucket</span><span class="p">:</span>
             <span class="n">priority_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="p">[</span><span class="n">priority</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
@@ -741,9 +739,7 @@ but we still need to keep track of which priority is lowest:</p>
         <span class="n">priority_bucket</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 </code></pre></div>
 
-<!-- ## evict -->
-<p>The part of <code>evict()</code> that handles priorities needs to be updated as well,
-to remove the element at the beginning of bucket with the lowest priority.</p>
+<p>But now we can finally evict the least recently used item:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span> <span class="o">==</span> <span class="n">initial_size</span><span class="p">:</span>
             <span class="n">priority</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
             <span class="n">priority_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span>
@@ -751,10 +747,7 @@ to remove the element at the beginning of bucket with the lowest priority.</p>
             <span class="bp">self</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
 </code></pre></div>
 
-<!-- ## delete -->
-<p>Deleting gets extra stuff too –
-after we delete the key from the bucket,
-we also clean up the bucket if it's empty.</p>
+<p>In <code>delete()</code>, we're careful to get rid of empty buckets:<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup></p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">priority_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="p">[</span><span class="n">priority</span><span class="p">]</span>
         <span class="k">del</span> <span class="n">priority_bucket</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">priority_bucket</span><span class="p">:</span>
@@ -762,14 +755,7 @@ we also clean up the bucket if it's empty.</p>
             <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span>
 </code></pre></div>
 
-<p>This isn't strictly needed,
-I'm doing it to release the memory held by the dict,
-since it seems <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Objects/dictnotes.txt#L93-L100">dicts are resized only when items are added, not removed</a>;
-but, if it's likely a priority would be reused soon,
-we could get away with doing nothing.</p>
-<!-- ## tests -->
-<p>At this point, existing tests should pass again,
-and we can add a new (failing) one for the LRU part:</p>
+<p>Existing tests pass again, and we can add a new (still failing) one:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">test_lru</span><span class="p">():</span>
     <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">FakeTime</span><span class="p">())</span>
 
@@ -784,31 +770,30 @@ and we can add a new (failing) one for the LRU part:</p>
     <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;C&#39;</span>
 </code></pre></div>
 
-<!-- ## get -->
-<p>... and with just one line at the end of <code>get()</code>,
-we can get it to pass:</p>
+<p>All that's needed to make it pass is to call <a class="external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict.move_to_end">move_to_end()</a> in <code>get()</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="p">[</span><span class="n">item</span><span class="o">.</span><span class="n">priority</span><span class="p">]</span><span class="o">.</span><span class="n">move_to_end</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">item</span><span class="o">.</span><span class="n">value</span>
 </code></pre></div>
 
-<h2 id="make-it-fast">make it fast<span class="headerlink"> <a href="#make-it-fast" title="permalink">#</a></span></h2>
-<p>Let's make a quick recap of the priority queue methods we need so far and why:</p>
+<h2 id="problem-our-priority-queue-is-slow">Problem: our priority queue is slow<span class="headerlink"> <a href="#problem-our-priority-queue-is-slow" title="permalink">#</a></span></h2>
+<p>OK, we have a complete solution,
+it's time to deal with the priority queue implementation.
+Let's do a quick recap of the methods we need and why:</p>
 <ul>
 <li><code>push()</code> – to add items</li>
-<li><code>peek()</code> – to check what items have the lowest expiry time or priority</li>
+<li><code>peek()</code> – to get items / buckets with the lowest expiry time / priority</li>
 <li><code>remove()</code> – to delete items</li>
-<li><code>pop()</code> – not used, but would be without <a class="anchor" href="#delete-refactoring">the <code>delete()</code> refactoring</a></li>
+<li><code>pop()</code> – not used, but would be without the <a class="anchor" href="#problem-we-re-deleting-items-in-three-places"><code>delete()</code> refactoring</a></li>
 </ul>
-<p>There are two observations we can make on top of this.</p>
-<p>First, the <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue">priority queue</a> Wikipedia page does not mention any <code>remove()</code> operation.</p>
-<p>Second, even if we unpack <code>delete()</code>,
-we'll only <code>pop()</code> an item from either the expiry <em>or</em> the priorities queue,
+<p>We make two related observations:
+first, there's no <em>remove</em> operation on the  <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue">priority queue</a> Wikipedia page;
+second, even if we unpack <code>delete()</code>,
+we only get to <code>pop()</code> an item/bucket from one of the queues,
 and still have to <code>remove()</code> it from the other.</p>
-<p>Indeed, <strong>this is what makes the problem difficult</strong> –
-we need to maintain not one, but <em>two</em> independent priority queues,
-preventing us from using data structures commonly used to implement them.</p>
+<p>And <strong>this is what makes the problem tricky</strong> –
+we need to maintain not one, but <em>two</em> independent priority queues.</p>
 <h3 id="heapq">heapq<span class="headerlink"> <a href="#heapq" title="permalink">#</a></span></h3>
-<p>if you search <a class="external" href="https://docs.python.org/3.12/search.html?q=priority+queue">for &quot;priority queue&quot;</a> in the Python docs,
+<p>If you <a class="external" href="https://docs.python.org/3.12/search.html?q=priority+queue">search the docs for &quot;priority queue&quot;</a>,
 you'll find <a class="external" href="https://docs.python.org/3/library/heapq.html">heapq</a>, which:</p>
 <blockquote>
 <p>[...] provides an implementation of the heap queue algorithm,
@@ -822,12 +807,11 @@ you'll find <a class="external" href="https://docs.python.org/3/library/heapq.ht
 > they are conceptually distinct from heaps. [...]
 
 -->
-<p>ok, reading through the heapq documentation,
-we find <em>extensive</em> <a class="external" href="https://docs.python.org/3/library/heapq.html#priority-queue-implementation-notes">notes on priority queues</a>
-(<a class="internal" href="/output">good docs are nice like that</a>).
+<p>Reading on,
+we find extensive <a class="external" href="https://docs.python.org/3/library/heapq.html#priority-queue-implementation-notes">notes on implementing priority queues</a>;
 particularly interesting are
-using <em>(priority, item)</em> tuples (we're already doing this!)
-and <em>removing entries</em>:</p>
+using <em>(priority, item)</em> tuples (already doing this!)
+and removing entries:</p>
 <blockquote>
 <p>Removing the entry or changing its priority is more difficult
 because it would break the heap structure invariants.
@@ -835,14 +819,14 @@ So, a possible solution is to mark the entry as removed
 and add a new entry with the revised priority.</p>
 </blockquote>
 <p>This workaround is needed because while
-<a class="external" href="https://stackoverflow.com/questions/10162679/python-delete-element-from-heap/10163422#10163422">removing the i-th element can be done in O(log n)</a>,
-finding the index of the element is O(n).
+removing the i-th element <a class="external" href="https://stackoverflow.com/questions/10162679/python-delete-element-from-heap/10163422#10163422">can be done in <strong>O(log n)</strong></a>,
+finding its index is <strong>O(n)</strong>.
 To summarize, we have:</p>
 <table class="table">
 <thead>
 <tr>
   <th></th>
-  <th>naive (sort)</th>
+  <th>sort</th>
   <th>heapq</th>
 </tr>
 </thead>
@@ -869,45 +853,39 @@ To summarize, we have:</p>
 </tr>
 </tbody>
 </table>
-<p>Nevertheless, with a few assumptions, the workaround could work:</p>
+<p>Still, with a few mitigating assumptions, it could work:</p>
 <ul>
-<li>we can assume priorities are static,
-so we never need to remove a bucket</li>
-<li>marked-to-be-removed expiry times will eventually be
-pop()-ed anyway when they expire;
-we can assume expiry time doesn't change for a lot of items;
-we can also assume most evictions are of expired items,
-and not because of priority
-(which causes removed entries to accumulate in the expiry queue)</li>
+<li>we can assume priorities are static, so buckets never get removed</li>
+<li>to-be-removed expiry times will get popped sooner or later anyway;
+we can assume that most evictions are due to expired items,
+and that items being evicted due to low priority (i.e. when the cache is full)
+and item updates are rare
+(both cause to-be-removed entries to accumulate in the expiry queue)</li>
 </ul>
-<p>...but, that's maybe too many assumptions for my liking.</p>
+<!-- ...but, that's maybe too many assumptions for my liking. -->
 <h3 id="bisect">bisect<span class="headerlink"> <a href="#bisect" title="permalink">#</a></span></h3>
 <p>One way of finding an element in better than O(n) is <a class="external" href="https://docs.python.org/3/library/bisect.html">bisect</a>, which:</p>
 <blockquote>
 <p>[...] provides support for maintaining a list in sorted order
 without having to sort the list after each insertion.</p>
 </blockquote>
-<p>This looks like it could provide an improvement
+<p>This may provide an improvement
 to our <a class="anchor" href="#priority-queue">naive implementation</a>;
-however, reading further to <a class="external" href="https://docs.python.org/3/library/bisect.html#performance-notes">Performance Notes</a>,
+sadly, reading further to <a class="external" href="https://docs.python.org/3/library/bisect.html#performance-notes">Performance Notes</a>
 we find that:</p>
 <blockquote>
-<p>The insort() functions are O(n) because the logarithmic search step
+<p>The insort() functions are <strong>O(n)</strong> because the logarithmic search step
 is dominated by the linear time insertion step.</p>
 </blockquote>
-<p>Now, that's still better than the naive solution.</p>
-<p>While we're here, there's an unrelated improvement that applies to both.
-With a sorted list, pop() is O(n) only because
-we need to shift all elements after index 0 to cover the gap;
-if the list was in <em>reverse</em> order,
-we'd pop() <em>from the end</em>,
-<a class="external" href="https://wiki.python.org/moin/TimeComplexity">which is O(1)</a>,
-because there's no gap to cover. So:</p>
+<p>While in general that's better than just about any sort,
+we happen to be hitting the best case of our sort <a class="external" href="https://en.wikipedia.org/wiki/Timsort">implementation</a>,
+which has the same complexity.
+(Nevertheless, shifting elements is likely cheaper than the same number of comparisons.)</p>
 <table class="table">
 <thead>
 <tr>
   <th></th>
-  <th>naive (sort)</th>
+  <th>sort</th>
   <th>heapq</th>
   <th>bisect</th>
 </tr>
@@ -917,7 +895,7 @@ because there's no gap to cover. So:</p>
   <td>push()</td>
   <td>O(n)</td>
   <td>O(log n)</td>
-  <td>O(log n) + <strong>O(n)</strong></td>
+  <td>O(n)</td>
 </tr>
 <tr>
   <td>peek()</td>
@@ -927,15 +905,15 @@ because there's no gap to cover. So:</p>
 </tr>
 <tr>
   <td>pop()</td>
-  <td>O(1)</td>
+  <td>O(n)</td>
   <td>O(log n)</td>
-  <td>O(1)</td>
+  <td>O(n)</td>
 </tr>
 <tr>
   <td>remove()</td>
   <td>O(n)</td>
   <td>O(n)</td>
-  <td>O(log n) + <strong>O(n)</strong></td>
+  <td>O(n)</td>
 </tr>
 </tbody>
 </table>
@@ -945,38 +923,21 @@ because there's no gap to cover. So:</p>
 that uses <em>bisect</em> to managed sorted collections of data.</p>
 </blockquote>
 <p>Not in stdlib, moving along... ¯\_(ツ)_/¯</p>
-<h3 id="self-balancing-binary-trees">self-balancing binary trees<span class="headerlink"> <a href="#self-balancing-binary-trees" title="permalink">#</a></span></h3>
-<p>OK, I kinda ran out of ideas,
-the <a class="external" href="https://docs.python.org/3/library/datatypes.html">Data Types</a> section of the docs
-doesn't seem to have anything else that may help.</p>
-<p>We have two options.
-We could try to find some data structure
-that keeps some elements in sorted order
-that can do better than <a class="anchor" href="#bisect">bisect</a>.
-Or, we could cheat and
-continue reading the Wikipedia <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue">priority queue</a> page.
-Both paths end up in the same place.</p>
-<p>Skipping past the <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue#Naive_implementations">naive implementations</a>,
-to the <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue#Usual_implementation">usual implementation</a>, we find that:</p>
-<blockquote>
-<p>To improve performance, priority queues are typically based on a <a class="external" href="https://en.wikipedia.org/wiki/Heap_(data_structure)">heap</a>, [...]</p>
-</blockquote>
-<p>Already looked into that, doesn't work for us. Next:</p>
-<blockquote>
-<p>Alternatively, when a <a class="external" href="https://en.wikipedia.org/wiki/Self-balancing_binary_search_tree">self-balancing binary search tree</a> is used,
-insertion and removal also take O(log n) time [...]</p>
-</blockquote>
-<p>There, that's what we were looking for!
-(In case you're actually preparing for an interview,
-this is likely also what your interviewer is looking for.)</p>
+<h3 id="pop-optimization">pop() optimization<span class="headerlink"> <a href="#pop-optimization" title="permalink">#</a></span></h3>
+<p>There's an unrelated improvement that applies to both
+the <a class="anchor" href="#priority-queue">naive solution</a> and <a class="anchor" href="#bisect">bisect</a>.
+With a sorted list, pop() is <strong>O(n)</strong> because
+it shifts all elements after the first;
+if the order was reversed,
+we'd pop() <em>from the end</em>,
+<a class="external" href="https://wiki.python.org/moin/TimeComplexity">which is <strong>O(1)</strong></a>. So:</p>
 <table class="table">
 <thead>
 <tr>
   <th></th>
-  <th>naive (sort)</th>
+  <th>sort</th>
   <th>heapq</th>
   <th>bisect</th>
-  <th>self-balancing BST</th>
 </tr>
 </thead>
 <tbody>
@@ -984,7 +945,64 @@ this is likely also what your interviewer is looking for.)</p>
   <td>push()</td>
   <td>O(n)</td>
   <td>O(log n)</td>
-  <td>O(log n) + <strong>O(n)</strong></td>
+  <td>O(n)</td>
+</tr>
+<tr>
+  <td>peek()</td>
+  <td>O(1)</td>
+  <td>O(1)</td>
+  <td>O(1)</td>
+</tr>
+<tr>
+  <td>pop()</td>
+  <td>O(1)<a class="anchor" href="#pop-optimization">*</a></td>
+  <td>O(log n)</td>
+  <td>O(1)<a class="anchor" href="#pop-optimization">*</a></td>
+</tr>
+<tr>
+  <td>remove()</td>
+  <td>O(n)</td>
+  <td>O(n)</td>
+  <td>O(n)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="binary-search-trees">Binary search trees<span class="headerlink"> <a href="#binary-search-trees" title="permalink">#</a></span></h3>
+<p>OK, I'm out of ideas, 
+and there's nothing else <a class="external" href="https://docs.python.org/3/library/datatypes.html">in stdlib</a> that can help.</p>
+<p>We can restate the problem as follows:
+we need a sorted data structure
+that can do better than <strong>O(n)</strong> for push() / remove().</p>
+<p>We've already peeked at the Wikipedia <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue">priority queue</a> page,
+so let's keep reading – 
+skipping past the <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue#Naive_implementations">naive implementations</a>,
+to the <a class="external" href="https://en.wikipedia.org/wiki/Priority_queue#Usual_implementation">usual implementation</a>, we find that:</p>
+<blockquote>
+<p>To improve performance, priority queues are typically based on a <a class="external" href="https://en.wikipedia.org/wiki/Heap_(data_structure)">heap</a>, [...]</p>
+</blockquote>
+<p>Looked into that, didn't work; next:</p>
+<blockquote>
+<p>Alternatively, when a <a class="external" href="https://en.wikipedia.org/wiki/Self-balancing_binary_search_tree">self-balancing binary search tree</a> is used,
+insertion and removal also take O(log n) time [...]</p>
+</blockquote>
+<p><em>There</em>, that's what we're looking for!
+(And likely what your interviewer is, too.)</p>
+<table class="table">
+<thead>
+<tr>
+  <th></th>
+  <th>sort</th>
+  <th>heapq</th>
+  <th>bisect</th>
+  <th>BST</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>push()</td>
+  <td>O(n)</td>
+  <td>O(log n)</td>
+  <td>O(n)</td>
   <td>O(log n)</td>
 </tr>
 <tr>
@@ -996,29 +1014,28 @@ this is likely also what your interviewer is looking for.)</p>
 </tr>
 <tr>
   <td>pop()</td>
-  <td>O(1)</td>
+  <td>O(1)<a class="anchor" href="#pop-optimization">*</a></td>
   <td>O(log n)</td>
-  <td>O(1)</td>
+  <td>O(1)<a class="anchor" href="#pop-optimization">*</a></td>
   <td>O(log n)</td>
 </tr>
 <tr>
   <td>remove()</td>
   <td>O(n)</td>
   <td>O(log n)</td>
-  <td>O(log n) + <strong>O(n)</strong></td>
+  <td>O(n)</td>
   <td>O(log n)</td>
 </tr>
 </tbody>
 </table>
-<p>OK, but there's no self-balancing BST implementation in the stdlib,
-and I sure as hell am not implementing one right now,
-I still have flashbacks from when I tried to do a red-black tree
+<p>But there's no self-balancing BST in the standard library,
+and I sure as hell am not implementing one right now
+– I still have flashbacks from when I tried to do a red-black tree
 and two hours later it still had bugs
-(I mean, <a class="external" href="https://en.wikipedia.org/wiki/Red%E2%80%93black_tree#Operations">just look at how long this explanation is!</a>).</p>
+(I mean, <a class="external" href="https://en.wikipedia.org/wiki/Red%E2%80%93black_tree#Operations">look at the length of this explanation!</a>).</p>
 <!-- TODO and there's other, more complicated data structures that mix trees with something else -->
-<p>After some googling we find, among others, <a class="external" href="https://pypi.org/project/bintrees/">bintrees</a>,
-which looks like a mature library with various sorts of binary trees
-...except:</p>
+<p>After a bit of googling we find, among others, <a class="external" href="https://pypi.org/project/bintrees/">bintrees</a>,
+a mature library that provides all sorts of binary search trees... except:</p>
 <blockquote>
 <p>Bintrees Development Stopped</p>
 <p>Use <em>sortedcontainers</em> instead: <a class="external" href="https://pypi.python.org/pypi/sortedcontainers">https://pypi.python.org/pypi/sortedcontainers</a></p>
@@ -1030,22 +1047,19 @@ which looks like a mature library with various sorts of binary trees
 <p>Depends on the <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a> module.</p>
 </blockquote>
 <p>(￢‿￢ )</p>
-<p>Oh, I remember, I remember now...</p>
-<p>I'm not salty because the red-black tree took two hours to implement.</p>
-<p>I'm salty because after spending all that time,
-I find that <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a>,
-a pure Python library,<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup>
-is <em>faster</em> in practice than
+<p>I remember, I remember now...
+I'm not salty because the red-black tree took two hours to implement.
+I'm salty because after all that time,
+I found <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a>,
+a pure Python library<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
+that is <em>faster</em> in practice than
 fancy self-balancing binary search trees implemented in C!</p>
 <p>It has <a class="external" href="https://grantjenks.com/docs/sortedcontainers/performance.html">extensive benchmarks</a> to prove it,
 and simulated workload benchmarks for our own use case,
 <a class="external" href="https://grantjenks.com/docs/sortedcontainers/performance-workload.html#priority-queue">priority queues</a>
 – so yeah, while the interview answer is &quot;self-balancing BSTs&quot;,
 the <em>actual</em> answer is <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a>.</p>
-<hr />
-<p>So, how does it work?</p>
-<p>Well, there's an <a class="external" href="https://grantjenks.com/docs/sortedcontainers/implementation.html">extensive explanation</a> too
-(<a class="internal" href="/output#good-libraries-educate">good libraries educate</a>);</p>
+<p>So, how does it work? There's an <a class="external" href="https://grantjenks.com/docs/sortedcontainers/implementation.html">extensive explanation</a> too:<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup></p>
 <blockquote>
 <p>The <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a> internal implementation is based on a couple observations. The first is that Python’s <em>list</em> is fast, <em>really fast</em>. [...] The second is that <em>bisect.insort</em> is fast. This is somewhat counter-intuitive since it involves shifting a series of items in a list. But modern processors do this really well. A lot of time has been spent optimizing mem-copy/mem-move-like operations both in hardware and software.</p>
 <p>But using only one list and <em>bisect.insort</em> would produce sluggish behavior for lengths exceeding ten thousand. So the implementation of <a class="external" href="https://grantjenks.com/docs/sortedcontainers/sortedlist.html">Sorted List</a> uses a list of lists to store elements. [...]</p>
@@ -1055,11 +1069,11 @@ fewer memory allocations,
 better cache locality,
 lower memory overhead,
 and faster iteration.</p>
-<p>Of course, there are more details,
-but I think that gives you a decent idea of how and why it works,
+<p>I think that gives you a decent idea of how and why it works,
 enough that with a bit of tinkering
-you might be able to implement it yourself.<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup></p>
-<h2 id="making-it-stdlib-only">making it stdlib only<span class="headerlink"> <a href="#making-it-stdlib-only" title="permalink">#</a></span></h2>
+you might be able to implement it yourself.<sup class="footnote-ref" id="fnref-8"><a href="#fn-8">8</a></sup></p>
+<h2 id="problem-sorted-containers-is-not-in-the-standard-library-either">Problem: Sorted Containers is not in the standard library either<span class="headerlink"> <a href="#problem-sorted-containers-is-not-in-the-standard-library-either" title="permalink">#</a></span></h2>
+<!-- FIXME: from here -->
 <p>But <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a> is not in stdlib,
 and we don't want to implement it ourselves.</p>
 <p>We did learn something, though – let's update that table one last time:</p>
@@ -1067,7 +1081,7 @@ and we don't want to implement it ourselves.</p>
 <thead>
 <tr>
   <th></th>
-  <th>naive (sort)</th>
+  <th>sort</th>
   <th>heapq</th>
   <th>bisect</th>
   <th>bisect &lt;10k</th>
@@ -1079,7 +1093,7 @@ and we don't want to implement it ourselves.</p>
   <td>push()</td>
   <td>O(n)</td>
   <td>O(log n)</td>
-  <td>O(log n) + <strong>O(n)</strong></td>
+  <td>O(n)</td>
   <td>O(log n)</td>
   <td>O(log n)</td>
 </tr>
@@ -1093,17 +1107,17 @@ and we don't want to implement it ourselves.</p>
 </tr>
 <tr>
   <td>pop()</td>
-  <td>O(1)</td>
+  <td>O(1)<a class="anchor" href="#pop-optimization">*</a></td>
   <td>O(log n)</td>
-  <td>O(1)</td>
-  <td>O(1)</td>
+  <td>O(1)<a class="anchor" href="#pop-optimization">*</a></td>
+  <td>O(1)<a class="anchor" href="#pop-optimization">*</a></td>
   <td>O(log n)</td>
 </tr>
 <tr>
   <td>remove()</td>
   <td>O(n)</td>
   <td>O(log n)</td>
-  <td>O(log n) + <strong>O(n)</strong></td>
+  <td>O(n)</td>
   <td>O(log n)</td>
   <td>O(log n)</td>
 </tr>
@@ -1479,11 +1493,19 @@ in the first draft of the code, it was called MagicDS. ✨ <a href="#fnref-2" cl
 what you're looking at is an object in a trench coat,
 at least if you think <a class="external" href="https://web.archive.org/web/20170512101417/http://wiki.c2.com/?ClosuresAndObjectsAreEquivalent">closures and objects are equivalent</a>. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-4"><p>Another way of getting an &quot;object&quot; on the cheap. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-5"><p><a class="external" href="https://docs.python.org/3/library/bisect.html">bisect</a> itself has
+<li id="fn-5"><p>If we assume a relatively small number of buckets
+that will be reused soon enough,
+this isn't strictly necessary.
+I'm partly doing it to release the memory held by the dict,
+since <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Objects/dictnotes.txt#L93-L100">dicts are resized only when items are added</a>. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-6"><p><a class="external" href="https://docs.python.org/3/library/bisect.html">bisect</a> itself has
 <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/bisect.py#L110-L114">a fast C implementation</a>,
 so I guess <em>technically</em> it's not pure Python.
-But given that stdlib is already there, does that count? <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-6"><p><a class="external" href="https://peps.python.org/pep-0020/">If the implementation is easy to explain, it may be a good idea.</a> <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
+But given that stdlib is already there, does that count? <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-7"><p>Remember, <a class="internal" href="/output#good-libraries-educate">good libraries educate</a>!
+Hell, there's even a <a class="external" href="https://www.youtube.com/watch?v=7z2Ki44Vs4E&amp;t=922s">PyCon 2016 talk</a>
+with the same explanation, if you prefer that. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-8"><p><a class="external" href="https://peps.python.org/pep-0020/">If the implementation is easy to explain, it may be a good idea.</a> <a href="#fnref-8" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
