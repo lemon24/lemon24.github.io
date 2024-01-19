@@ -158,14 +158,13 @@ but we'll end up with a decent solution anyway!</p>
 <li><a href="#sorted-containers">Sorted Containers</a></li>
 </ul>
 </li>
-<li><a href="#problem-sorted-containers-is-not-in-the-standard-library-either">Problem: Sorted Containers is not in the standard library either</a>
+<li><a href="#problem-sorted-containers-is-not-in-stdlib">Problem: Sorted Containers is not in stdlib</a>
 <ul>
-<li><a href="#expires-buckets">expires buckets</a></li>
-<li><a href="#bisect-1">bisect</a></li>
+<li><a href="#log-scale">Log scale</a></li>
+<li><a href="#bisect-finally">bisect, finally</a></li>
 </ul>
 </li>
 <li><a href="#conclusion">conclusion</a></li>
-<li><a href="#bonus-bucket-queue">bonus: bucket queue</a></li>
 </ul>
 </section>
 <h2 id="requirements">Requirements<span class="headerlink">&nbsp;<a href="#requirements" title="permalink">#</a></span></h2>
@@ -638,9 +637,9 @@ but I have a different kind of optimization in mind – for readability.</p>
 <p>We're deleting items in three slightly different ways,
 careful to keep three data structures in sync each time;
 it would be nice to do it only once.
-While it may seem premature,
+While a bit premature,
 through the magic of having written the article already,
-I'm confident it'll pay off.</p>
+I'm sure it will pay off.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
         <span class="o">*</span><span class="n">_</span><span class="p">,</span> <span class="n">expires</span><span class="p">,</span> <span class="n">priority</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">remove</span><span class="p">((</span><span class="n">expires</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
@@ -723,6 +722,7 @@ What makes <a class="external" href="https://docs.python.org/3/library/collectio
 <p>Indeed, move_to_end() <a class="external" href="https://github.com/python/cpython/blob/v3.12.0/Lib/collections/__init__.py#L188-L211">does exactly</a> what we described <a class="anchor" href="#dll">above</a> –
 this is good news, it means we don't have to do it ourselves!</p>
 <hr />
+<p><a id="priority-buckets"></a></p>
 <p>So, we need one OrderedDict (read: doubly linked list) for each priority,
 but still need to keep track the lowest priority:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
@@ -887,7 +887,7 @@ which has the same complexity.
   <th></th>
   <th>sort</th>
   <th>heapq</th>
-  <th>bisect</th>
+  <th><mark>bisect</mark></th>
 </tr>
 </thead>
 <tbody>
@@ -955,9 +955,9 @@ we'd pop() <em>from the end</em>,
 </tr>
 <tr>
   <td>pop()</td>
-  <td>O(1)<a class="anchor" href="#pop-optimization">*</a></td>
+  <td><mark>O(1)<a class="anchor" href="#pop-optimization">*</a></mark></td>
   <td>O(log n)</td>
-  <td>O(1)<a class="anchor" href="#pop-optimization">*</a></td>
+  <td><mark>O(1)<a class="anchor" href="#pop-optimization">*</a></marr></td>
 </tr>
 <tr>
   <td>remove()</td>
@@ -994,7 +994,7 @@ insertion and removal also take O(log n) time [...]</p>
   <th>sort</th>
   <th>heapq</th>
   <th>bisect</th>
-  <th>BST</th>
+  <th><mark>BST</mark></th>
 </tr>
 </thead>
 <tbody>
@@ -1059,7 +1059,7 @@ and simulated workload benchmarks for our own use case,
 <a class="external" href="https://grantjenks.com/docs/sortedcontainers/performance-workload.html#priority-queue">priority queues</a>
 – so yeah, while the interview answer is &quot;self-balancing BSTs&quot;,
 the <em>actual</em> answer is <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a>.</p>
-<p>So, how does it work? There's an <a class="external" href="https://grantjenks.com/docs/sortedcontainers/implementation.html">extensive explanation</a> too:<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup></p>
+<p>How does it work? There's an <a class="external" href="https://grantjenks.com/docs/sortedcontainers/implementation.html">extensive explanation</a> too:<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup></p>
 <blockquote>
 <p>The <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a> internal implementation is based on a couple observations. The first is that Python’s <em>list</em> is fast, <em>really fast</em>. [...] The second is that <em>bisect.insort</em><sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup> is fast. This is somewhat counter-intuitive since it involves shifting a series of items in a list. But modern processors do this really well. A lot of time has been spent optimizing mem-copy/mem-move-like operations both in hardware and software.</p>
 <p>But using only one list and <em>bisect.insort</em> would produce sluggish behavior for lengths exceeding ten thousand. So the implementation of <a class="external" href="https://grantjenks.com/docs/sortedcontainers/sortedlist.html">Sorted List</a> uses a list of lists to store elements. [...]</p>
@@ -1072,11 +1072,10 @@ and faster iteration.</p>
 <p>I think that gives you a decent idea of how and why it works,
 enough that with a bit of tinkering
 you might be able to implement it yourself.<sup class="footnote-ref" id="fnref-8"><a href="#fn-8">8</a></sup></p>
-<h2 id="problem-sorted-containers-is-not-in-the-standard-library-either">Problem: Sorted Containers is not in the standard library either<span class="headerlink">&nbsp;<a href="#problem-sorted-containers-is-not-in-the-standard-library-either" title="permalink">#</a></span></h2>
-<!-- FIXME: from here -->
-<p>But <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a> is not in stdlib,
-and we don't want to implement it ourselves.</p>
-<p>We did learn something, though – let's update that table one last time:</p>
+<h2 id="problem-sorted-containers-is-not-in-stdlib">Problem: Sorted Containers is not in stdlib<span class="headerlink">&nbsp;<a href="#problem-sorted-containers-is-not-in-stdlib" title="permalink">#</a></span></h2>
+<p>But <a class="external" href="https://grantjenks.com/docs/sortedcontainers/">Sorted Containers</a> is not in the standard library either,
+and we don't want to implement it ourselves.
+We did learn something from it, though:</p>
 <table class="table">
 <thead>
 <tr>
@@ -1084,7 +1083,7 @@ and we don't want to implement it ourselves.</p>
   <th>sort</th>
   <th>heapq</th>
   <th>bisect</th>
-  <th>bisect &lt;10k</th>
+  <th><mark>bisect &lt;10k</mark></th>
   <th>BST</th>
 </tr>
 </thead>
@@ -1123,36 +1122,37 @@ and we don't want to implement it ourselves.</p>
 </tr>
 </tbody>
 </table>
-<p>We're back to making assumptions,
-but this time we'll work hard to make them reasonable.</p>
+<p>We still need to make some assumptions, though:</p>
 <ol>
-<li>Do we really need more than 10k priorities in practice?
+<li>Do we really need more than 10k priorities?
  <strong>Likely no</strong>, let's just cap them at 10k.</li>
-<li>Do we really need more than 10k expiry times in practice?
- <strong>Maybe</strong> –
- with a granularity of 1 second,
- we get a maximum time of 2.7 hours,
- which seems a bit short;
- with 10 seconds,
- we get 27 hours,
+<li>Do we really need more than 10k expiry times?
+ <strong>Maybe?</strong> –
+ with 1 second granularity
+ we can represent only up to 2.7 hours;
+ 10 seconds takes us up to 27 hours,
  which may just work.</li>
 </ol>
-<p>OK, one more leap and we're done.</p>
-<p>The main thing we don't like about the 10k expiry times,
-aside from the short maximum time,
-is that the granularity is too low;
-this is especially a problem for short times –
+<p>OK, one more and we're done.
+The other issue,
+aside from the maximum time,
+is that the granularity is too low,
+especially for short times –
 rounding 1 to 10 seconds is much worse than
-rounding 2001 to 2010 seconds.</p>
-<p>Which begs the question –
-does it really matter if an item expires in 2010 seconds instead of 2001?
-<strong>Likely no</strong>, we just need a scheme that rounds in a predictable way.</p>
+rounding 2001 to 2010 seconds.
+Which begs the question –</p>
+<ol start="3">
+<li>Does it really matter if items expire in 2010 seconds instead of 2001?
+ <strong>Likely no</strong>,
+ but we need a way to round
+ small values with higher granularity than big ones.</li>
+</ol>
+<h3 id="log-scale">Log scale<span class="headerlink">&nbsp;<a href="#log-scale" title="permalink">#</a></span></h3>
 <p>How about 1, 2, 4, 8, ...?
-Rounding up to powers of two give us decreasing granularity,
-we just need to work around the time not starting at zero;
-one way of doing that is to just round up the entire expiry time,
-in the end, that's what we're trying to fit into a bucket.
-Let's get an intuition of how it would work:</p>
+Rounding up to powers of 2 gets us decreasing granularity,
+but time doesn't actually start at zero.
+We fix this by rounding up to <em>multiples</em> of powers of 2 instead;
+let's get an intuition of how it works:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">ceil</span><span class="p">((</span><span class="mi">2000</span> <span class="o">+</span>  <span class="mi">1</span><span class="p">)</span> <span class="o">/</span>  <span class="mi">1</span><span class="p">)</span> <span class="o">*</span>  <span class="mi">1</span> <span class="o">=</span> <span class="mi">2001</span>
 <span class="n">ceil</span><span class="p">((</span><span class="mi">2000</span> <span class="o">+</span>  <span class="mi">2</span><span class="p">)</span> <span class="o">/</span>  <span class="mi">2</span><span class="p">)</span> <span class="o">*</span>  <span class="mi">2</span> <span class="o">=</span> <span class="mi">2002</span>
 <span class="n">ceil</span><span class="p">((</span><span class="mi">2000</span> <span class="o">+</span>  <span class="mi">3</span><span class="p">)</span> <span class="o">/</span>  <span class="mi">4</span><span class="p">)</span> <span class="o">*</span>  <span class="mi">4</span> <span class="o">=</span> <span class="mi">2004</span>
@@ -1170,14 +1170,12 @@ Let's get an intuition of how it would work:</p>
 <span class="n">ceil</span><span class="p">((</span><span class="mi">2013</span> <span class="o">+</span> <span class="mi">16</span><span class="p">)</span> <span class="o">/</span> <span class="mi">16</span><span class="p">)</span> <span class="o">*</span> <span class="mi">16</span> <span class="o">=</span> <span class="mi">2032</span>
 <span class="n">ceil</span><span class="p">((</span><span class="mi">2013</span> <span class="o">+</span> <span class="mi">17</span><span class="p">)</span> <span class="o">/</span> <span class="mi">32</span><span class="p">)</span> <span class="o">*</span> <span class="mi">32</span> <span class="o">=</span> <span class="mi">2048</span>
 </code></pre></div>
-<p>The beauty of using aligned powers is that
+<p>The beauty of aligned powers is that
 for a relatively constant number of expiry times,
-the number of buckets remains roughly the same as time goes on –
-as expired buckets are removed from the beginning,
-new ones fill the gaps between the sparser remaining ones.</p>
-<p>OK, let's put it into code.
-The part that's trickier is rounding <code>maxage</code> to the next power of two
-– that's easily done by rounding its logarithm to the next integer.</p>
+the number of buckets remains roughly the same over time –
+as closely packed buckets are removed from the beginning,
+new ones fill the gaps between the sparser ones towards the end.</p>
+<p>OK, let's put it into code:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">log_bucket</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">maxage</span><span class="p">):</span>
     <span class="n">next_power</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">log2</span><span class="p">(</span><span class="n">maxage</span><span class="p">))</span>
     <span class="n">expires</span> <span class="o">=</span> <span class="n">now</span> <span class="o">+</span> <span class="n">maxage</span>
@@ -1194,7 +1192,7 @@ The part that's trickier is rounding <code>maxage</code> to the next power of tw
 <p>Looking good!</p>
 <p>There are two sources of error –
 first from rounding <code>maxage</code>,
-worst when it's one more than a power of two,
+worst when it's one more than a power of 2,
 and second from rounding the expiry time,
 also worst when it's one more than a power of two.
 Together, they approach 200% of <code>maxage</code>:</p>
@@ -1207,18 +1205,24 @@ Together, they approach 200% of <code>maxage</code>:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">log_bucket</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="mi">33</span><span class="p">)</span>  <span class="c1"># (128 - 64) / 33 ~= 191%</span>
 <span class="go">128</span>
 </code></pre></div>
-<p>200% error is quite a lot,
-but before we set to fix it,
+<p>200% error is quite a lot;
+before we set to fix it,
 let's confirm our reasoning.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">error</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">maxage</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;log_bucket() error.&quot;&quot;&quot;</span>
     <span class="n">bucket</span> <span class="o">=</span> <span class="n">log_bucket</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">maxage</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
     <span class="k">return</span> <span class="p">(</span><span class="n">bucket</span> <span class="o">-</span> <span class="n">now</span><span class="p">)</span> <span class="o">/</span> <span class="n">maxage</span> <span class="o">-</span> <span class="mi">1</span>
 
-<span class="k">def</span> <span class="nf">max_error</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
-    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="n">error</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="p">))</span>
+<span class="k">def</span> <span class="nf">max_error</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">max_maxage</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Worst log_bucket() error for all maxages up to max_maxage.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span>
+        <span class="n">error</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">maxage</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">maxage</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_maxage</span><span class="p">)</span>
+    <span class="p">)</span>
 
 <span class="k">def</span> <span class="nf">max_error_random</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
-    <span class="n">max_now</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Worst log_bucket() error for random inputs, out of n tries.&quot;&quot;&quot;</span>
+    <span class="n">max_now</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span> <span class="o">*</span> <span class="mi">2</span>
     <span class="n">max_maxage</span> <span class="o">=</span> <span class="mi">3600</span> <span class="o">*</span> <span class="mi">24</span> <span class="o">*</span> <span class="mi">31</span>
     <span class="n">rand</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
     <span class="k">return</span> <span class="nb">max</span><span class="p">(</span>
@@ -1236,10 +1240,9 @@ let's confirm our reasoning.</p>
 </code></pre></div>
 <p>Looks confirmed enough to me.</p>
 <p>So, how do we make the error smaller?
-Instead of rounding to the next power of two,
-we could round to the next half of a power of two,
-or a quarter, or an eighth...
-which means subtracting from the power of two:</p>
+Instead of rounding to the next power of 2,
+we round to the next half of a power of 2,
+or next quarter, or next eighth...</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">log_bucket</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">maxage</span><span class="p">,</span> <span class="n">shift</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
     <span class="n">next_power</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">log2</span><span class="p">(</span><span class="n">maxage</span><span class="p">)</span> <span class="o">-</span> <span class="n">shift</span><span class="p">))</span>
     <span class="n">expires</span> <span class="o">=</span> <span class="n">now</span> <span class="o">+</span> <span class="n">maxage</span>
@@ -1272,25 +1275,30 @@ which means subtracting from the power of two:</p>
 <span class="go">8   0.8%</span>
 <span class="go">9   0.4%</span>
 </code></pre></div>
-<p>So, with <code>shift=7</code>, the error is less that two percent!
-I wonder how many buckets is...</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">max_buckets</span><span class="p">(</span><span class="n">seconds</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+<p>With <code>shift=7</code>, the error is less that two percent;
+I wonder how many buckets that is...</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">max_buckets</span><span class="p">(</span><span class="n">max_maxage</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Number of buckets to cover all maxages up to max_maxage.&quot;&quot;&quot;</span>
     <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-    <span class="n">buckets</span> <span class="o">=</span> <span class="p">{</span><span class="n">log_bucket</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">seconds</span><span class="p">)}</span>
+    <span class="n">buckets</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">log_bucket</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">maxage</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">maxage</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_maxage</span><span class="p">)</span>
+    <span class="p">}</span>
     <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">buckets</span><span class="p">)</span>
 </code></pre></div>
 
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">max_buckets</span><span class="p">(</span><span class="mi">3600</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span>
-<span class="go">730</span>
+<span class="go">729</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">max_buckets</span><span class="p">(</span><span class="mi">3600</span> <span class="o">*</span> <span class="mi">24</span> <span class="o">*</span> <span class="mi">31</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span>
-<span class="go">1046</span>
+<span class="go">1047</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">max_buckets</span><span class="p">(</span><span class="mi">3600</span> <span class="o">*</span> <span class="mi">24</span> <span class="o">*</span> <span class="mi">365</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span>
-<span class="go">1280</span>
+<span class="go">1279</span>
 </code></pre></div>
-<p>That's 1.3k buckets for a whole year, way below 10k!</p>
-<h3 id="expires-buckets">expires buckets<span class="headerlink">&nbsp;<a href="#expires-buckets" title="permalink">#</a></span></h3>
-<p>TODO</p>
-<p><code>__init__()</code>:</p>
+<p>A bit over a thousand buckets for the whole year, not bad!</p>
+<!-- ## expires buckets -->
+<hr />
+<p>Before we can use any of that,
+we need to convert expiry times to buckets:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">expires_order</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
@@ -1298,7 +1306,7 @@ I wonder how many buckets is...</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
 </code></pre></div>
 
-<p><code>set()</code>:</p>
+<p>In <code>set()</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">expires_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">expires</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">expires_bucket</span><span class="p">:</span>
             <span class="n">expires_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="p">[</span><span class="n">expires</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
@@ -1306,7 +1314,7 @@ I wonder how many buckets is...</p>
         <span class="n">expires_bucket</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
 </code></pre></div>
 
-<p><code>evict()</code>:</p>
+<p>In <code>evict()</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
             <span class="n">expires</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_order</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">expires</span> <span class="o">&gt;</span> <span class="n">now</span><span class="p">:</span>
@@ -1316,7 +1324,7 @@ I wonder how many buckets is...</p>
                 <span class="bp">self</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
 </code></pre></div>
 
-<p><code>delete()</code>:</p>
+<p>In <code>delete()</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">expires_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="p">[</span><span class="n">expires</span><span class="p">]</span>
         <span class="n">expires_bucket</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">expires_bucket</span><span class="p">:</span>
@@ -1324,34 +1332,27 @@ I wonder how many buckets is...</p>
             <span class="bp">self</span><span class="o">.</span><span class="n">expires_order</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">expires</span><span class="p">)</span>
 </code></pre></div>
 
-<p>... refactor later</p>
-<p>now we can plug in <code>log_bucket()</code>;
-since we're at it,
-why not have priority work in the same way?</p>
+<p>(That looks a lot like the <a class="anchor" href="#priority-buckets">priority buckets</a> code,
+but I can't be bothered.)</p>
+<hr />
+<p>And now we plug <code>log_bucket()</code> in.
+Since we're at it,
+why not have unlimited priorities too?
+A hammer is a hammer and everything is a nail, after all.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">expires</span> <span class="o">=</span> <span class="n">log_bucket</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">maxage</span><span class="p">,</span> <span class="n">shift</span><span class="o">=</span><span class="mi">7</span><span class="p">)</span>
         <span class="n">priority</span> <span class="o">=</span> <span class="n">log_bucket</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">priority</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">shift</span><span class="o">=</span><span class="mi">7</span><span class="p">)</span>
         <span class="n">item</span> <span class="o">=</span> <span class="n">Item</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">expires</span><span class="p">,</span> <span class="n">priority</span><span class="p">)</span>
 </code></pre></div>
 
-<h3 id="bisect-1">bisect<span class="headerlink">&nbsp;<a href="#bisect-1" title="permalink">#</a></span></h3>
-<p>Time to implement the priority queue.</p>
-<p>We use <a class="external" href="https://docs.python.org/3/library/bisect.html#bisect.insort">insort()</a> to do so:</p>
+<h3 id="bisect-finally">bisect, finally<span class="headerlink">&nbsp;<a href="#bisect-finally" title="permalink">#</a></span></h3>
+<p>Time to fix that priority queue.</p>
+<p>We use <a class="external" href="https://docs.python.org/3/library/bisect.html#bisect.insort">insort()</a> to add priorities
+and <a class="external" href="https://docs.python.org/3/library/operator.html#operator.neg">operator.neg()</a> to keep the list <a class="anchor" href="#pop-optimization">reversed</a>:<sup class="footnote-ref" id="fnref-9"><a href="#fn-9">9</a></sup></p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">push</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
         <span class="n">bisect</span><span class="o">.</span><span class="n">insort</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">operator</span><span class="o">.</span><span class="n">neg</span><span class="p">)</span>
 </code></pre></div>
 
-<p>... but remember we need to maintain the list in reversed order,
-so the smallest element is at the end;
-using <a class="external" href="https://docs.python.org/3/library/operator.html#operator.neg">operator.neg()</a> works here,
-but limits values to numeric values (that support <code>-obj</code>)</p>
-<ul>
-<li>so it can't be used with tuples anymore</li>
-<li>it's OK, now we're storing the values somewhere else</li>
-<li>alternatively,
-we could make <a class="external" href="https://stackoverflow.com/a/24414594">a wrapper that reverses the sequence</a>,
-but that's overkill</li>
-</ul>
-<p><code>peek()</code> and <code>pop()</code> are trivial, as expected:</p>
+<p>We update <code>peek()</code> and <code>pop()</code> to handle the reverse order:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">peek</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
 
@@ -1359,11 +1360,9 @@ but that's overkill</li>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
 </code></pre></div>
 
+<!-- FIXME: from here -->
 <p>Finally, <code>remove()</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">remove</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">item</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">peek</span><span class="p">():</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
-            <span class="k">return</span>
         <span class="n">i</span> <span class="o">=</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect_left</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="o">-</span><span class="n">item</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">operator</span><span class="o">.</span><span class="n">neg</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="n">item</span><span class="p">:</span>
             <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
@@ -1478,11 +1477,6 @@ you don't need to understand how it works if the specs fit the requirements</li>
 
 </form>
 <p>TODO: other article</p>
-<h2 id="bonus-bucket-queue">bonus: bucket queue<span class="headerlink">&nbsp;<a href="#bonus-bucket-queue" title="permalink">#</a></span></h2>
-<p>TODO</p>
-<p>past usual implementations</p>
-<p>https://en.wikipedia.org/wiki/Bucket_queue</p>
-<p>https://en.wikipedia.org/wiki/Priority_queue#Specialized_heaps</p>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>Note the subtitle: <em>if you're not sure what to do yet</em>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
@@ -1505,6 +1499,10 @@ with the same explanation, if you prefer that. <a href="#fnref-6" class="footnot
 so I guess <em>technically</em> it's not pure Python.
 But given that stdlib is already there, does that count? <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-8"><p><a class="external" href="https://peps.python.org/pep-0020/">If the implementation is easy to explain, it may be a good idea.</a> <a href="#fnref-8" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-9"><p>This limits priorities to values that can be negated,
+so tuples won't work anymore.
+We could use a <a class="external" href="https://stackoverflow.com/a/24414594">&quot;reversed view&quot; wrapper</a>
+if we really cared about that. <a href="#fnref-9" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 

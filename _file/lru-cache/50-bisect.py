@@ -113,9 +113,6 @@ class PriorityQueue:
         return self.data.pop()
 
     def remove(self, item):
-        if item == self.peek():
-            self.pop()
-            return
         i = bisect.bisect_left(self.data, -item, key=operator.neg)
         if i != len(self.data) and self.data[i] == item:
             del self.data[i]
@@ -137,14 +134,20 @@ import random
 import functools
 
 def error(now, maxage, *args):
+    """log_bucket() error."""
     bucket = log_bucket(now, maxage, *args)
     return (bucket - now) / maxage - 1
 
-def max_error(now, n, *args):
-    return max(error(now, i, *args) for i in range(1, n+1))
+def max_error(now, max_maxage, *args):
+    """Worst log_bucket() error for all maxages up to max_maxage."""
+    return max(
+        error(now, maxage, *args)
+        for maxage in range(1, max_maxage)
+    )
 
 def max_error_random(n, *args):
-    max_now = int(time.time())
+    """Worst log_bucket() error for random inputs, out of n tries."""
+    max_now = int(time.time()) * 2
     max_maxage = 3600 * 24 * 31
     rand = functools.partial(random.randint, 1)
     return max(
@@ -152,9 +155,13 @@ def max_error_random(n, *args):
         for _ in range(n)
     )
 
-def max_buckets(seconds, *args):
+def max_buckets(max_maxage, *args):
+    """Number of buckets to cover all maxages up to max_maxage."""
     now = time.time()
-    buckets = {log_bucket(now, i, *args) for i in range(1, seconds)}
+    buckets = {
+        log_bucket(now, maxage, *args)
+        for maxage in range(1, max_maxage)
+    }
     return len(buckets)
 
 
