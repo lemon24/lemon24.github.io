@@ -161,7 +161,7 @@ but we'll end up with a decent solution anyway!</p>
 <li><a href="#problem-sorted-containers-is-not-in-stdlib">Problem: Sorted Containers is not in stdlib</a>
 <ul>
 <li><a href="#log-scale">Log scale</a></li>
-<li><a href="#bisect-finally">bisect, finally</a></li>
+<li><a href="#bisect-redux">bisect, redux</a></li>
 </ul>
 </li>
 <li><a href="#conclusion">conclusion</a></li>
@@ -1297,8 +1297,14 @@ I wonder how many buckets that is...</p>
 <p>A bit over a thousand buckets for the whole year, not bad!</p>
 <!-- ## expires buckets -->
 <hr />
-<p>Before we can use any of that,
-we need to convert expiry times to buckets:</p>
+<details>
+<summary>
+Before we can use any of that,
+we need to convert expiry times to buckets,
+which looks a lot like the <a href="#priority-buckets">priority buckets</a> code,
+the only notable part being eviction.
+</summary>
+<p><code>__init__()</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">expires_order</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
@@ -1306,7 +1312,7 @@ we need to convert expiry times to buckets:</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
 </code></pre></div>
 
-<p>In <code>set()</code>:</p>
+<p><code>set()</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">expires_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">expires</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">expires_bucket</span><span class="p">:</span>
             <span class="n">expires_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="p">[</span><span class="n">expires</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
@@ -1314,7 +1320,16 @@ we need to convert expiry times to buckets:</p>
         <span class="n">expires_bucket</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
 </code></pre></div>
 
-<p>In <code>evict()</code>:</p>
+<p><code>delete()</code>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">expires_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="p">[</span><span class="n">expires</span><span class="p">]</span>
+        <span class="n">expires_bucket</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">expires_bucket</span><span class="p">:</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="p">[</span><span class="n">expires</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">expires_order</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">expires</span><span class="p">)</span>
+</code></pre></div>
+
+<p><code>evict()</code>:</p>
+</details>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
             <span class="n">expires</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_order</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">expires</span> <span class="o">&gt;</span> <span class="n">now</span><span class="p">:</span>
@@ -1324,18 +1339,8 @@ we need to convert expiry times to buckets:</p>
                 <span class="bp">self</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
 </code></pre></div>
 
-<p>In <code>delete()</code>:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>        <span class="n">expires_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="p">[</span><span class="n">expires</span><span class="p">]</span>
-        <span class="n">expires_bucket</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">expires_bucket</span><span class="p">:</span>
-            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="p">[</span><span class="n">expires</span><span class="p">]</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">expires_order</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">expires</span><span class="p">)</span>
-</code></pre></div>
-
-<p>(That looks a lot like the <a class="anchor" href="#priority-buckets">priority buckets</a> code,
-but I can't be bothered.)</p>
 <hr />
-<p>And now we plug <code>log_bucket()</code> in.
+<p>And now we use <code>log_bucket()</code>.
 Since we're at it,
 why not have unlimited priorities too?
 A hammer is a hammer and everything is a nail, after all.</p>
@@ -1344,7 +1349,7 @@ A hammer is a hammer and everything is a nail, after all.</p>
         <span class="n">item</span> <span class="o">=</span> <span class="n">Item</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">expires</span><span class="p">,</span> <span class="n">priority</span><span class="p">)</span>
 </code></pre></div>
 
-<h3 id="bisect-finally">bisect, finally<span class="headerlink">&nbsp;<a href="#bisect-finally" title="permalink">#</a></span></h3>
+<h3 id="bisect-redux">bisect, redux<span class="headerlink">&nbsp;<a href="#bisect-redux" title="permalink">#</a></span></h3>
 <p>Time to fix that priority queue.</p>
 <p>We use <a class="external" href="https://docs.python.org/3/library/bisect.html#bisect.insort">insort()</a> to add priorities
 and <a class="external" href="https://docs.python.org/3/library/operator.html#operator.neg">operator.neg()</a> to keep the list <a class="anchor" href="#pop-optimization">reversed</a>:<sup class="footnote-ref" id="fnref-9"><a href="#fn-9">9</a></sup></p>
@@ -1360,8 +1365,8 @@ and <a class="external" href="https://docs.python.org/3/library/operator.html#op
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
 </code></pre></div>
 
-<!-- FIXME: from here -->
-<p>Finally, <code>remove()</code>:</p>
+<p>Finally, for <code>remove()</code> we adapt the <code>index()</code> recipe
+from <a class="external" href="https://docs.python.org/3/library/bisect.html#searching-sorted-lists">Searching Sorted Lists</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span> <span class="nf">remove</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
         <span class="n">i</span> <span class="o">=</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect_left</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="o">-</span><span class="n">item</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">operator</span><span class="o">.</span><span class="n">neg</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="n">item</span><span class="p">:</span>
@@ -1370,11 +1375,6 @@ and <a class="external" href="https://docs.python.org/3/library/operator.html#op
         <span class="k">raise</span> <span class="ne">ValueError</span>
 </code></pre></div>
 
-<p>We add a fast path for removing an element that's at the end
-(although it may be premature optimization).
-The rest of the method is based on the <code>index()</code> recipe
-from <a class="external" href="https://docs.python.org/3/library/bisect.html#searching-sorted-lists">Searching Sorted Lists</a>,
-with minor modifications to account for the reversed order.</p>
 <p>And that's it, we're done!</p>
 <p>Here's <a class="attachment" href="/_file/lru-cache/50-bisect.py">the final version of the code</a>.</p>
 <h2 id="conclusion">conclusion<span class="headerlink">&nbsp;<a href="#conclusion" title="permalink">#</a></span></h2>
