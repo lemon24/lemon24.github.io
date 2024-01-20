@@ -30,15 +30,17 @@
 
 
 
-<title>Python stdlib only priority-expiry LRU cache - death and gravity</title>
+<title>This is not interview advice: building a priority-expiry LRU cache without heaps or trees in Python - death and gravity</title>
+<meta name="description" content="Today we&#39;re implementing a least recently used cache with priorities and expiry, using only the Python standard library.
+This is a bIG TEch CoDINg InTerVIEW problem, so we&#39;ll work hard to stay away from the correct™ data structures – no heaps, no binary search trees – but we&#39;ll end up with a decent solution anyway!" />
 
 
-
-<meta property="og:title" content="Python stdlib only priority-expiry LRU cache">
+<meta property="og:title" content="This is not interview advice: building a priority-expiry LRU cache without heaps or trees in Python">
 <meta property="og:site_name" content="death and gravity">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://death.andgravity.com/lru-cache">
-
+<meta property="og:description" content="Today we&#39;re implementing a least recently used cache with priorities and expiry, using only the Python standard library.
+This is a bIG TEch CoDINg InTerVIEW problem, so we&#39;ll work hard to stay away from the correct™ data structures – no heaps, no binary search trees – but we&#39;ll end up with a decent solution anyway!">
 
 
 
@@ -54,6 +56,15 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
 
 
 
@@ -71,14 +82,14 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">Python stdlib only priority-expiry LRU cache</h1>
+<h1 class="heading-noindex">This is not interview advice: building a priority-expiry LRU cache without heaps or trees in Python</h1>
 
 <p class="text-gray text-nowrap">
 
 
 
 <small>
-<span class="tooltip" data-tooltip="published on 2023-10-10">October 2023</span>
+<span class="tooltip" data-tooltip="published on 2024-01-20">January 2024</span>
 ∙ 22 minute read
 ∙
 </small><span class="share-icons">
@@ -89,11 +100,11 @@ window.addEventListener('resize', set_vh);
 >PyCoder's Weekly</a>
 <a
     class="share-icon hacker-news"
-    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/lru-cache&t=Python%20stdlib%20only%20priority-expiry%20LRU%20cache"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/lru-cache&t=This%20is%20not%20interview%20advice%3A%20building%20a%20priority-expiry%20LRU%20cache%20without%20heaps%20or%20trees%20in%20Python"
 >HN</a>
 <a
     class="share-icon reddit"
-    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/lru-cache&title=Python%20stdlib%20only%20priority-expiry%20LRU%20cache"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/lru-cache&title=This%20is%20not%20interview%20advice%3A%20building%20a%20priority-expiry%20LRU%20cache%20without%20heaps%20or%20trees%20in%20Python"
 >Reddit</a>
 <a
     class="share-icon linkedin"
@@ -101,7 +112,7 @@ window.addEventListener('resize', set_vh);
 >linkedin</a>
 <a
     class="share-icon twitter"
-    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Python%20stdlib%20only%20priority-expiry%20LRU%20cache&url=https%3A//death.andgravity.com/lru-cache&via=_andgravity"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=This%20is%20not%20interview%20advice%3A%20building%20a%20priority-expiry%20LRU%20cache%20without%20heaps%20or%20trees%20in%20Python&url=https%3A//death.andgravity.com/lru-cache&via=_andgravity"
 >Twitter</a>
 </span>
 
@@ -125,10 +136,9 @@ but that doesn't matter.</em></p>
 least recently used cache with priorities and expiry,
 using <strong>only the Python standard library</strong>.</p>
 <p>This is a bIG TEch CoDINg InTerVIEW problem,
-so we'll make sure to keep away from the correct™ data structures –
-this means <!-- **no heaps**, --> <strong>no binary search trees</strong> –
+so we'll work hard to stay away from the correct™ data structures –
+<strong>no heaps</strong>, <strong>no binary search trees</strong> –
 but we'll end up with a decent solution anyway!</p>
-<p>TODO: this is what this article covers</p>
 <section class="toc">
 <ul>
 <li><a href="#requirements">Requirements</a></li>
@@ -160,11 +170,11 @@ but we'll end up with a decent solution anyway!</p>
 </li>
 <li><a href="#problem-sorted-containers-is-not-in-stdlib">Problem: Sorted Containers is not in stdlib</a>
 <ul>
-<li><a href="#log-scale">Log scale</a></li>
+<li><a href="#logarithmic-time">Logarithmic time</a></li>
 <li><a href="#bisect-redux">bisect, redux</a></li>
 </ul>
 </li>
-<li><a href="#conclusion">conclusion</a></li>
+<li><a href="#conclusion">Conclusion</a></li>
 </ul>
 </section>
 <h2 id="requirements">Requirements<span class="headerlink">&nbsp;<a href="#requirements" title="permalink">#</a></span></h2>
@@ -227,7 +237,9 @@ as we'll see soon enough</li>
 </ul>
 <section class="admonition tip">
 <p class="admonition-title">Tip</p>
-<p>TODO: clarifying questions</p>
+<p>Your interviewer may be expecting you to uncover some of these details
+ through clarifying questions.
+ Be sure to think out loud and state your assumptions.</p>
 </section>
 <h2 id="a-minimal-plausible-solution">A minimal plausible solution<span class="headerlink">&nbsp;<a href="#a-minimal-plausible-solution" title="permalink">#</a></span></h2>
 <p>I'm sure there are a lot smart people out there
@@ -242,7 +254,10 @@ we can then write some tests against that,
 to know if we break anything going forward.</p>
 <section class="admonition tip">
 <p class="admonition-title">Tip</p>
-<p>TODO: interview question, make it very clear that's what you're doing,</p>
+<p>If during an interview you don't know what to do
+ and choose to work up from the naive solution,
+ make it very clear that's what you're doing.
+ Your interviewer may give you hints to help you skip that.</p>
 </section>
 <!-- ## setup -->
 <p>A class holds all the things we need
@@ -263,7 +278,7 @@ provides average <strong>O(1)</strong> search / insert / delete.</p>
 <p class="admonition-title">Tip</p>
 <p>Given the problem we're solving,
  and the context we're solving it in,
- we kinda <em>have to</em> talk about <a class="external" href="https://en.wikipedia.org/wiki/Time_complexity">time complexity</a>.
+ we <em>have to</em> talk about <a class="external" href="https://en.wikipedia.org/wiki/Time_complexity">time complexity</a>.
  Ned Batchelder's
  <a class="external" href="https://nedbatchelder.com/text/bigo.html">Big-O: How Code Slows as Data Grows</a>
  provides an excellent introduction
@@ -775,6 +790,19 @@ but still need to keep track the lowest priority:</p>
         <span class="k">return</span> <span class="n">item</span><span class="o">.</span><span class="n">value</span>
 </code></pre></div>
 
+
+
+
+<div class="panel inline-panel" >
+    <div class="panel-header text-large">
+        Liking this so far? Here&#39;s another article you might like:
+    </div>
+    <div class="panel-body">
+        <p><a href="/stdlib">
+            Learn by reading code: Python standard library design decisions explained
+        </a>
+    </div>
+</div>
 <h2 id="problem-our-priority-queue-is-slow">Problem: our priority queue is slow<span class="headerlink">&nbsp;<a href="#problem-our-priority-queue-is-slow" title="permalink">#</a></span></h2>
 <p>OK, we have a complete solution,
 it's time to deal with the priority queue implementation.
@@ -1033,7 +1061,7 @@ and I sure as hell am not implementing one right now
 – I still have flashbacks from when I tried to do a red-black tree
 and two hours later it still had bugs
 (I mean, <a class="external" href="https://en.wikipedia.org/wiki/Red%E2%80%93black_tree#Operations">look at the length of this explanation!</a>).</p>
-<!-- TODO and there's other, more complicated data structures that mix trees with something else -->
+<!-- and there's other, more complicated data structures that mix trees with something else -->
 <p>After a bit of googling we find, among others, <a class="external" href="https://pypi.org/project/bintrees/">bintrees</a>,
 a mature library that provides all sorts of binary search trees... except:</p>
 <blockquote>
@@ -1147,7 +1175,7 @@ Which begs the question –</p>
  but we need a way to round
  small values with higher granularity than big ones.</li>
 </ol>
-<h3 id="log-scale">Log scale<span class="headerlink">&nbsp;<a href="#log-scale" title="permalink">#</a></span></h3>
+<h3 id="logarithmic-time">Logarithmic time<span class="headerlink">&nbsp;<a href="#logarithmic-time" title="permalink">#</a></span></h3>
 <p>How about 1, 2, 4, 8, ...?
 Rounding up to powers of 2 gets us decreasing granularity,
 but time doesn't actually start at zero.
@@ -1300,8 +1328,8 @@ I wonder how many buckets that is...</p>
 <details>
 <summary>
 Before we can use any of that,
-we need to convert expiry times to buckets,
-which looks a lot like the <a href="#priority-buckets">priority buckets</a> code,
+we need to convert expiry times to buckets;
+that looks a lot like the <a href="#priority-buckets">priority buckets</a> code,
 the only notable part being eviction.
 </summary>
 <p><code>__init__()</code>:</p>
@@ -1349,6 +1377,19 @@ A hammer is a hammer and everything is a nail, after all.</p>
         <span class="n">item</span> <span class="o">=</span> <span class="n">Item</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">expires</span><span class="p">,</span> <span class="n">priority</span><span class="p">)</span>
 </code></pre></div>
 
+
+
+
+<div class="panel inline-panel" >
+    <div class="panel-header text-large">
+        If you&#39;ve made it this far, you will definitely like:
+    </div>
+    <div class="panel-body">
+        <p><a href="/pwned">
+            Has your password been pwned? Or, how I almost failed to search a 37 GB text file in under 1 millisecond (in Python)
+        </a>
+    </div>
+</div>
 <h3 id="bisect-redux">bisect, redux<span class="headerlink">&nbsp;<a href="#bisect-redux" title="permalink">#</a></span></h3>
 <p>Time to fix that priority queue.</p>
 <p>We use <a class="external" href="https://docs.python.org/3/library/bisect.html#bisect.insort">insort()</a> to add priorities
@@ -1377,31 +1418,32 @@ from <a class="external" href="https://docs.python.org/3/library/bisect.html#sea
 
 <p>And that's it, we're done!</p>
 <p>Here's <a class="attachment" href="/_file/lru-cache/50-bisect.py">the final version of the code</a>.</p>
-<h2 id="conclusion">conclusion<span class="headerlink">&nbsp;<a href="#conclusion" title="permalink">#</a></span></h2>
-<ul>
-<li>usually they ask you to walk through and <em>implement</em> it in an hour, that's fucking delusional ||  I've heard you're supposed to impement this one in an hour, which is delusional<ul>
-<li>hopefully, reasonable interviewers wont' actually ask you to implement the rb tree on the spot; explaining what you would use and why should be enough (again, for reasonable interviewers)</li>
-</ul>
-</li>
-<li>it is good to have a basic knowledge of big o etc</li>
-<li>but what big o notation says and what happens in practice can differ quite a lot<ul>
-<li>be sure to measure / profile (link to profiling into)</li>
-<li>be sure to think of limits; sometimes the n in o(n) is small enough you can do smth else</li>
-</ul>
-</li>
-<li>you don't need to know how to implement all the data structure<ul>
-<li>however, it is useful to have a cursory knowledge of them existing, and of their properties</li>
-<li>think of it as knowing which tools exist in that particular</li>
-<li>&quot;Wikipedia says so&quot; is sometimes a good answer,
-you don't need to understand how it works if the specs fit the requirements</li>
-</ul>
-</li>
-<li>good docs educate (link)<ul>
-<li>the python docs already covered a lot of what we needed</li>
-<li>but, that's not in the api docs you see in your ide, you need to go and read the docs</li>
-</ul>
-</li>
-</ul>
+<h2 id="conclusion">Conclusion<span class="headerlink">&nbsp;<a href="#conclusion" title="permalink">#</a></span></h2>
+<p>Anyone expecting you to <em>implement</em> this in under an hour is delusional.
+Explaining <strong>what you would use and why</strong> should be enough
+for reasonable interviewers,
+although that may prove difficult
+if you haven't solved this kind of problem before.</p>
+<p>Bullshit interviews aside,
+it is useful to <strong>have basic knowledge of time complexity</strong>.
+Again, can't recommend <a class="external" href="https://nedbatchelder.com/text/bigo.html">Big-O: How Code Slows as Data Grows</a> enough.</p>
+<p>But, what big O notation says and what happens in practice can differ quite a lot.
+Be sure to <strong><a class="internal" href="/fast-conway-cubes#conclusion">measure</a></strong>,
+and be sure to think of limits –
+sometimes, the <strong>n</strong> in <strong>O(n)</strong>
+is or can be made <strong>small enough</strong>
+you don't have to do the theoretically correct thing.</p>
+<p>You don't need to know how to implement all the data structures,
+that's what (software) libraries and Wikipedia are for
+(and for that matter, book libraries too).
+However, it is useful to have an idea of
+<strong>what's available and when to use it</strong>.</p>
+<p><strong><a class="internal" href="/output#good-libraries-educate">Good libraries educate</a></strong> –
+the Python standard library docs
+already cover a lot of the practical knowledge we needed,
+and so did Sorted Containers.
+But, that won't show up in the API reference you see in your IDE,
+you have read the actual documentation.</p>
 <p><strong>Learned something new today?</strong> Share this with others, it really helps! <span class="text-large">
 <span class="share-icons">
 <a
@@ -1411,11 +1453,11 @@ you don't need to understand how it works if the specs fit the requirements</li>
 >PyCoder's Weekly</a>
 <a
     class="share-icon hacker-news color"
-    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/lru-cache&t=Python%20stdlib%20only%20priority-expiry%20LRU%20cache"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/lru-cache&t=This%20is%20not%20interview%20advice%3A%20building%20a%20priority-expiry%20LRU%20cache%20without%20heaps%20or%20trees%20in%20Python"
 >HN</a>
 <a
     class="share-icon reddit color"
-    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/lru-cache&title=Python%20stdlib%20only%20priority-expiry%20LRU%20cache"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/lru-cache&title=This%20is%20not%20interview%20advice%3A%20building%20a%20priority-expiry%20LRU%20cache%20without%20heaps%20or%20trees%20in%20Python"
 >Reddit</a>
 <a
     class="share-icon linkedin color"
@@ -1423,7 +1465,7 @@ you don't need to understand how it works if the specs fit the requirements</li>
 >linkedin</a>
 <a
     class="share-icon twitter color"
-    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Python%20stdlib%20only%20priority-expiry%20LRU%20cache&url=https%3A//death.andgravity.com/lru-cache&via=_andgravity"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=This%20is%20not%20interview%20advice%3A%20building%20a%20priority-expiry%20LRU%20cache%20without%20heaps%20or%20trees%20in%20Python&url=https%3A//death.andgravity.com/lru-cache&via=_andgravity"
 >Twitter</a>
 </span>
 </span></p>
@@ -1476,7 +1518,13 @@ you don't need to understand how it works if the specs fit the requirements</li>
     </div>
 
 </form>
-<p>TODO: other article</p>
+<!--
+
+# Bonus: this is not production code
+
+# Bonus: is bisect really O(log n) for <10k elements?
+
+-->
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>Note the subtitle: <em>if you're not sure what to do yet</em>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
