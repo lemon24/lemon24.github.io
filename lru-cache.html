@@ -90,7 +90,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2024-01-20">January 2024</span>
-∙ 22 minute read
+∙ 24 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -820,6 +820,13 @@ we only get to <code>pop()</code> an item/bucket from one of the queues,
 and still have to <code>remove()</code> it from the other.</p>
 <p>And <strong>this is what makes the problem tricky</strong> –
 we need to maintain not one, but <em>two</em> independent priority queues.</p>
+<section class="admonition note">
+<p class="admonition-title">Note</p>
+<p>We'll now go through a few data structures in quick succession,
+ which may be a bit overwhelming without preparation.
+ Keep in mind we don't care how they work (not yet, at least),
+ we're just shopping around based on specs.</p>
+</section>
 <h3 id="heapq">heapq<span class="headerlink">&nbsp;<a href="#heapq" title="permalink">#</a></span></h3>
 <p>If you <a class="external" href="https://docs.python.org/3.12/search.html?q=priority+queue">search the docs for &quot;priority queue&quot;</a>,
 you'll find <a class="external" href="https://docs.python.org/3/library/heapq.html">heapq</a>, which:</p>
@@ -1417,7 +1424,133 @@ from <a class="external" href="https://docs.python.org/3/library/bisect.html#sea
 </code></pre></div>
 
 <p>And that's it, we're done!</p>
-<p>Here's <a class="attachment" href="/_file/lru-cache/50-bisect.py">the final version of the code</a>.</p>
+<details>
+<summary>
+Here's the cache in its full glory (click to expand):
+</summary>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Cache</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">maxsize</span><span class="p">,</span> <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxsize</span> <span class="o">=</span> <span class="n">maxsize</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="n">time</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">expires_order</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span> <span class="o">=</span> <span class="n">PriorityQueue</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">item</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="n">item</span><span class="o">.</span><span class="n">expires</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="p">[</span><span class="n">item</span><span class="o">.</span><span class="n">priority</span><span class="p">]</span><span class="o">.</span><span class="n">move_to_end</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">item</span><span class="o">.</span><span class="n">value</span>
+
+    <span class="k">def</span> <span class="nf">set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">maxage</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">priority</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="n">now</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">maxsize</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">evict</span><span class="p">(</span><span class="n">now</span><span class="p">)</span>
+
+        <span class="n">expires</span> <span class="o">=</span> <span class="n">log_bucket</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">maxage</span><span class="p">,</span> <span class="n">shift</span><span class="o">=</span><span class="mi">7</span><span class="p">)</span>
+        <span class="n">priority</span> <span class="o">=</span> <span class="n">log_bucket</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">priority</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">shift</span><span class="o">=</span><span class="mi">7</span><span class="p">)</span>
+        <span class="n">item</span> <span class="o">=</span> <span class="n">Item</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">expires</span><span class="p">,</span> <span class="n">priority</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">item</span>
+
+        <span class="n">expires_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">expires</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">expires_bucket</span><span class="p">:</span>
+            <span class="n">expires_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="p">[</span><span class="n">expires</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">expires_order</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="n">expires</span><span class="p">)</span>
+        <span class="n">expires_bucket</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+        <span class="n">priority_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">priority_bucket</span><span class="p">:</span>
+            <span class="n">priority_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="p">[</span><span class="n">priority</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span>
+        <span class="n">priority_bucket</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">evict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">now</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">initial_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span>
+
+        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+            <span class="n">expires</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_order</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">expires</span> <span class="o">&gt;</span> <span class="n">now</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="n">expires_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="p">[</span><span class="n">expires</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="p">[</span><span class="n">expires</span><span class="p">]):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span> <span class="o">==</span> <span class="n">initial_size</span><span class="p">:</span>
+            <span class="n">priority</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
+            <span class="n">priority_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">priority_bucket</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="o">*</span><span class="n">_</span><span class="p">,</span> <span class="n">expires</span><span class="p">,</span> <span class="n">priority</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+        <span class="n">expires_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="p">[</span><span class="n">expires</span><span class="p">]</span>
+        <span class="n">expires_bucket</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">expires_bucket</span><span class="p">:</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires_buckets</span><span class="p">[</span><span class="n">expires</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">expires_order</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">expires</span><span class="p">)</span>
+
+        <span class="n">priority_bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="p">[</span><span class="n">priority</span><span class="p">]</span>
+        <span class="k">del</span> <span class="n">priority_bucket</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">priority_bucket</span><span class="p">:</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_buckets</span><span class="p">[</span><span class="n">priority</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">Item</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="n">key</span><span class="p">:</span> <span class="nb">object</span>
+    <span class="n">value</span><span class="p">:</span> <span class="nb">object</span>
+    <span class="n">expires</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">priority</span><span class="p">:</span> <span class="nb">int</span>
+
+<span class="k">class</span> <span class="nc">PriorityQueue</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">def</span> <span class="nf">push</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="n">bisect</span><span class="o">.</span><span class="n">insort</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">operator</span><span class="o">.</span><span class="n">neg</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">peek</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">pop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">remove</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect_left</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="o">-</span><span class="n">item</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">operator</span><span class="o">.</span><span class="n">neg</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="n">item</span><span class="p">:</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">return</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span>
+
+    <span class="k">def</span> <span class="fm">__bool__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">log_bucket</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">maxage</span><span class="p">,</span> <span class="n">shift</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+    <span class="n">next_power</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">log2</span><span class="p">(</span><span class="n">maxage</span><span class="p">)</span> <span class="o">-</span> <span class="n">shift</span><span class="p">))</span>
+    <span class="n">expires</span> <span class="o">=</span> <span class="n">now</span> <span class="o">+</span> <span class="n">maxage</span>
+    <span class="n">bucket</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">expires</span> <span class="o">/</span> <span class="n">next_power</span><span class="p">)</span> <span class="o">*</span> <span class="n">next_power</span>
+    <span class="k">return</span> <span class="n">bucket</span>
+</code></pre></div>
+
+</details>
+<p>(<a class="attachment" href="/_file/lru-cache/50-bisect.py">The entire file, with tests and everything.</a>)</p>
 <h2 id="conclusion">Conclusion<span class="headerlink">&nbsp;<a href="#conclusion" title="permalink">#</a></span></h2>
 <p>Anyone expecting you to <em>implement</em> this in under an hour is delusional.
 Explaining <strong>what you would use and why</strong> should be enough
