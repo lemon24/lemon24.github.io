@@ -30,11 +30,11 @@
 
 
 
-<title>imap_unordered() with backpressure - death and gravity</title>
+<title>imap_unordered() with backpressure: or, how imap_unordered() accidentally the whole thing - death and gravity</title>
 
 
 
-<meta property="og:title" content="imap_unordered() with backpressure">
+<meta property="og:title" content="imap_unordered() with backpressure: or, how imap_unordered() accidentally the whole thing">
 <meta property="og:site_name" content="death and gravity">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://death.andgravity.com/imap-backpressure">
@@ -71,7 +71,7 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">imap_unordered() with backpressure</h1>
+<h1 class="heading-noindex">imap_unordered() with backpressure: or, how imap_unordered() accidentally the whole thing</h1>
 
 <p class="text-gray text-nowrap">
 
@@ -89,13 +89,151 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>So, you're using something like multiprocessing.Pool.imap_unordered(),
-because it allows you to process a lazy iterable that's much longer
-than the number of processes/threads
-without consuming it all in memory.</p>
-<p>But, it has no backpressure</p>
+<p>Say you're using <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>
+to process a lazy iterable in parallel:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">pool</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">dummy</span><span class="o">.</span><span class="n">Pool</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span><span class="n">do_thing</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39; out:&#39;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+<span class="gp">... </span>
+<span class="go">done: 0</span>
+<span class="go"> out: 0</span>
+<span class="go">done: 1</span>
+<span class="go"> out: 1</span>
+<span class="go">done: 2</span>
+<span class="go"> out: 2</span>
+</code></pre></div>
+<p>Items are processed by each worker one at a time,
+and results are yielded by the <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a> iterator
+as soon as they are ready. So far so good.</p>
+<p>What happens if we consume results slower than they are produced?
+A reasonable intuition would be that <strong>workers block
+until the next result is requested</strong>
+– that is, workers process results in lockstep with the consumer.
+So, we'd get the same output as above, right? <strong>Wrong!</strong></p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span><span class="n">do_thing</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)):</span>
+<span class="gp">... </span>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">.2</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39; out:&#39;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+<span class="gp">... </span>
+<span class="go">done: 0</span>
+<span class="go">done: 1</span>
+<span class="go">done: 2</span>
+<span class="go"> out: 0</span>
+<span class="go"> out: 1</span>
+<span class="go"> out: 2</span>
+</code></pre></div>
+<p>Following the same intuition,
+you may expect that
+<strong>workers get items from the input iterable as needed</strong>...
+alas, you'd be <strong>wrong again</strong>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">get_inputs</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;  in:&#39;</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="k">yield</span> <span class="n">i</span>
+<span class="gp">... </span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span><span class="n">do_thing</span><span class="p">,</span> <span class="n">get_inputs</span><span class="p">(</span><span class="mi">3</span><span class="p">)):</span>
+<span class="gp">... </span>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">.2</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39; out:&#39;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+<span class="gp">... </span>
+<span class="go">  in: 0</span>
+<span class="go">  in: 1</span>
+<span class="go">  in: 2</span>
+<span class="go">done: 0</span>
+<span class="go">done: 1</span>
+<span class="go">done: 2</span>
+<span class="go"> out: 0</span>
+<span class="go"> out: 1</span>
+<span class="go"> out: 2</span>
+</code></pre></div>
+<p>TODO: memory</p>
+<!--
+import time, multiprocessing.dummy
+
+pool = multiprocessing.dummy.Pool(1)
+for result in pool.imap_unordered(do_thing, range(3)):
+    print(' out:', result)
+
+for result in pool.imap_unordered(do_thing, range(3)):
+    time.sleep(.2)
+    print(' out:', result)
+
+for result in pool.imap_unordered(do_thing, get_inputs(3)):
+    time.sleep(.2)
+    print(' out:', result)
+-->
+<!-- TODO separate performance section for double and chunk size -->
 <h2 id="what-is-backpressure">What is backpressure?<span class="headerlink">&nbsp;<a href="#what-is-backpressure" title="permalink">#</a></span></h2>
 <p>&quot;when code consuming results from [i]map_unordered() cannot keep up with the tasks producing them, the results accumulate in the internal queue, with potentially infinite memory usage&quot;</p>
+<!--
+https://pikchr.org/home/pikchrshow
+
+I: box "input" fit fill white width 1.5cm
+
+arrow <- width I.width * 1.5
+
+W: box "worker" same as I
+box same \
+  at last.thickness * 2 ne of last \
+  behind last
+
+arrow <- from W.end width I.width * 1.5
+
+F: box "for" same as I
+-->
+<svg xmlns='http://www.w3.org/2000/svg' viewBox="0 0 514.556 37.6147">
+<path d="M217.813,32.4L302.852,32.4L302.852,2.16L217.813,2.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M2.16,35.4547L87.1994,35.4547L87.1994,5.2147L2.16,5.2147Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="44.6797" y="20.3347" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">input</text>
+<polygon points="87.1994,20.3347 98.7194,16.0147 98.7194,24.6547" style="fill:rgb(0,0,0)"/>
+<path d="M92.9594,20.3347L214.758,20.3347"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M214.758,35.4547L299.798,35.4547L299.798,5.2147L214.758,5.2147Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="257.278" y="20.3347" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">worker</text>
+<polygon points="299.798,20.3347 311.318,16.0147 311.318,24.6547" style="fill:rgb(0,0,0)"/>
+<path d="M305.558,20.3347L427.357,20.3347"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M427.357,35.4547L512.396,35.4547L512.396,5.2147L427.357,5.2147Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="469.877" y="20.3347" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">for</text>
+</svg>
+<!--
+https://pikchr.org/home/pikchrshow
+
+I: box "input" fit fill white width 1.5cm
+
+arrow <- width I.width * .4
+oval "queue" small fit fill white width I.width * .7
+arrow -> width I.width * .4
+
+W: box "worker" same as I
+box same \
+  at last.thickness * 2 ne of last \
+  behind last
+
+arrow <- from W.end width I.width * .4
+oval "queue" small fit fill white width I.width * .7
+arrow -> width I.width * .4
+
+F: box "for" same as I
+-->
+<svg xmlns='http://www.w3.org/2000/svg' viewBox="0 0 514.556 37.6147">
+<path d="M217.813,32.4L302.852,32.4L302.852,2.16L217.813,2.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M2.16,35.4547L87.1994,35.4547L87.1994,5.2147L2.16,5.2147Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="44.6797" y="20.3347" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">input</text>
+<polygon points="87.1994,20.3347 98.7194,16.0147 98.7194,24.6547" style="fill:rgb(0,0,0)"/>
+<path d="M92.9594,20.3347L121.215,20.3347"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M134.319,33.4387L167.639,33.4387A13.104 13.104 0 0 0 180.743 20.3347A13.104 13.104 0 0 0 167.639 7.2307L134.319,7.2307A13.104 13.104 0 0 0 121.215 20.3347A13.104 13.104 0 0 0 134.319 33.4387Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="150.979" y="20.3347" text-anchor="middle" fill="rgb(0,0,0)" font-size="80%" dominant-baseline="central">queue</text>
+<polygon points="214.758,20.3347 203.238,24.6547 203.238,16.0147" style="fill:rgb(0,0,0)"/>
+<path d="M180.743,20.3347L208.998,20.3347"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M214.758,35.4547L299.798,35.4547L299.798,5.2147L214.758,5.2147Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="257.278" y="20.3347" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">worker</text>
+<polygon points="299.798,20.3347 311.318,16.0147 311.318,24.6547" style="fill:rgb(0,0,0)"/>
+<path d="M305.558,20.3347L333.814,20.3347"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M346.918,33.4387L380.237,33.4387A13.104 13.104 0 0 0 393.341 20.3347A13.104 13.104 0 0 0 380.237 7.2307L346.918,7.2307A13.104 13.104 0 0 0 333.814 20.3347A13.104 13.104 0 0 0 346.918 33.4387Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="363.577" y="20.3347" text-anchor="middle" fill="rgb(0,0,0)" font-size="80%" dominant-baseline="central">queue</text>
+<polygon points="427.357,20.3347 415.837,24.6547 415.837,16.0147" style="fill:rgb(0,0,0)"/>
+<path d="M393.341,20.3347L421.597,20.3347"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M427.357,35.4547L512.396,35.4547L512.396,5.2147L427.357,5.2147Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="469.877" y="20.3347" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">for</text>
+</svg>
+<p>https://bugs.python.org/issue40110</p>
 <h2 id="queue">Queue<span class="headerlink">&nbsp;<a href="#queue" title="permalink">#</a></span></h2>
 <p>internally, it uses a queue; if we had access to the queue,
 we could easily fix this by making the queue bounded.</p>
