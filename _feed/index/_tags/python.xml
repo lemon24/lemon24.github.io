@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #python</title>
-  <updated>2024-03-07T17:00:00+00:00</updated>
+  <updated>2024-03-07T18:00:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
@@ -11,8 +11,8 @@
   <link href="https://death.andgravity.com/_feed/index/_tags/python.xml" rel="self"/>
   <entry xml:base="https://death.andgravity.com/reader-3-12">
     <id>https://death.andgravity.com/reader-3-12</id>
-    <title>reader 3.12 released – split search, track changes</title>
-    <updated>2024-03-07T17:00:00+00:00</updated>
+    <title>reader 3.12 released – split search index, changes API</title>
+    <updated>2024-03-07T18:00:00+00:00</updated>
     <content type="html">&lt;p&gt;Hi there!&lt;/p&gt;
 &lt;p&gt;I'm happy to announce version 3.12 of &lt;strong&gt;&lt;a class="external" href="https://github.com/lemon24/reader"&gt;reader&lt;/a&gt;&lt;/strong&gt;, a Python feed reader library.&lt;/p&gt;
 &lt;h2 id="what-s-new"&gt;What's new?&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#what-s-new" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
@@ -20,52 +20,53 @@
 &lt;h3 id="split-the-search-index-into-a-separate-database"&gt;Split the search index into a separate database&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#split-the-search-index-into-a-separate-database" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
 &lt;p&gt;The &lt;a class="external" href="https://reader.readthedocs.io/en/latest/guide.html#fts"&gt;full-text search&lt;/a&gt; index can get almost as large as the actual data,
 so I've split it into a separate, attached database,
-which allows backing up the main database separately.&lt;/p&gt;
+which allows backing up only the main database.&lt;/p&gt;
 &lt;p&gt;(I stole this idea from &lt;a class="external" href="https://crawshaw.io/blog/one-process-programming-notes"&gt;One process programming notes (with Go and SQLite)&lt;/a&gt;.)&lt;/p&gt;
 &lt;h3 id="change-tracking-internal-api"&gt;Change tracking internal API&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#change-tracking-internal-api" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
 &lt;p&gt;To support the search index split,
 Storage got a &lt;a class="external" href="https://reader.readthedocs.io/en/latest/internal.html#reader._types.ChangeTrackerType"&gt;change tracking API&lt;/a&gt;
 that allows search implementations
 to keep in sync with text content changes.&lt;/p&gt;
-&lt;p&gt;This is the first step
-towards &lt;strong&gt;using other search backends&lt;/strong&gt;
-that are not tightly-coupled to the storage.
+&lt;p&gt;This is a first step
+towards &lt;strong&gt;search backends that aren't tightly-coupled&lt;/strong&gt; to a storage.
 For example,
 the SQLite storage uses its &lt;a class="external" href="https://www.sqlite.org/fts5.html"&gt;FTS5 extension&lt;/a&gt; for search,
 and a PostgreSQL storage can use its own &lt;a class="external" href="https://www.postgresql.org/docs/current/textsearch.html"&gt;native support&lt;/a&gt;;
 the new API allows either storage to use something like Elasticsearch.
 (There's still no good way for search
 to filter/sort results without storage cooperation,
-so more work is needed.)&lt;/p&gt;
-&lt;p&gt;Here's how it works (&lt;a class="external" href="https://reader.readthedocs.io/en/latest/internal.html#reader._types.ChangeTrackerType"&gt;long version&lt;/a&gt;):&lt;/p&gt;
+so more work is needed here.)&lt;/p&gt;
+&lt;p&gt;Also, it lays some of the groundwork for &lt;strong&gt;searchable tag values&lt;/strong&gt;
+by having tag support already built into the API.&lt;/p&gt;
+&lt;p&gt;Here's how change tracking works (&lt;a class="external" href="https://reader.readthedocs.io/en/latest/internal.html#reader._types.ChangeTrackerType"&gt;long version&lt;/a&gt;):&lt;/p&gt;
 &lt;ul&gt;
 &lt;li&gt;Each entry has a 16 byte random sequence that changes when its text changes.&lt;/li&gt;
-&lt;li&gt;All sequence changes get recorded.&lt;/li&gt;
-&lt;li&gt;During updates, search gets the changes and processes them.&lt;/li&gt;
+&lt;li&gt;Sequence changes get recorded and are available through the API.&lt;/li&gt;
+&lt;li&gt;Search &lt;code&gt;update()&lt;/code&gt; processes pending changes and marks them as done.&lt;/li&gt;
 &lt;/ul&gt;
-&lt;p&gt;While simple on its surface,
+&lt;p&gt;While simple on the surface,
 this prevents a lot of potential concurrency issues
 that needed special handling before.
 For example, what if an entry changes during pre-processing,
 before it is added to the search index?
 You &lt;em&gt;could&lt;/em&gt; use a transaction,
-but this ends up keeping the database locked for too long.
-Also, what about other search backends
+but this may keep the database locked for too long.
+Also, what about search backends
 where you don't have transactions?&lt;/p&gt;
 &lt;p&gt;I used &lt;a class="external" href="https://hypothesis.readthedocs.io/"&gt;Hypothesis&lt;/a&gt; and property-based testing
-to &lt;a class="external" href="https://gist.github.com/lemon24/558955ad82ba2e4f50c0184c630c668c"&gt;validate this model&lt;/a&gt;,
-so I'm ~99% confident it is correct.
+to &lt;a class="external" href="https://gist.github.com/lemon24/558955ad82ba2e4f50c0184c630c668c"&gt;validate the model&lt;/a&gt;,
+so I'm ~99% sure it is correct.
 A real model checker like TLA+ or Alloy may have been a better tool for it,
 but I don't know how to use one at this point.&lt;/p&gt;
 &lt;h3 id="filter-by-entry-tags"&gt;Filter by entry tags&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#filter-by-entry-tags" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
 &lt;p&gt;It is now possible to filter entries by &lt;a class="external" href="https://reader.readthedocs.io/en/latest/guide.html#resource-tags"&gt;entry tags&lt;/a&gt;:
 &lt;code&gt;get_entries(tags=['tag'])&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;I added this to see if it's possible to implement
-the &lt;em&gt;has_enclosures&lt;/em&gt; &lt;a class="external" href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.get_entries"&gt;get_entries()&lt;/a&gt; filter as a plugin
+&lt;p&gt;I did this to see how it would look to implement
+the &lt;em&gt;has_enclosures&lt;/em&gt; &lt;a class="external" href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.get_entries"&gt;get_entries()&lt;/a&gt; argument as a plugin
 (it is possible, but &lt;a class="external" href="https://github.com/lemon24/reader/issues/327#issuecomment-1859147186"&gt;not really worth it&lt;/a&gt;).&lt;/p&gt;
 &lt;h3 id="sqlite-storage-improvements"&gt;SQLite storage improvements&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#sqlite-storage-improvements" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
-&lt;p&gt;As part of refactoring for the index split,
-I made a few small storage improvements:&lt;/p&gt;
+&lt;p&gt;As part of a bigger storage refactoring,
+I made a few small improvements:&lt;/p&gt;
 &lt;ul&gt;
 &lt;li&gt;Enable &lt;a class="external" href="https://www.sqlite.org/wal.html"&gt;write-ahead logging&lt;/a&gt; only once, when the database is created.&lt;/li&gt;
 &lt;li&gt;Vacuum the main database after migrations.&lt;/li&gt;
@@ -73,9 +74,9 @@ I made a few small storage improvements:&lt;/p&gt;
 &lt;/ul&gt;
 &lt;h3 id="python-versions"&gt;Python versions&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#python-versions" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
 &lt;p&gt;&lt;em&gt;reader&lt;/em&gt; 3.11 (released back in December) adds support for Python 3.12.&lt;/p&gt;
-&lt;p&gt;For more details, see the full &lt;a class="external" href="https://reader.readthedocs.io/en/stable/changelog.html#version-3-12"&gt;changelog&lt;/a&gt;.&lt;/p&gt;
 &lt;hr /&gt;
-&lt;p&gt;That's it for now.&lt;/p&gt;
+&lt;p&gt;That's it for now.
+For more details, see the full &lt;a class="external" href="https://reader.readthedocs.io/en/stable/changelog.html#version-3-12"&gt;changelog&lt;/a&gt;.&lt;/p&gt;
 &lt;p&gt;&lt;strong&gt;Want to contribute?&lt;/strong&gt;
 Check out the &lt;a class="external" href="https://reader.readthedocs.io/en/latest/contributing.html"&gt;docs&lt;/a&gt; and the &lt;a class="external" href="https://reader.readthedocs.io/en/latest/dev.html#roadmap"&gt;roadmap&lt;/a&gt;.&lt;/p&gt;
 &lt;p&gt;&lt;strong&gt;Learned something new today?&lt;/strong&gt; Share this with others, it really helps! &lt;span class="text-large"&gt;
@@ -87,11 +88,11 @@ Check out the &lt;a class="external" href="https://reader.readthedocs.io/en/late
 &gt;PyCoder's Weekly&lt;/a&gt;
 &lt;a
     class="share-icon hacker-news color"
-    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/reader-3-12&amp;t=reader%203.12%20released%20%E2%80%93%20split%20search%2C%20track%20changes"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/reader-3-12&amp;t=reader%203.12%20released%20%E2%80%93%20split%20search%20index%2C%20changes%20API"
 &gt;HN&lt;/a&gt;
 &lt;a
     class="share-icon reddit color"
-    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/reader-3-12&amp;title=reader%203.12%20released%20%E2%80%93%20split%20search%2C%20track%20changes"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/reader-3-12&amp;title=reader%203.12%20released%20%E2%80%93%20split%20search%20index%2C%20changes%20API"
 &gt;Reddit&lt;/a&gt;
 &lt;a
     class="share-icon linkedin color"
@@ -99,7 +100,7 @@ Check out the &lt;a class="external" href="https://reader.readthedocs.io/en/late
 &gt;linkedin&lt;/a&gt;
 &lt;a
     class="share-icon twitter color"
-    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=reader%203.12%20released%20%E2%80%93%20split%20search%2C%20track%20changes&amp;url=https%3A//death.andgravity.com/reader-3-12&amp;via=_andgravity"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=reader%203.12%20released%20%E2%80%93%20split%20search%20index%2C%20changes%20API&amp;url=https%3A//death.andgravity.com/reader-3-12&amp;via=_andgravity"
 &gt;Twitter&lt;/a&gt;
 &lt;/span&gt;
 &lt;/span&gt;&lt;/p&gt;

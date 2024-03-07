@@ -30,11 +30,11 @@
 
 
 
-<title>reader 3.12 released – split search, track changes - death and gravity</title>
+<title>reader 3.12 released – split search index, changes API - death and gravity</title>
 
 
 
-<meta property="og:title" content="reader 3.12 released – split search, track changes">
+<meta property="og:title" content="reader 3.12 released – split search index, changes API">
 <meta property="og:site_name" content="death and gravity">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://death.andgravity.com/reader-3-12">
@@ -80,7 +80,7 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">reader 3.12 released – split search, track changes</h1>
+<h1 class="heading-noindex">reader 3.12 released – split search index, changes API</h1>
 
 <p class="text-gray text-nowrap">
 
@@ -98,11 +98,11 @@ window.addEventListener('resize', set_vh);
 >PyCoder's Weekly</a>
 <a
     class="share-icon hacker-news"
-    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/reader-3-12&t=reader%203.12%20released%20%E2%80%93%20split%20search%2C%20track%20changes"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/reader-3-12&t=reader%203.12%20released%20%E2%80%93%20split%20search%20index%2C%20changes%20API"
 >HN</a>
 <a
     class="share-icon reddit"
-    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/reader-3-12&title=reader%203.12%20released%20%E2%80%93%20split%20search%2C%20track%20changes"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/reader-3-12&title=reader%203.12%20released%20%E2%80%93%20split%20search%20index%2C%20changes%20API"
 >Reddit</a>
 <a
     class="share-icon linkedin"
@@ -110,7 +110,7 @@ window.addEventListener('resize', set_vh);
 >linkedin</a>
 <a
     class="share-icon twitter"
-    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=reader%203.12%20released%20%E2%80%93%20split%20search%2C%20track%20changes&url=https%3A//death.andgravity.com/reader-3-12&via=_andgravity"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=reader%203.12%20released%20%E2%80%93%20split%20search%20index%2C%20changes%20API&url=https%3A//death.andgravity.com/reader-3-12&via=_andgravity"
 >Twitter</a>
 </span>
 
@@ -135,52 +135,53 @@ window.addEventListener('resize', set_vh);
 <h3 id="split-the-search-index-into-a-separate-database">Split the search index into a separate database<span class="headerlink">&nbsp;<a href="#split-the-search-index-into-a-separate-database" title="permalink">#</a></span></h3>
 <p>The <a class="external" href="https://reader.readthedocs.io/en/latest/guide.html#fts">full-text search</a> index can get almost as large as the actual data,
 so I've split it into a separate, attached database,
-which allows backing up the main database separately.</p>
+which allows backing up only the main database.</p>
 <p>(I stole this idea from <a class="external" href="https://crawshaw.io/blog/one-process-programming-notes">One process programming notes (with Go and SQLite)</a>.)</p>
 <h3 id="change-tracking-internal-api">Change tracking internal API<span class="headerlink">&nbsp;<a href="#change-tracking-internal-api" title="permalink">#</a></span></h3>
 <p>To support the search index split,
 Storage got a <a class="external" href="https://reader.readthedocs.io/en/latest/internal.html#reader._types.ChangeTrackerType">change tracking API</a>
 that allows search implementations
 to keep in sync with text content changes.</p>
-<p>This is the first step
-towards <strong>using other search backends</strong>
-that are not tightly-coupled to the storage.
+<p>This is a first step
+towards <strong>search backends that aren't tightly-coupled</strong> to a storage.
 For example,
 the SQLite storage uses its <a class="external" href="https://www.sqlite.org/fts5.html">FTS5 extension</a> for search,
 and a PostgreSQL storage can use its own <a class="external" href="https://www.postgresql.org/docs/current/textsearch.html">native support</a>;
 the new API allows either storage to use something like Elasticsearch.
 (There's still no good way for search
 to filter/sort results without storage cooperation,
-so more work is needed.)</p>
-<p>Here's how it works (<a class="external" href="https://reader.readthedocs.io/en/latest/internal.html#reader._types.ChangeTrackerType">long version</a>):</p>
+so more work is needed here.)</p>
+<p>Also, it lays some of the groundwork for <strong>searchable tag values</strong>
+by having tag support already built into the API.</p>
+<p>Here's how change tracking works (<a class="external" href="https://reader.readthedocs.io/en/latest/internal.html#reader._types.ChangeTrackerType">long version</a>):</p>
 <ul>
 <li>Each entry has a 16 byte random sequence that changes when its text changes.</li>
-<li>All sequence changes get recorded.</li>
-<li>During updates, search gets the changes and processes them.</li>
+<li>Sequence changes get recorded and are available through the API.</li>
+<li>Search <code>update()</code> processes pending changes and marks them as done.</li>
 </ul>
-<p>While simple on its surface,
+<p>While simple on the surface,
 this prevents a lot of potential concurrency issues
 that needed special handling before.
 For example, what if an entry changes during pre-processing,
 before it is added to the search index?
 You <em>could</em> use a transaction,
-but this ends up keeping the database locked for too long.
-Also, what about other search backends
+but this may keep the database locked for too long.
+Also, what about search backends
 where you don't have transactions?</p>
 <p>I used <a class="external" href="https://hypothesis.readthedocs.io/">Hypothesis</a> and property-based testing
-to <a class="external" href="https://gist.github.com/lemon24/558955ad82ba2e4f50c0184c630c668c">validate this model</a>,
-so I'm ~99% confident it is correct.
+to <a class="external" href="https://gist.github.com/lemon24/558955ad82ba2e4f50c0184c630c668c">validate the model</a>,
+so I'm ~99% sure it is correct.
 A real model checker like TLA+ or Alloy may have been a better tool for it,
 but I don't know how to use one at this point.</p>
 <h3 id="filter-by-entry-tags">Filter by entry tags<span class="headerlink">&nbsp;<a href="#filter-by-entry-tags" title="permalink">#</a></span></h3>
 <p>It is now possible to filter entries by <a class="external" href="https://reader.readthedocs.io/en/latest/guide.html#resource-tags">entry tags</a>:
 <code>get_entries(tags=['tag'])</code>.</p>
-<p>I added this to see if it's possible to implement
-the <em>has_enclosures</em> <a class="external" href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.get_entries">get_entries()</a> filter as a plugin
+<p>I did this to see how it would look to implement
+the <em>has_enclosures</em> <a class="external" href="https://reader.readthedocs.io/en/latest/api.html#reader.Reader.get_entries">get_entries()</a> argument as a plugin
 (it is possible, but <a class="external" href="https://github.com/lemon24/reader/issues/327#issuecomment-1859147186">not really worth it</a>).</p>
 <h3 id="sqlite-storage-improvements">SQLite storage improvements<span class="headerlink">&nbsp;<a href="#sqlite-storage-improvements" title="permalink">#</a></span></h3>
-<p>As part of refactoring for the index split,
-I made a few small storage improvements:</p>
+<p>As part of a bigger storage refactoring,
+I made a few small improvements:</p>
 <ul>
 <li>Enable <a class="external" href="https://www.sqlite.org/wal.html">write-ahead logging</a> only once, when the database is created.</li>
 <li>Vacuum the main database after migrations.</li>
@@ -188,9 +189,9 @@ I made a few small storage improvements:</p>
 </ul>
 <h3 id="python-versions">Python versions<span class="headerlink">&nbsp;<a href="#python-versions" title="permalink">#</a></span></h3>
 <p><em>reader</em> 3.11 (released back in December) adds support for Python 3.12.</p>
-<p>For more details, see the full <a class="external" href="https://reader.readthedocs.io/en/stable/changelog.html#version-3-12">changelog</a>.</p>
 <hr />
-<p>That's it for now.</p>
+<p>That's it for now.
+For more details, see the full <a class="external" href="https://reader.readthedocs.io/en/stable/changelog.html#version-3-12">changelog</a>.</p>
 <p><strong>Want to contribute?</strong>
 Check out the <a class="external" href="https://reader.readthedocs.io/en/latest/contributing.html">docs</a> and the <a class="external" href="https://reader.readthedocs.io/en/latest/dev.html#roadmap">roadmap</a>.</p>
 <p><strong>Learned something new today?</strong> Share this with others, it really helps! <span class="text-large">
@@ -202,11 +203,11 @@ Check out the <a class="external" href="https://reader.readthedocs.io/en/latest/
 >PyCoder's Weekly</a>
 <a
     class="share-icon hacker-news color"
-    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/reader-3-12&t=reader%203.12%20released%20%E2%80%93%20split%20search%2C%20track%20changes"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/reader-3-12&t=reader%203.12%20released%20%E2%80%93%20split%20search%20index%2C%20changes%20API"
 >HN</a>
 <a
     class="share-icon reddit color"
-    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/reader-3-12&title=reader%203.12%20released%20%E2%80%93%20split%20search%2C%20track%20changes"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/reader-3-12&title=reader%203.12%20released%20%E2%80%93%20split%20search%20index%2C%20changes%20API"
 >Reddit</a>
 <a
     class="share-icon linkedin color"
@@ -214,7 +215,7 @@ Check out the <a class="external" href="https://reader.readthedocs.io/en/latest/
 >linkedin</a>
 <a
     class="share-icon twitter color"
-    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=reader%203.12%20released%20%E2%80%93%20split%20search%2C%20track%20changes&url=https%3A//death.andgravity.com/reader-3-12&via=_andgravity"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=reader%203.12%20released%20%E2%80%93%20split%20search%20index%2C%20changes%20API&url=https%3A//death.andgravity.com/reader-3-12&via=_andgravity"
 >Twitter</a>
 </span>
 </span></p>
