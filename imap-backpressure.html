@@ -30,11 +30,11 @@
 
 
 
-<title>imap_unordered() with backpressure: or, how imap_unordered() accidentally the whole thing - death and gravity</title>
+<title>Backpressure: or, how parallel map() accidentally the whole thing - death and gravity</title>
 
 
 
-<meta property="og:title" content="imap_unordered() with backpressure: or, how imap_unordered() accidentally the whole thing">
+<meta property="og:title" content="Backpressure: or, how parallel map() accidentally the whole thing">
 <meta property="og:site_name" content="death and gravity">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://death.andgravity.com/imap-backpressure">
@@ -71,9 +71,39 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">imap_unordered() with backpressure: or, how imap_unordered() accidentally the whole thing</h1>
+<h1 class="heading-noindex">Backpressure: or, how parallel map() accidentally the whole thing</h1>
 
 <p class="text-gray text-nowrap">
+
+
+
+<small>
+<span class="tooltip" data-tooltip="published on 2024-03-27">March 2024</span>
+∙ two minute read
+∙
+</small><span class="share-icons">
+<a
+    class="share-icon pycoders"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+>PyCoder's Weekly</a>
+<a
+    class="share-icon hacker-news"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/imap-backpressure&t=Backpressure%3A%20or%2C%20how%20parallel%20map%28%29%20accidentally%20the%20whole%20thing"
+>HN</a>
+<a
+    class="share-icon reddit"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/imap-backpressure&title=Backpressure%3A%20or%2C%20how%20parallel%20map%28%29%20accidentally%20the%20whole%20thing"
+>Reddit</a>
+<a
+    class="share-icon linkedin"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/imap-backpressure"
+>linkedin</a>
+<a
+    class="share-icon twitter"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Backpressure%3A%20or%2C%20how%20parallel%20map%28%29%20accidentally%20the%20whole%20thing&url=https%3A//death.andgravity.com/imap-backpressure&via=_andgravity"
+>Twitter</a>
+</span>
 
 
 </p>
@@ -89,9 +119,44 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>Say you're using <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>
-to process a lazy iterable in parallel:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">pool</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">dummy</span><span class="o">.</span><span class="n">Pool</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<p>Say you're processing a lazy iterable in parallel
+with <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap">Pool.imap()</a> or <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>.</p>
+<p>Maybe you get things in an &quot;endless&quot; stream from a paginated API,
+download them in parallel, and save progress to a database.
+Maybe it's more complicated, and
+you have multiple parallel processing steps chained in a sort of pipeline.</p>
+<!--
+```python
+inputs = get_inputs()
+ones = pool.imap(do_one, inputs)
+twos = pool.imap(do_two, ones)
+threes = pool.imap(do_three, twos)
+outputs = list(threes)
+```
+-->
+<p>What happens if you <strong>consume results slower than things are processed</strong>?
+Maybe the database is slow today, 
+or the second processing step is much slower than the first.</p>
+<p>A reasonable intuition is that <strong>workers block
+until the next result is requested</strong>
+– that is, workers process results in lockstep with the consumer.
+You may also expect that
+<strong>workers get items from the input iterable as needed</strong>
+– after all, that's how vanilla non-parallel <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a> works, right?</p>
+<p>Both intuitions <strong>are wrong</strong>.</p>
+<!-- .. toc:: -->
+<h2 id="an-example">An example<span class="headerlink">&nbsp;<a href="#an-example" title="permalink">#</a></span></h2>
+<p>Here's a simplified version of the problem:
+<code>range(3)</code> is the stream,
+<code>do_thing()</code> the processor,
+and we're using just one thread to make what's happening clear.</p>
+<p>First, the &quot;normal&quot; case, when consuming results is fast:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">do_thing</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">.1</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;done:&#39;</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">i</span>
+<span class="gp">... </span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">pool</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">dummy</span><span class="o">.</span><span class="n">Pool</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span><span class="n">do_thing</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)):</span>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39; out:&#39;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
 <span class="gp">...</span>
@@ -104,12 +169,9 @@ to process a lazy iterable in parallel:</p>
 </code></pre></div>
 <p>Items are processed by each worker one at a time,
 and results are yielded by the <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a> iterator
-as soon as they are ready. So far so good.</p>
-<p>What happens if we consume results slower than they are produced?
-A reasonable intuition would be that <strong>workers block
-until the next result is requested</strong>
-– that is, workers process results in lockstep with the consumer.
-So, we'd get the same output as above, right? <strong>Wrong!</strong></p>
+as soon as they're ready. So far so good.</p>
+<p>So, if our intuition is correct,
+we get the same output for a slow consumer, right?</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span><span class="n">do_thing</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)):</span>
 <span class="gp">... </span>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">.2</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39; out:&#39;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
@@ -121,6 +183,9 @@ So, we'd get the same output as above, right? <strong>Wrong!</strong></p>
 <span class="go"> out: 1</span>
 <span class="go"> out: 2</span>
 </code></pre></div>
+<p><strong>Wrong!</strong>
+The workers keep doing work,
+even when the consumer remains behind.</p>
 <p>Following the same intuition,
 you may expect that
 <strong>workers get items from the input iterable as needed</strong>...
@@ -149,6 +214,7 @@ alas, you'd be <strong>wrong again</strong>:</p>
 import time, multiprocessing.dummy
 
 pool = multiprocessing.dummy.Pool(1)
+
 for result in pool.imap_unordered(do_thing, range(3)):
     print(' out:', result)
 
