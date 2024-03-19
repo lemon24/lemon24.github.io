@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2024-03-27">March 2024</span>
-∙ two minute read
+∙ three minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -135,7 +135,7 @@ outputs = list(threes)
 ```
 -->
 <p>What happens if you <strong>consume results slower than things are processed</strong>?
-Maybe the database is slow today, 
+Maybe the database is slow today,
 or the second processing step is much slower than the first.</p>
 <p>A reasonable intuition is that <strong>workers block
 until the next result is requested</strong>
@@ -146,17 +146,28 @@ You may also expect that
 <p>Both intuitions <strong>are wrong</strong>.</p>
 <!-- .. toc:: -->
 <h2 id="an-example">An example<span class="headerlink">&nbsp;<a href="#an-example" title="permalink">#</a></span></h2>
-<p>Here's a simplified version of the problem:
+<p>Here's a simple version of the problem:
 <code>range(3)</code> is the stream,
 <code>do_thing()</code> the processor,
-and we're using just one thread to make what's happening clear.</p>
-<p>First, the &quot;normal&quot; case, when consuming results is fast:</p>
+and we're using just one worker thread.</p>
+<p>Before that, though, let's see what sequential <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a> does, as a baseline:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">do_thing</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">.1</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">.01</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;done:&#39;</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="k">return</span> <span class="n">i</span>
-<span class="gp">... </span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">pool</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">dummy</span><span class="o">.</span><span class="n">Pool</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="nb">map</span><span class="p">(</span><span class="n">do_thing</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39; out:&#39;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="go">done: 0</span>
+<span class="go"> out: 0</span>
+<span class="go">done: 1</span>
+<span class="go"> out: 1</span>
+<span class="go">done: 2</span>
+<span class="go"> out: 2</span>
+</code></pre></div>
+<p>First, the usual case where consuming results is faster than processing them:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">pool</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">dummy</span><span class="o">.</span><span class="n">Pool</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span><span class="n">do_thing</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)):</span>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39; out:&#39;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
 <span class="gp">...</span>
@@ -167,13 +178,14 @@ and we're using just one thread to make what's happening clear.</p>
 <span class="go">done: 2</span>
 <span class="go"> out: 2</span>
 </code></pre></div>
-<p>Items are processed by each worker one at a time,
-and results are yielded by the <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a> iterator
-as soon as they're ready. So far so good.</p>
-<p>So, if our intuition is correct,
-we get the same output for a slow consumer, right?</p>
+<p>This looks functionally equivalent to <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a> –
+items are processed by the worker one at a time,
+and <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a> yields results as soon as they're ready.
+So far so good.</p>
+<p>If our intuition is correct,
+we'll get the same output for a slow consumer, right?</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span><span class="n">do_thing</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)):</span>
-<span class="gp">... </span>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">.2</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">.1</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39; out:&#39;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
 <span class="gp">...</span>
 <span class="go">done: 0</span>
@@ -186,18 +198,31 @@ we get the same output for a slow consumer, right?</p>
 <p><strong>Wrong!</strong>
 The workers keep doing work,
 even when the consumer remains behind.</p>
-<p>Following the same intuition,
-you may expect that
-<strong>workers get items from the input iterable as needed</strong>...
-alas, you'd be <strong>wrong again</strong>:</p>
+<p>What about workers getting items from the input?
+Here, we don't care about the consumer at all,
+<code>do_input()</code> being slower than the input iterable is enough.</p>
+<p>First, sequential <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a> as a baseline:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">get_inputs</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
 <span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;  in:&#39;</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
 <span class="gp">... </span>        <span class="k">yield</span> <span class="n">i</span>
 <span class="gp">...</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span><span class="n">do_thing</span><span class="p">,</span> <span class="n">get_inputs</span><span class="p">(</span><span class="mi">3</span><span class="p">)):</span>
-<span class="gp">... </span>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">.2</span><span class="p">)</span>
-<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39; out:&#39;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="nb">map</span><span class="p">(</span><span class="n">do_thing</span><span class="p">,</span> <span class="n">get_inputs</span><span class="p">(</span><span class="mi">3</span><span class="p">)):</span>
+<span class="gp">... </span>    <span class="k">pass</span>
+<span class="gp">...</span>
+<span class="go">  in: 0</span>
+<span class="go">done: 0</span>
+<span class="go">  in: 1</span>
+<span class="go">done: 1</span>
+<span class="go">  in: 2</span>
+<span class="go">done: 2</span>
+</code></pre></div>
+<p>Input is consumed in lockstep with the work being done
+– get one, do one, repeat.</p>
+<p>As before, if we were right,
+we should get the same output from <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span><span class="n">do_thing</span><span class="p">,</span> <span class="n">get_inputs</span><span class="p">(</span><span class="mi">3</span><span class="p">)):</span>
+<span class="gp">... </span>    <span class="k">pass</span>
 <span class="gp">...</span>
 <span class="go">  in: 0</span>
 <span class="go">  in: 1</span>
@@ -205,11 +230,32 @@ alas, you'd be <strong>wrong again</strong>:</p>
 <span class="go">done: 0</span>
 <span class="go">done: 1</span>
 <span class="go">done: 2</span>
-<span class="go"> out: 0</span>
-<span class="go"> out: 1</span>
-<span class="go"> out: 2</span>
 </code></pre></div>
-<p>TODO: memory</p>
+<p><strong>Wrong again!</strong>
+The entire input is consumed way before the worker finishes one item.</p>
+<p>And it's not like <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a> does <code>list(input)</code> at the beginning,
+for longer input and fast enough work,
+you will get interleaved output (although different on each run):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span><span class="nb">print</span><span class="p">,</span> <span class="n">get_inputs</span><span class="p">(</span><span class="mi">8</span><span class="p">)):</span> <span class="k">pass</span>
+<span class="gp">...</span>
+<span class="go">  in: 0</span>
+<span class="go">  in: 1</span>
+<span class="go">  in: 2</span>
+<span class="go">0</span>
+<span class="go">  in: 3</span>
+<span class="go">  in: 4</span>
+<span class="go">1</span>
+<span class="go">  in: 5</span>
+<span class="go">2</span>
+<span class="go">  in: 6</span>
+<span class="go">3</span>
+<span class="go">  in: 7</span>
+<span class="go">4</span>
+<span class="go">5</span>
+<span class="go">6</span>
+<span class="go">7</span>
+</code></pre></div>
+<p>What is going on?</p>
 <!--
 import time, multiprocessing.dummy
 
@@ -219,11 +265,10 @@ for result in pool.imap_unordered(do_thing, range(3)):
     print(' out:', result)
 
 for result in pool.imap_unordered(do_thing, range(3)):
-    time.sleep(.2)
+    time.sleep(.1)
     print(' out:', result)
 
 for result in pool.imap_unordered(do_thing, get_inputs(3)):
-    time.sleep(.2)
     print(' out:', result)
 -->
 <!-- TODO separate performance section for double and chunk size -->
