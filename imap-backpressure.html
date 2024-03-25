@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2024-03-27">March 2024</span>
-∙ three minute read
+∙ four minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -121,7 +121,7 @@ window.addEventListener('resize', set_vh);
 
 <p>Say you're processing a lazy iterable in parallel
 with <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap">Pool.imap()</a> or <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>.</p>
-<p>Maybe you get things in an &quot;endless&quot; stream from a paginated API,
+<p>Maybe you get an &quot;endless&quot; stream of things from a paginated API,
 download them in parallel, and save progress to a database.
 Maybe it's more complicated, and
 you have multiple parallel processing steps chained in a sort of pipeline.</p>
@@ -137,14 +137,21 @@ outputs = list(threes)
 <p>What happens if you <strong>consume results slower than things are processed</strong>?
 Maybe the database is slow today,
 or the second processing step is much slower than the first.</p>
-<p>A reasonable intuition is that <strong>workers block
+<p>A reasonable guess is that <strong>workers block
 until the next result is requested</strong>
 – that is, workers process results in lockstep with the consumer.
-You may also expect that
+Likewise, you may expect that
 <strong>workers get items from the input iterable as needed</strong>
 – after all, that's how vanilla non-parallel <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a> works, right?</p>
-<p>Both intuitions <strong>are wrong</strong>.</p>
-<!-- .. toc:: -->
+<!-- **Wrong.** -->
+<section class="toc">
+<ul>
+<li><a href="#an-example">An example</a></li>
+<li><a href="#what-is-backpressure">What is backpressure?</a></li>
+<li><a href="#queue">Queue</a></li>
+<li><a href="#concurrent-futures">concurrent.futures</a></li>
+</ul>
+</section>
 <h2 id="an-example">An example<span class="headerlink">&nbsp;<a href="#an-example" title="permalink">#</a></span></h2>
 <p>Here's a simple version of the problem:
 <code>range(3)</code> is the stream,
@@ -273,21 +280,61 @@ for result in pool.imap_unordered(do_thing, get_inputs(3)):
 -->
 <!-- TODO separate performance section for double and chunk size -->
 <h2 id="what-is-backpressure">What is backpressure?<span class="headerlink">&nbsp;<a href="#what-is-backpressure" title="permalink">#</a></span></h2>
-<p>&quot;when code consuming results from [i]map_unordered() cannot keep up with the tasks producing them, the results accumulate in the internal queue, with potentially infinite memory usage&quot;</p>
+<blockquote>
+<p><a class="external" href="https://en.wiktionary.org/wiki/backpressure"><strong>backpressure</strong></a>
+(<em>countable and uncountable, plural</em> <strong>backpressures</strong>)</p>
+<ol>
+<li>(dynamics) Pressure that is opposed to the flow of a fluid.</li>
+<li>(computing) The buildup of unprocessed data due to a bottleneck.</li>
+</ol>
+</blockquote>
+<p>That's clear enough, but misses some nuance.
+Jay Phelps starts his excellent <a class="external" href="https://medium.com/@jayphelps/backpressure-explained-the-flow-of-data-through-software-2350b3e77ce7">Backpressure explained</a> article
+by paraphrasing the <a class="external" href="https://en.wikipedia.org/wiki/Back_pressure">Wikipedia definition</a>:</p>
+<blockquote>
+<p>resistance to the desired flow of <del>fluid through pipes</del> <strong>data through software</strong></p>
+</blockquote>
+<p>That <em>desired</em> carries a lot of weight.
+In an aside, Jay further notes:</p>
+<blockquote>
+<p>you might eventually hear someone use the word &quot;backpressure&quot; to actually mean something has the ability to <strong>control or handle backpressure</strong></p>
+</blockquote>
+<p>Turns out, we care a lot <em>where</em> and <em>how</em> that backpressure is handled.</p>
 <figure class="figure">
-<svg xmlns='http://www.w3.org/2000/svg' class="pikchr" viewBox="0 0 514.556 40.6694">
-<path d="M220.868,32.4L305.907,32.4L305.907,2.16L220.868,2.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
-<path d="M217.813,35.4547L302.852,35.4547L302.852,5.2147L217.813,5.2147Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
-<path d="M2.16,38.5094L87.1994,38.5094L87.1994,8.2694L2.16,8.2694Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
-<text x="44.6797" y="23.3894" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">input</text>
-<polygon points="87.1994,23.3894 98.7194,19.0694 98.7194,27.7094" style="fill:rgb(0,0,0)"/>
-<path d="M92.9594,23.3894L214.758,23.3894"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
-<path d="M214.758,38.5094L299.798,38.5094L299.798,8.2694L214.758,8.2694Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
-<text x="257.278" y="23.3894" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">worker</text>
-<polygon points="299.798,23.3894 311.318,19.0694 311.318,27.7094" style="fill:rgb(0,0,0)"/>
-<path d="M305.558,23.3894L427.357,23.3894"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
-<path d="M427.357,38.5094L512.396,38.5094L512.396,8.2694L427.357,8.2694Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
-<text x="469.877" y="23.3894" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">for</text>
+<svg xmlns='http://www.w3.org/2000/svg' class="pikchr" viewBox="0 0 582.588 37.188">
+<path d="M2.16,35.028L87.1994,35.028L87.1994,4.788L2.16,4.788Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="44.6797" y="19.908" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">input</text>
+<polygon points="87.1994,19.908 98.7194,15.588 98.7194,24.228" style="fill:rgb(0,0,0)"/>
+<path d="M92.9594,19.908L248.774,19.908"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="167.987" y="10.224" text-anchor="middle" fill="rgb(0,0,0)" font-size="80%" dominant-baseline="central">next</text>
+<path d="M248.774,35.028L333.814,35.028L333.814,4.788L248.774,4.788Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="291.294" y="19.908" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">map()</text>
+<polygon points="333.814,19.908 345.334,15.588 345.334,24.228" style="fill:rgb(0,0,0)"/>
+<path d="M339.574,19.908L495.388,19.908"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="414.601" y="10.224" text-anchor="middle" fill="rgb(0,0,0)" font-size="80%" dominant-baseline="central">next</text>
+<path d="M495.388,35.028L580.428,35.028L580.428,4.788L495.388,4.788Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="537.908" y="19.908" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">for</text>
+</svg>
+
+
+<figcaption class="figure-caption text-center text-small">
+</figcaption>
+<figure class="figure">
+<svg xmlns='http://www.w3.org/2000/svg' class="pikchr" viewBox="0 0 582.588 42.1968">
+<path d="M252.593,32.4L337.632,32.4L337.632,2.16L252.593,2.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M248.774,36.2184L333.814,36.2184L333.814,5.97838L248.774,5.97838Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M2.16,36.2184L87.1994,36.2184L87.1994,5.97838L2.16,5.97838Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="44.6797" y="21.0984" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">input</text>
+<polygon points="87.1994,21.0984 98.7194,16.7784 98.7194,25.4184" style="fill:rgb(0,0,0)"/>
+<path d="M92.9594,21.0984L248.774,21.0984"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="167.987" y="11.4144" text-anchor="middle" fill="rgb(0,0,0)" font-size="80%" dominant-baseline="central">next</text>
+<path d="M244.956,40.0368L329.995,40.0368L329.995,9.79675L244.956,9.79675Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="287.475" y="24.9168" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">worker</text>
+<polygon points="333.814,21.0984 345.334,16.7784 345.334,25.4184" style="fill:rgb(0,0,0)"/>
+<path d="M339.574,21.0984L495.388,21.0984"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="414.601" y="11.4144" text-anchor="middle" fill="rgb(0,0,0)" font-size="80%" dominant-baseline="central">next</text>
+<path d="M495.388,36.2184L580.428,36.2184L580.428,5.97838L495.388,5.97838Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="537.908" y="21.0984" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">for</text>
 </svg>
 
 
@@ -295,32 +342,37 @@ for result in pool.imap_unordered(do_thing, get_inputs(3)):
 </figcaption>
 </figure>
 <figure class="figure">
-<svg xmlns='http://www.w3.org/2000/svg' class="pikchr" viewBox="0 0 514.556 40.6694">
-<path d="M220.868,32.4L305.907,32.4L305.907,2.16L220.868,2.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
-<path d="M217.813,35.4547L302.852,35.4547L302.852,5.2147L217.813,5.2147Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
-<path d="M2.16,38.5094L87.1994,38.5094L87.1994,8.2694L2.16,8.2694Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
-<text x="44.6797" y="23.3894" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">input</text>
-<polygon points="121.215,23.3894 109.695,27.7094 109.695,19.0694" style="fill:rgb(0,0,0)"/>
-<path d="M87.1994,23.3894L115.455,23.3894"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
-<path d="M134.319,36.4934L167.639,36.4934A13.104 13.104 0 0 0 180.743 23.3894A13.104 13.104 0 0 0 167.639 10.2854L134.319,10.2854A13.104 13.104 0 0 0 121.215 23.3894A13.104 13.104 0 0 0 134.319 36.4934Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
-<text x="150.979" y="23.3894" text-anchor="middle" fill="rgb(0,0,0)" font-size="80%" dominant-baseline="central">queue</text>
-<polygon points="180.743,23.3894 192.263,19.0694 192.263,27.7094" style="fill:rgb(0,0,0)"/>
-<path d="M186.503,23.3894L214.758,23.3894"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
-<path d="M214.758,38.5094L299.798,38.5094L299.798,8.2694L214.758,8.2694Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
-<text x="257.278" y="23.3894" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">worker</text>
-<polygon points="333.814,23.3894 322.294,27.7094 322.294,19.0694" style="fill:rgb(0,0,0)"/>
-<path d="M299.798,23.3894L328.054,23.3894"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
-<path d="M346.918,36.4934L380.237,36.4934A13.104 13.104 0 0 0 393.341 23.3894A13.104 13.104 0 0 0 380.237 10.2854L346.918,10.2854A13.104 13.104 0 0 0 333.814 23.3894A13.104 13.104 0 0 0 346.918 36.4934Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
-<text x="363.577" y="23.3894" text-anchor="middle" fill="rgb(0,0,0)" font-size="80%" dominant-baseline="central">queue</text>
-<polygon points="393.341,23.3894 404.861,19.0694 404.861,27.7094" style="fill:rgb(0,0,0)"/>
-<path d="M399.101,23.3894L427.357,23.3894"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
-<path d="M427.357,38.5094L512.396,38.5094L512.396,8.2694L427.357,8.2694Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
-<text x="469.877" y="23.3894" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">for</text>
+<svg xmlns='http://www.w3.org/2000/svg' class="pikchr" viewBox="0 0 582.588 42.1968">
+<path d="M252.593,32.4L337.632,32.4L337.632,2.16L252.593,2.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M248.774,36.2184L333.814,36.2184L333.814,5.97838L248.774,5.97838Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M2.16,36.2184L87.1994,36.2184L87.1994,5.97838L2.16,5.97838Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="44.6797" y="21.0984" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">input</text>
+<polygon points="138.223,21.0984 126.703,25.4184 126.703,16.7784" style="fill:rgb(0,0,0)"/>
+<path d="M87.1994,21.0984L132.463,21.0984"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="112.711" y="11.4144" text-anchor="middle" fill="rgb(0,0,0)" font-size="80%" dominant-baseline="central">put</text>
+<path d="M151.327,34.2024L184.647,34.2024A13.104 13.104 0 0 0 197.751 21.0984A13.104 13.104 0 0 0 184.647 7.99438L151.327,7.99438A13.104 13.104 0 0 0 138.223 21.0984A13.104 13.104 0 0 0 151.327 34.2024Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="167.987" y="21.0984" text-anchor="middle" fill="rgb(0,0,0)" font-size="80%" dominant-baseline="central">queue</text>
+<polygon points="197.751,21.0984 209.271,16.7784 209.271,25.4184" style="fill:rgb(0,0,0)"/>
+<path d="M203.511,21.0984L248.774,21.0984"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="223.262" y="11.4144" text-anchor="middle" fill="rgb(0,0,0)" font-size="80%" dominant-baseline="central">get</text>
+<path d="M244.956,40.0368L329.995,40.0368L329.995,9.79675L244.956,9.79675Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="287.475" y="24.9168" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">worker</text>
+<polygon points="384.837,21.0984 373.317,25.4184 373.317,16.7784" style="fill:rgb(0,0,0)"/>
+<path d="M333.814,21.0984L379.077,21.0984"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="359.325" y="11.4144" text-anchor="middle" fill="rgb(0,0,0)" font-size="80%" dominant-baseline="central">put</text>
+<path d="M397.941,34.2024L431.261,34.2024A13.104 13.104 0 0 0 444.365 21.0984A13.104 13.104 0 0 0 431.261 7.99438L397.941,7.99438A13.104 13.104 0 0 0 384.837 21.0984A13.104 13.104 0 0 0 397.941 34.2024Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="414.601" y="21.0984" text-anchor="middle" fill="rgb(0,0,0)" font-size="80%" dominant-baseline="central">queue</text>
+<polygon points="444.365,21.0984 455.885,16.7784 455.885,25.4184" style="fill:rgb(0,0,0)"/>
+<path d="M450.125,21.0984L495.388,21.0984"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="469.877" y="11.4144" text-anchor="middle" fill="rgb(0,0,0)" font-size="80%" dominant-baseline="central">get</text>
+<path d="M495.388,36.2184L580.428,36.2184L580.428,5.97838L495.388,5.97838Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="537.908" y="21.0984" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">for</text>
 </svg>
 
 
 </figure>
 <p>https://bugs.python.org/issue40110</p>
+<p>&quot;when code consuming results from [i]map_unordered() cannot keep up with the tasks producing them, the results accumulate in the internal queue, with potentially infinite memory usage&quot;</p>
 <h2 id="queue">Queue<span class="headerlink">&nbsp;<a href="#queue" title="permalink">#</a></span></h2>
 <p>internally, it uses a queue; if we had access to the queue,
 we could easily fix this by making the queue bounded.</p>
