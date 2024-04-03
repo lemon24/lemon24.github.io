@@ -120,7 +120,8 @@ window.addEventListener('resize', set_vh);
 <div class="column col-sm-12 col-md-10 col-8">
 
 <p>Say you're processing a lazy iterable in parallel
-with <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap">Pool.imap()</a> or <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>.</p>
+with <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap">multiprocessing.​Pool.imap()</a> or <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>
+in Python.</p>
 <p>Maybe you get an &quot;endless&quot; stream of things from a paginated API,
 download them in parallel, and save progress to a database.
 Maybe it's more complicated, and
@@ -142,8 +143,8 @@ until the next result is requested</strong>
 – that is, workers process results in lockstep with the consumer.
 Likewise, you may expect that
 <strong>workers get items from the input iterable as needed</strong>
-– after all, that's how vanilla non-parallel <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a> works, right?</p>
-<!-- **Wrong.** -->
+– after all, that's how vanilla non-parallel <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a> works.</p>
+<p>Right? <strong>Wrong!</strong></p>
 <section class="toc">
 <ul>
 <li><a href="#an-example">An example</a></li>
@@ -155,9 +156,9 @@ Likewise, you may expect that
 <h2 id="an-example">An example<span class="headerlink">&nbsp;<a href="#an-example" title="permalink">#</a></span></h2>
 <p>Here's a simple version of the problem:
 <code>range(3)</code> is the stream,
-<code>do_thing()</code> the processor,
+<code>do_thing()</code> the processor function,
 and we're using just one worker thread.</p>
-<p>Before that, though, let's see what sequential <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a> does, as a baseline:</p>
+<p>Before that, though, let's see what regular <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a> does, as a baseline:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">do_thing</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">.01</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;done:&#39;</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
@@ -205,10 +206,11 @@ we'll get the same output for a slow consumer, right?</p>
 <p><strong>Wrong!</strong>
 The workers keep doing work,
 even when the consumer remains behind.</p>
+<hr />
 <p>What about workers getting items from the input?
 Here, we don't care about the consumer at all,
-<code>do_input()</code> being slower than the input iterable is enough.</p>
-<p>First, sequential <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a> as a baseline:</p>
+<code>do_thing()</code> being slower than the input iterable is enough.</p>
+<p>First, regular <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a> as a baseline:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">get_inputs</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
 <span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;  in:&#39;</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
@@ -240,9 +242,9 @@ we should get the same output from <a class="external" href="https://docs.python
 </code></pre></div>
 <p><strong>Wrong again!</strong>
 The entire input is consumed way before the worker finishes one item.</p>
-<p>And it's not like <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a> does <code>list(input)</code> at the beginning,
+<p>And it's not like <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a> does <code>list(input)</code> at the beginning –
 for longer input and fast enough work,
-you will get interleaved output (although different on each run):</p>
+you will get interleaved output (different on each run):</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span><span class="nb">print</span><span class="p">,</span> <span class="n">get_inputs</span><span class="p">(</span><span class="mi">8</span><span class="p">)):</span> <span class="k">pass</span>
 <span class="gp">...</span>
 <span class="go">  in: 0</span>
@@ -279,27 +281,49 @@ for result in pool.imap_unordered(do_thing, get_inputs(3)):
     print(' out:', result)
 -->
 <!-- TODO separate performance section for double and chunk size -->
+<!-- TODO link from limit-concurrency to this section -->
 <h2 id="what-is-backpressure">What is backpressure?<span class="headerlink">&nbsp;<a href="#what-is-backpressure" title="permalink">#</a></span></h2>
+<p>Wiktionary says:</p>
 <blockquote>
 <p><a class="external" href="https://en.wiktionary.org/wiki/backpressure"><strong>backpressure</strong></a>
 (<em>countable and uncountable, plural</em> <strong>backpressures</strong>)</p>
 <ol>
-<li>(dynamics) Pressure that is opposed to the flow of a fluid.</li>
-<li>(computing) The buildup of unprocessed data due to a bottleneck.</li>
+<li>(<em>fluid dynamics</em>) Pressure that is opposed to the flow of a fluid.</li>
+<li>(<em>computing</em>) The buildup of unprocessed data due to a bottleneck.</li>
 </ol>
 </blockquote>
-<p>That's clear enough, but misses some nuance.
-Jay Phelps starts his excellent <a class="external" href="https://medium.com/@jayphelps/backpressure-explained-the-flow-of-data-through-software-2350b3e77ce7">Backpressure explained</a> article
-by paraphrasing the <a class="external" href="https://en.wikipedia.org/wiki/Back_pressure">Wikipedia definition</a>:</p>
+<p>In an aside to his excellent
+<a class="external" href="https://medium.com/@jayphelps/backpressure-explained-the-flow-of-data-through-software-2350b3e77ce7">Backpressure explained: the resisted flow of data through software</a>,
+Jay Phelps notes:</p>
 <blockquote>
-<p>resistance to the desired flow of <del>fluid through pipes</del> <strong>data through software</strong></p>
+<p>you might eventually hear someone use the word &quot;backpressure&quot;
+to actually mean something has the ability to <strong>control or handle backpressure</strong></p>
 </blockquote>
-<p>That <em>desired</em> carries a lot of weight.
-In an aside, Jay further notes:</p>
+<p>Tomasz Nurkiewicz does this in
+<a class="external" href="https://nurkiewicz.com/2021/06/backpressure.html">Flow control and backpressure: slowing down to remain stable</a>,
+using <a class="external" href="https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Flow_control">TCP flow control</a> as an example:</p>
 <blockquote>
-<p>you might eventually hear someone use the word &quot;backpressure&quot; to actually mean something has the ability to <strong>control or handle backpressure</strong></p>
+<p>Backpressure is a mechanism of automatically slowing down the producer
+when the consumer can't keep up with the incoming data. [...]
+TCP/IP protocol used throughout the Internet has flow control mechanism built-in.</p>
 </blockquote>
-<p>Turns out, we care a lot <em>where</em> and <em>how</em> that backpressure is handled.</p>
+<p>Turns out, we care so much about handling backpressure 
+that we use the terms interchangeably:</p>
+<blockquote>
+<p><a class="external" href="https://en.wiktionary.org/wiki/flow_control"><strong>flow control</strong></a>
+(<em>uncountable</em>)</p>
+<ol>
+<li>(<em>networking</em>) The management of the data transmission rate between
+two nodes to prevent a fast sender from outrunning a slow receiver.</li>
+</ol>
+</blockquote>
+<p>(Why is that? ... TODO)</p>
+<!-- TODO example with pipes -->
+<hr />
+<p>With regular <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a>, the consumer controls the producer
+– the for loop calls <a class="external" href="https://docs.python.org/3.12/library/stdtypes.html#iterator.__next__">__next__()</a> on the iterator returned by <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a>,
+which in turn calls <a class="external" href="https://docs.python.org/3.12/library/stdtypes.html#iterator.__next__">__next__()</a> on the input 
+before doing the work and returning the result.</p>
 <figure class="figure">
 <svg xmlns='http://www.w3.org/2000/svg' class="pikchr" viewBox="0 0 582.588 37.188">
 <path d="M2.16,35.028L87.1994,35.028L87.1994,4.788L2.16,4.788Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
@@ -318,7 +342,10 @@ In an aside, Jay further notes:</p>
 
 
 <figcaption class="figure-caption text-center text-small">
+how regular map() works
 </figcaption>
+</figure>
+<p>Applying the same model to <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a> would look like this:</p>
 <figure class="figure">
 <svg xmlns='http://www.w3.org/2000/svg' class="pikchr" viewBox="0 0 582.588 42.1968">
 <path d="M252.593,32.4L337.632,32.4L337.632,2.16L252.593,2.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
@@ -339,8 +366,17 @@ In an aside, Jay further notes:</p>
 
 
 <figcaption class="figure-caption text-center text-small">
+how we thought Pool.imap_unordered() should work
 </figcaption>
 </figure>
+<p>That's fine as a mental model,
+but things <em>cannot</em> work like that in practice.
+First,
+the input may be in a different process,
+so workers cannot call <a class="external" href="https://docs.python.org/3.12/library/stdtypes.html#iterator.__next__">__next__()</a> on it.
+Second, a &quot;collection of workers&quot; has no <a class="external" href="https://docs.python.org/3.12/library/stdtypes.html#iterator.__next__">__next__()</a>,
+you have to gather their outputs somewhere.</p>
+<p>That somewhere is a <em><a class="external" href="https://docs.python.org/3.12/library/multiprocessing.html#pipes-and-queues">queue</a></em>.</p>
 <figure class="figure">
 <svg xmlns='http://www.w3.org/2000/svg' class="pikchr" viewBox="0 0 582.588 42.1968">
 <path d="M252.593,32.4L337.632,32.4L337.632,2.16L252.593,2.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
@@ -370,9 +406,17 @@ In an aside, Jay further notes:</p>
 </svg>
 
 
+<figcaption class="figure-caption text-center text-small">
+how Pool.imap_unordered() actually works
+</figcaption>
 </figure>
-<p>https://bugs.python.org/issue40110</p>
+<p>???</p>
+<p>https://bugs.python.org/issue40110
+https://github.com/python/cpython/issues/84291
+https://github.com/python/cpython/issues/64192
+https://github.com/python/cpython/issues/63372</p>
 <p>&quot;when code consuming results from [i]map_unordered() cannot keep up with the tasks producing them, the results accumulate in the internal queue, with potentially infinite memory usage&quot;</p>
+<p>When is this a problem?</p>
 <h2 id="queue">Queue<span class="headerlink">&nbsp;<a href="#queue" title="permalink">#</a></span></h2>
 <p>internally, it uses a queue; if we had access to the queue,
 we could easily fix this by making the queue bounded.</p>
