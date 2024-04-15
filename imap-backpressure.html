@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2024-03-27">March 2024</span>
-∙ four minute read
+∙ five minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -148,7 +148,12 @@ Likewise, you may expect that
 <section class="toc">
 <ul>
 <li><a href="#an-example">An example</a></li>
-<li><a href="#what-is-backpressure">What is backpressure?</a></li>
+<li><a href="#what-is-backpressure">What is backpressure?</a>
+<ul>
+<li><a href="#an-example-of-backpressure">An example of backpressure</a></li>
+</ul>
+</li>
+<li><a href="#">...</a></li>
 <li><a href="#queue">Queue</a></li>
 <li><a href="#concurrent-futures">concurrent.futures</a></li>
 </ul>
@@ -317,12 +322,50 @@ This overlaps with flow control quite a bit:</p>
 two nodes to prevent a fast sender from outrunning a slow receiver.</li>
 </ol>
 </blockquote>
-<p>While scaling up, buffering, and dropping data
+<p>While buffering, dropping data, and scaling up
 are valid strategies for dealing with an overloaded system,
 I'd hesitate to call them backpressure,
 since in isolation they're all missing the resistance part.</p>
-<!-- TODO example with pipes -->
-<hr />
+<h3 id="an-example-of-backpressure">An example of backpressure<span class="headerlink">&nbsp;<a href="#an-example-of-backpressure" title="permalink">#</a></span></h3>
+<p><a class="external" href="https://en.wikipedia.org/wiki/Pipeline_(Unix)">Unix pipelines</a> offer an easy way to see backpressure in action.</p>
+<p>Given a program that writes to standard output:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">6</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;  in:&#39;</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s2">&gt;</span><span class="si">{</span><span class="mi">40000</span><span class="si">}}</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<p>...and one that reads from standard input:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">sys</span><span class="o">,</span> <span class="nn">time</span>
+
+<span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">stdin</span><span class="p">:</span>
+    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">.01</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39; out:&#39;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">line</span><span class="p">),</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
+</code></pre></div>
+
+<p>...you can pass data from one to the other by chaining them in a pipeline:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>writer.py<span class="w"> </span><span class="p">|</span><span class="w"> </span>python<span class="w"> </span>reader.py
+<span class="go">  in: 0</span>
+<span class="go">  in: 1</span>
+<span class="go">  in: 2</span>
+<span class="go"> out: 0</span>
+<span class="go">  in: 3</span>
+<span class="go"> out: 1</span>
+<span class="go">  in: 4</span>
+<span class="go"> out: 2</span>
+<span class="go">  in: 5</span>
+<span class="go"> out: 3</span>
+<span class="go"> out: 4</span>
+<span class="go"> out: 5</span>
+</code></pre></div>
+<p>Once all the <a class="external" href="https://unix.stackexchange.com/questions/11946/how-big-is-the-pipe-buffer">various</a> <a class="external" href="https://docs.python.org/3/library/sys.html#sys.stdin">buffers</a> get filled up
+(first three <code>in:</code> lines),
+the <a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase.write">write()</a> call blocks until at least some data is read on the other side;
+the two programs then continue in lockstep (alternating <code>in:</code> / <code>out:</code> lines)
+until there's no more data.</p>
+<p>Here, the blocking <a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase.write">write()</a> is where the backpressure happens.</p>
+<h2 id="">...<span class="headerlink">&nbsp;<a href="#" title="permalink">#</a></span></h2>
 <p>With regular <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a>, the consumer controls the producer
 – the for loop calls <a class="external" href="https://docs.python.org/3.12/library/stdtypes.html#iterator.__next__">__next__()</a> on the iterator returned by <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a>,
 which in turn calls <a class="external" href="https://docs.python.org/3.12/library/stdtypes.html#iterator.__next__">__next__()</a> on the input
