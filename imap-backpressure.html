@@ -296,24 +296,22 @@ for result in pool.imap_unordered(do_thing, get_inputs(3)):
 <li>(<em>computing</em>) The buildup of unprocessed data due to a bottleneck.</li>
 </ol>
 </blockquote>
-<p>In <a class="external" href="https://medium.com/@jayphelps/backpressure-explained-the-flow-of-data-through-software-2350b3e77ce7">Backpressure explained</a>,
-Jay Phelps starts by paraphrasing the <a class="external" href="https://en.wikipedia.org/wiki/Back_pressure">Wikipedia definition</a>:</p>
-<blockquote>
-<p>resistance to the desired flow of <del>fluid through pipes</del> <strong>data through software</strong></p>
-</blockquote>
-<p>He then goes on to define backpressure as the <em>situation</em>
+<p>Easy, right? But there's more than one way to interpret that definition.</p>
+<p>In <a class="external" href="https://medium.com/@jayphelps/backpressure-explained-the-flow-of-data-through-software-2350b3e77ce7">Backpressure explained — the resisted flow of data through software</a>,
+Jay Phelps defines backpressure as the <em>situation</em>
 of having a fast data producer and a slow data consumer,
-detached of how that's handled. In an aside, he notes:</p>
+detached of how it is handled (control, buffer, drop, or ignore).
+He notes:</p>
 <blockquote>
 <p>you might eventually hear someone use the word &quot;backpressure&quot;
 to actually mean something has the ability to <strong>control or handle backpressure</strong></p>
 </blockquote>
 <p>However, <a class="external" href="https://blog.frankel.ch/backpressure-reactive-systems/">most</a> <a class="external" href="https://nurkiewicz.com/2021/06/backpressure.html">other</a> <a class="external" href="https://www.techopedia.com/definition/24131/backpressure">people</a>,
 including <a class="external" href="https://datatracker.ietf.org/doc/html/rfc3449#section-4.8">some</a> <a class="external" href="https://datatracker.ietf.org/doc/html/rfc2285#section-3.7.1">RFCs</a>,
-define backpressure as
-a mechanism that <strong>pushes back on the producer</strong>
-when that happens.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
-This overlaps with flow control quite a bit:</p>
+define backpressure strictly in the <em>control</em> sense<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
+– a mechanism that <strong>pushes back on the producer</strong>
+when that happens.
+In other words, some form of:</p>
 <blockquote>
 <p><a class="external" href="https://en.wiktionary.org/wiki/flow_control"><strong>flow control</strong></a>
 (<em>uncountable</em>)</p>
@@ -323,12 +321,12 @@ two nodes to prevent a fast sender from outrunning a slow receiver.</li>
 </ol>
 </blockquote>
 <p>While buffering, dropping data, and scaling up
-are valid strategies for dealing with an overloaded system,
+are all valid strategies for dealing with an overloaded system,
 I'd hesitate to call them backpressure,
-since in isolation they're all missing the resistance part.</p>
+since on their own they are all missing the resistance part.</p>
 <h3 id="an-example-of-backpressure">An example of backpressure<span class="headerlink">&nbsp;<a href="#an-example-of-backpressure" title="permalink">#</a></span></h3>
-<p><a class="external" href="https://en.wikipedia.org/wiki/Pipeline_(Unix)">Unix pipelines</a> offer an easy way to see backpressure in action.</p>
-<p>Given a program that writes to standard output:</p>
+<p><a class="external" href="https://en.wikipedia.org/wiki/Pipeline_(Unix)">Unix pipelines</a> are a good example of this.
+Given two programs, one that writes to standard output:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">sys</span>
 
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">6</span><span class="p">):</span>
@@ -359,12 +357,25 @@ since in isolation they're all missing the resistance part.</p>
 <span class="go"> out: 4</span>
 <span class="go"> out: 5</span>
 </code></pre></div>
-<p>Once all the <a class="external" href="https://unix.stackexchange.com/questions/11946/how-big-is-the-pipe-buffer">various</a> <a class="external" href="https://docs.python.org/3/library/sys.html#sys.stdin">buffers</a> get filled up
+<p>Underneath, it works roughly like this:</p>
+<ul>
+<li>the shell creates an <a class="external" href="https://en.wikipedia.org/wiki/Anonymous_pipe">anonymous pipe</a></li>
+<li>it then <a class="external" href="https://linux.die.net/man/2/fork">forks</a> twice, creating two new shell processes;
+each of the two processes inherit the parent's open files,
+including the ends of the pipe</li>
+<li>the two processes replace their standard output and input
+with each end of the pipe, respectively, and close the other one</li>
+<li>the two processes <a class="external" href="https://linux.die.net/man/3/exec">execute</a> the two commands in the pipeline;
+this replaces the shell with (TODO: files are inherited, including stdinonut, wihch are pipe ends)</li>
+<li>TODO: the programs start doing their thing</li>
+</ul>
+<p>Once all the <a class="external" href="https://docs.python.org/3/library/sys.html#sys.stdin">various</a> <a class="external" href="https://unix.stackexchange.com/questions/11946/how-big-is-the-pipe-buffer">buffers</a> get filled up
 (first three <code>in:</code> lines),
 the <a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase.write">write()</a> call blocks until at least some data is read on the other side;
 the two programs then continue in lockstep (alternating <code>in:</code> / <code>out:</code> lines)
 until there's no more data.</p>
 <p>Here, the blocking <a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase.write">write()</a> is where the backpressure happens.</p>
+<p>TODO:</p>
 <h2 id="">...<span class="headerlink">&nbsp;<a href="#" title="permalink">#</a></span></h2>
 <p>With regular <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a>, the consumer controls the producer
 – the for loop calls <a class="external" href="https://docs.python.org/3.12/library/stdtypes.html#iterator.__next__">__next__()</a> on the iterator returned by <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a>,
