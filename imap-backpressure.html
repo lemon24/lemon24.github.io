@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2024-03-27">March 2024</span>
-∙ six minute read
+∙ four minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -148,11 +148,6 @@ Likewise, you may expect that
 <section class="toc">
 <ul>
 <li><a href="#an-example">An example</a></li>
-<li><a href="#what-is-backpressure">What is backpressure?</a>
-<ul>
-<li><a href="#an-example-of-backpressure">An example of backpressure</a></li>
-</ul>
-</li>
 <li><a href="#what-is-going-on">What is going on?</a></li>
 <li><a href="#queue">Queue</a></li>
 <li><a href="#concurrent-futures">concurrent.futures</a></li>
@@ -286,97 +281,6 @@ for result in pool.imap_unordered(do_thing, get_inputs(3)):
     print(' out:', result)
 -->
 <!-- TODO separate performance section for double and chunk size -->
-<!-- TODO link from limit-concurrency to this section -->
-<h2 id="what-is-backpressure">What is backpressure?<span class="headerlink">&nbsp;<a href="#what-is-backpressure" title="permalink">#</a></span></h2>
-<blockquote>
-<p><a class="external" href="https://en.wiktionary.org/wiki/backpressure"><strong>backpressure</strong></a>
-(<em>countable and uncountable, plural</em> <strong>backpressures</strong>)</p>
-<ol>
-<li>(<em>fluid dynamics</em>) Pressure that is opposed to the flow of a fluid.</li>
-<li>(<em>computing</em>) The buildup of unprocessed data due to a bottleneck.</li>
-</ol>
-</blockquote>
-<p>Easy, right? But there's more than one way to interpret that definition.</p>
-<p>In <a class="external" href="https://medium.com/@jayphelps/backpressure-explained-the-flow-of-data-through-software-2350b3e77ce7">Backpressure explained — the resisted flow of data through software</a>,
-Jay Phelps defines backpressure as the <em>situation</em>
-of having a fast data producer and a slow data consumer,
-detached of how it is handled (control, buffer, drop, or ignore).
-He notes:</p>
-<blockquote>
-<p>you might eventually hear someone use the word &quot;backpressure&quot;
-to actually mean something has the ability to <strong>control or handle backpressure</strong></p>
-</blockquote>
-<p>However, <a class="external" href="https://blog.frankel.ch/backpressure-reactive-systems/">most</a> <a class="external" href="https://nurkiewicz.com/2021/06/backpressure.html">other</a> <a class="external" href="https://www.techopedia.com/definition/24131/backpressure">people</a>,
-including <a class="external" href="https://datatracker.ietf.org/doc/html/rfc3449#section-4.8">some</a> <a class="external" href="https://datatracker.ietf.org/doc/html/rfc2285#section-3.7.1">RFCs</a>,
-define backpressure strictly in the <em>control</em> sense<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
-– a mechanism that <strong>pushes back on the producer</strong>
-when that happens.
-In other words, some form of:</p>
-<blockquote>
-<p><a class="external" href="https://en.wiktionary.org/wiki/flow_control"><strong>flow control</strong></a>
-(<em>uncountable</em>)</p>
-<ol>
-<li>(<em>networking</em>) The management of the data transmission rate between
-two nodes to prevent a fast sender from outrunning a slow receiver.</li>
-</ol>
-</blockquote>
-<p>While buffering, dropping data, and scaling up
-are all valid strategies for dealing with an overloaded system,
-I'd hesitate to call them backpressure,
-since on their own they are all missing the resistance part.</p>
-<h3 id="an-example-of-backpressure">An example of backpressure<span class="headerlink">&nbsp;<a href="#an-example-of-backpressure" title="permalink">#</a></span></h3>
-<p><a class="external" href="https://en.wikipedia.org/wiki/Pipeline_(Unix)">Unix pipelines</a> are a good example of this.
-Given two programs, one that writes to standard output:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">sys</span>
-
-<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">6</span><span class="p">):</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;  in:&#39;</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
-    <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s2">&gt;</span><span class="si">{</span><span class="mi">40000</span><span class="si">}}</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
-</code></pre></div>
-
-<p>...and one that reads from standard input:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">sys</span><span class="o">,</span> <span class="nn">time</span>
-
-<span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">stdin</span><span class="p">:</span>
-    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">.01</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39; out:&#39;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">line</span><span class="p">),</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
-</code></pre></div>
-
-<p>...you can pass data from one to the other by chaining them in a pipeline:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>writer.py<span class="w"> </span><span class="p">|</span><span class="w"> </span>python<span class="w"> </span>reader.py
-<span class="go">  in: 0</span>
-<span class="go">  in: 1</span>
-<span class="go">  in: 2</span>
-<span class="go"> out: 0</span>
-<span class="go">  in: 3</span>
-<span class="go"> out: 1</span>
-<span class="go">  in: 4</span>
-<span class="go"> out: 2</span>
-<span class="go">  in: 5</span>
-<span class="go"> out: 3</span>
-<span class="go"> out: 4</span>
-<span class="go"> out: 5</span>
-</code></pre></div>
-<p>Underneath, it works roughly like this:</p>
-<ul>
-<li>the shell creates an <a class="external" href="https://en.wikipedia.org/wiki/Anonymous_pipe">anonymous pipe</a></li>
-<li>it then <a class="external" href="https://en.wikipedia.org/wiki/Fork_(system_call)">fork()</a>s twice, creating two new shell processes;
-each of the two processes inherit the parent's open files,
-including the ends of the pipe</li>
-<li>the two processes <a class="external" href="https://en.wikipedia.org/wiki/Dup_(system_call)">replace</a> their standard output and standard input
-with each end of the pipe, respectively, and close the other one</li>
-<li>the two processes each <a class="external" href="https://en.wikipedia.org/wiki/Exec_(system_call)">exec()</a> one of the commands in the pipeline,
-replacing the shell process image with that of the command</li>
-<li>the two programs start running:
-the writer writes to stdout (now the write end of the pipe),
-and the reader writes from stdin (now the read end of the pipe)</li>
-</ul>
-<p>Once all the <a class="external" href="https://docs.python.org/3/library/sys.html#sys.stdin">various</a> <a class="external" href="https://unix.stackexchange.com/questions/11946/how-big-is-the-pipe-buffer">buffers</a> get filled up
-(first three <code>in:</code> lines),
-the <a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase.write">write()</a> call blocks until at least some data is read on the other side;
-the two programs then continue in lockstep (alternating <code>in:</code> / <code>out:</code> lines)
-until there's no more data.</p>
-<p>Here, the backpressure mechanism is the blocking <a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase.write">write()</a>.</p>
 <h2 id="what-is-going-on">What is going on?<span class="headerlink">&nbsp;<a href="#what-is-going-on" title="permalink">#</a></span></h2>
 <p>tl;dr: <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a> lacks backpressure.</p>
 <p>Not satisfied with just that? Let's go!</p>
@@ -495,11 +399,6 @@ like AWS Lambda.</p>
 <p>even better, because the concurrent.futures API is similar to that of asyncio,
 you can use a <a class="internal" href="/limit-concurrency#asyncio-wait">similar solution</a>
 to get backpressure there too!</p>
-<section class="footnotes">
-<ol>
-<li id="fn-1"><p>Although RFCs seem to prefer more specific terms when available. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-</ol>
-</section>
 
 
 
