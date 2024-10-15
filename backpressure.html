@@ -196,15 +196,15 @@ puts it more succintly:</p>
 when the consumer can't keep up with the incoming data.</strong></p>
 </blockquote>
 <p>So, not only is backpressure <strong>not</strong> undesirable resistance,
-it is <strong>desired</strong> resistance.</p>
+it is <strong>signaling</strong> resistance.</p>
 <p>While buffering, dropping data, and scaling up
 are valid strategies for dealing with an overloaded system,
 on their own they're all missing
 the consumer pushing back on the producer
 that is essential for backpressure.</p>
 <h2 id="an-example-of-backpressure">An example of backpressure<span class="headerlink">&nbsp;<a href="#an-example-of-backpressure" title="permalink">#</a></span></h2>
-<p>Let's look at <a class="external" href="https://en.wikipedia.org/wiki/Pipeline_(Unix)">Unix pipelines</a> to solidify our idea of backpressure.
-Given two programs, one that writes to standard output:</p>
+<p>Let's look at how backpressure happens in <a class="external" href="https://en.wikipedia.org/wiki/Pipeline_(Unix)">Unix pipelines</a>.</p>
+<p>Given two programs, one that writes to standard output:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">sys</span>
 
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">6</span><span class="p">):</span>
@@ -237,32 +237,20 @@ Given two programs, one that writes to standard output:</p>
 <span class="go"> out: 4</span>
 <span class="go"> out: 5</span>
 </code></pre></div>
-<details>
-<summary>
-Underneath, the shell replaces the stdout and stdin of the two processes
-with the ends of an anonymous pipe (click for a detailed explanation).
-</summary>
-<ul>
-<li>the shell creates an <a class="external" href="https://en.wikipedia.org/wiki/Anonymous_pipe">anonymous pipe</a></li>
-<li>it then <a class="external" href="https://en.wikipedia.org/wiki/Fork_(system_call)">fork()</a>s twice, creating two new shell processes;
-each of the two processes inherit the parent's open files,
-including the ends of the pipe</li>
-<li>the two processes <a class="external" href="https://en.wikipedia.org/wiki/Dup_(system_call)">replace</a> their standard output and standard input
-with each end of the pipe, respectively, and close the other one</li>
-<li>the two processes each <a class="external" href="https://en.wikipedia.org/wiki/Exec_(system_call)">exec()</a> one of the commands in the pipeline,
-replacing the shell process image with that of the command</li>
-<li>the two programs start running:
-the writer writes to stdout (now the write end of the pipe),
-and the reader writes from stdin (now the read end of the pipe)</li>
-</ul>
-</details>
-<p>Once all the <a class="external" href="https://docs.python.org/3/library/sys.html#sys.stdin">various</a> <a class="external" href="https://unix.stackexchange.com/questions/11946/how-big-is-the-pipe-buffer">buffers</a> get filled up
+<p>Before starting the processes,
+the shell replaces their <a class="external" href="https://en.wikipedia.org/wiki/Standard_streams#Standard_output_(stdout)">standard output</a> and <a class="external" href="https://en.wikipedia.org/wiki/Standard_streams#Standard_input_(stdin)">input</a>
+with the ends of an anonymous pipe (<a class="anchor" href="#appendix-unix-pipelines">details</a>).
+Once started, the writer calls <a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase.write">write()</a> repeatedly until
+all the <a class="external" href="https://docs.python.org/3/library/sys.html#sys.stdin">various</a> <a class="external" href="https://unix.stackexchange.com/questions/11946/how-big-is-the-pipe-buffer">buffers</a> fill up
 (first three <code>in:</code> lines),
-the <a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase.write">write()</a> call blocks until at least some data is read on the other side;
-the two programs then continue in lockstep (alternating <code>in:</code> / <code>out:</code> lines)
-until there's no more data.</p>
-<p>Here, the backpressure mechanism is the blocking <a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase.write">write()</a>.</p>
-<h2 id="a-series-of-tubes">A series of tubes<span class="headerlink">&nbsp;<a href="#a-series-of-tubes" title="permalink">#</a></span></h2>
+then blocks until some buffer space is freed up by a read on the other side;
+the two programs continue in lockstep until there's no more data
+(alternating <code>in:</code> / <code>out:</code> lines).</p>
+<p>Here, backpressure is built <em>into</em> the blocking <a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase.write">write()</a>,
+and is invisible to the programs themselves;
+behind the scenes, the kernel keeps track of things,
+and puts processes to sleep and wakes processes up as needed.</p>
+<h2 id="the-treachery-of-images">The treachery of images<span class="headerlink">&nbsp;<a href="#the-treachery-of-images" title="permalink">#</a></span></h2>
 <blockquote>
 <p>Computers are almost, but not quite, entirely unlike a series of tubes.
 <br><cite>— me, now</cite></p>
@@ -312,6 +300,20 @@ until there's no more data.</p>
 
 
 </figure>
+<h2 id="appendix-unix-pipelines">Appendix: Unix pipelines<span class="headerlink">&nbsp;<a href="#appendix-unix-pipelines" title="permalink">#</a></span></h2>
+<ul>
+<li>the shell creates an <a class="external" href="https://en.wikipedia.org/wiki/Anonymous_pipe">anonymous pipe</a></li>
+<li>it then <a class="external" href="https://en.wikipedia.org/wiki/Fork_(system_call)">fork()</a>s twice, creating two new shell processes;
+each of the two processes inherit the parent's open files,
+including the ends of the pipe</li>
+<li>the two processes <a class="external" href="https://en.wikipedia.org/wiki/Dup_(system_call)">replace</a> their standard output and standard input
+with each end of the pipe, respectively, and close the other one</li>
+<li>the two processes each <a class="external" href="https://en.wikipedia.org/wiki/Exec_(system_call)">exec()</a> one of the commands in the pipeline,
+replacing the shell process image with that of the command</li>
+<li>the two programs start running:
+the writer writes to stdout (now the write end of the pipe),
+and the reader writes from stdin (now the read end of the pipe)</li>
+</ul>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>Although RFCs seem to prefer the term of <a class="external" href="https://en.wikipedia.org/wiki/Flow_control_(data)">flow control</a> instead. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
