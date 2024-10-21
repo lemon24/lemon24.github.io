@@ -127,7 +127,7 @@ Part is looking at somethinge that is perennially ambiguous and ill defined 
 <!-- TODO link from limit-concurrency to this section -->
 <p>When dealing with computers,
 you may hear people talking about <em>backpressure</em>,
-especially around networking and systems calling each other
+especially around systems that are talking to each other
 (&quot;distributed systems&quot;).</p>
 <p>So, what is backpressure?</p>
 <p>One should probably first try to answer this by using a dictionary,
@@ -195,13 +195,20 @@ puts it more succintly:</p>
 <p><strong>Backpressure is a mechanism of automatically slowing down the producer
 when the consumer can't keep up with the incoming data.</strong></p>
 </blockquote>
+<!--
+[Backpressure in Reactive Systems][reactive2] puts it more succintly:
+
+> considering a fast data producer and a slow data consumer, 
+> backpressure is the mechanism that "pushes back" on the producer 
+> not to be overwhelmed by data
+-->
 <p>So, not only is backpressure <strong>not</strong> undesirable resistance,
 it is <strong>signaling</strong> resistance.</p>
 <p>While buffering, dropping data, and scaling up
 are valid strategies for dealing with an overloaded system,
-on their own they're all missing
+they are all missing
 the consumer pushing back on the producer
-that is essential for backpressure.</p>
+that's the defining feature of backpressure.</p>
 <h2 id="an-example-of-backpressure">An example of backpressure<span class="headerlink">&nbsp;<a href="#an-example-of-backpressure" title="permalink">#</a></span></h2>
 <p>Let's look at how backpressure happens in <a class="external" href="https://en.wikipedia.org/wiki/Pipeline_(Unix)">Unix pipelines</a>.</p>
 <p>Given two programs, one that writes to standard output:</p>
@@ -217,6 +224,7 @@ that is essential for backpressure.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span> <span class="nn">sys</span><span class="o">,</span> <span class="nn">time</span>
 
 <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">stdin</span><span class="p">:</span>
+    <span class="c1"># make the reader slower</span>
     <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">.01</span><span class="p">)</span>
     <span class="c1"># int() strips all whitespace</span>
     <span class="nb">print</span><span class="p">(</span><span class="s1">&#39; out:&#39;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">line</span><span class="p">),</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
@@ -244,13 +252,16 @@ Once started, the writer calls <a class="external" href="https://docs.python.org
 all the <a class="external" href="https://docs.python.org/3/library/sys.html#sys.stdin">various</a> <a class="external" href="https://unix.stackexchange.com/questions/11946/how-big-is-the-pipe-buffer">buffers</a> fill up
 (first three <code>in:</code> lines),
 then blocks until some buffer space is freed up by a read on the other side;
-the two programs continue in lockstep until there's no more data
-(alternating <code>in:</code> / <code>out:</code> lines).</p>
+the two programs continue in lockstep
+(alternating <code>in:</code> / <code>out:</code> lines)
+until there's no more data.</p>
 <p>Here, backpressure is built <em>into</em> the blocking <a class="external" href="https://docs.python.org/3/library/io.html#io.TextIOBase.write">write()</a>,
-and is invisible to the programs themselves;
-behind the scenes, the kernel keeps track of things,
-and puts processes to sleep and wakes processes up as needed.</p>
-<p>[... TCP streams ...]</p>
+and is invisible to the processes themselves –
+after the <a class="external" href="https://unix.stackexchange.com/questions/11946/how-big-is-the-pipe-buffer">pipe buffer</a> gets full,
+the kernel puts the writer to sleep,
+to wake it up once space becomes available
+and the write can proceed.</p>
+<p>[... TCP streams ...] <a class="external" href="https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Flow_control">TCP flow control</a></p>
 <h2 id="the-treachery-of-images">The treachery of images<span class="headerlink">&nbsp;<a href="#the-treachery-of-images" title="permalink">#</a></span></h2>
 <blockquote>
 <p>Computers are almost, but not quite, entirely unlike a series of tubes.
