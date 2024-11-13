@@ -88,7 +88,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2024-11-11">November 2024</span>
-∙ three minute read
+∙ four minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -134,7 +134,7 @@ window.addEventListener('resize', set_vh);
 <p>Here are the highlights since <a class="internal" href="/reader-3-13">reader 3.13</a>.</p>
 <h3 id="retry-after">Retry-After<span class="headerlink">&nbsp;<a href="#retry-after" title="permalink">#</a></span></h3>
 <p>Now that it supports <a class="internal" href="/reader-3-13#scheduled-updates">scheduled updates</a>,
-<em>reader</em> can honor the <a class="external" href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After">Retry-After</a> HTTP header sent with 
+<em>reader</em> can honor the <a class="external" href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After">Retry-After</a> HTTP header sent with
 429 Too Many Requests or 503 Service Unavailable responses.</p>
 <p>Adding this required an extensive rework of the <a class="external" href="https://reader.readthedocs.io/en/latest/internal.html#parser">parser internal API</a>,
 but I'd say it was worth it, since we're getting quite close to it
@@ -156,7 +156,7 @@ like the <a class="external" href="https://reader.readthedocs.io/en/3.x/plugins.
 <p>The <a class="external" href="https://reader.readthedocs.io/en/3.x/plugins.html#module-reader._plugins.enclosure_tags">enclosure_tags</a> plugin fixes <a class="external" href="https://en.wikipedia.org/wiki/ID3">ID3 tags</a> for MP3 enclosures like podcasts.</p>
 <p>I've changed the implementation to rewrite tags on the fly,
 instead of downloading the entire file, rewriting tags,
-and then sending it to the user; 
+and then sending it to the user;
 this should allow browsers to display accurate download progress.</p>
 <p>Some other, smaller improvements:</p>
 <ul>
@@ -165,13 +165,53 @@ this should allow browsers to display accurate download progress.</p>
 <li>Use feed title as artist, instead of author.</li>
 </ul>
 <h3 id="using-the-installed-feedparser">Using the installed feedparser<span class="headerlink">&nbsp;<a href="#using-the-installed-feedparser" title="permalink">#</a></span></h3>
-<p>Because <a class="external" href="https://feedparser.readthedocs.io/en/latest/">feedparser</a> makes PyPI releases at a lower cadence, 
-<em>reader</em> has been using a vendored version of feedparser's <a class="external" href="https://github.com/kurtmckee/feedparser">develop</a> branch 
+<p>Because <a class="external" href="https://feedparser.readthedocs.io/en/latest/">feedparser</a> makes PyPI releases at a lower cadence,
+<em>reader</em> has been using a vendored version of feedparser's <a class="external" href="https://github.com/kurtmckee/feedparser">develop</a> branch
 <a class="internal" href="/reader-2-11#memory-usage-improvements">for some time</a>.
 It is now possible to <a class="external" href="https://reader.readthedocs.io/en/3.x/install.html#no-vendored-feedparser">opt out of this behavior</a>
 and make <em>reader</em> use the installed <code>feedparser</code> package.</p>
 <h3 id="python-versions">Python versions<span class="headerlink">&nbsp;<a href="#python-versions" title="permalink">#</a></span></h3>
 <p><em>reader</em> 3.14 (released back in July) adds support for Python 3.13.</p>
+<h2 id="upcoming-changes">Upcoming changes<span class="headerlink">&nbsp;<a href="#upcoming-changes" title="permalink">#</a></span></h2>
+<h3 id="replacing-requests-with-httpx">Replacing Requests with HTTPX<span class="headerlink">&nbsp;<a href="#replacing-requests-with-httpx" title="permalink">#</a></span></h3>
+<p><em>reader</em> relies on <a class="external" href="https://requests.readthedocs.io/">Requests</a> to retrieve feeds from the internet;
+among others, it replaces feedparser's use of <code>urllib</code>
+to make it easier to <a class="external" href="https://reader.readthedocs.io/en/3.x/internal.html#reader._parser.Parser.session_factory">write plugins</a>.</p>
+<p>However, Requests has a few issues that may never get fixed
+because it is in a feature-freeze –
+mainly the lack of default timeouts,
+underpowered response hooks, and no request hooks,
+all of which I had to work around in <em>reader</em> code.</p>
+<p>So, <a class="external" href="https://github.com/lemon24/reader/issues/360">I've been looking</a> into using <a class="external" href="https://www.python-httpx.org/">HTTPX</a> instead.</p>
+<p>Some reasons to use HTTPX:</p>
+<ul>
+<li>largely Requests-compatible API and feature set</li>
+<li>while the ecosystem is probably not comparable,
+it is actively maintained, popular enough,
+and the basics (mocking, auth) are there</li>
+<li>strict timeouts by default (and more kinds than Requests)</li>
+<li>request/response hooks</li>
+<li>URL normalization (needed by the parser)</li>
+</ul>
+<p>Bad reasons to move away from Requests:</p>
+<ul>
+<li>lack of async support –
+I have no plan to use async in <em>reader</em> at this point</li>
+<li>lack of HTTP/2 support –
+coming soon in urllib3 (and by extension, Requests?);
+also, <em>reader</em> makes rare requests to many different hosts,
+I'm not sure it would benefit all that much from HTTP/2</li>
+<li>lack of Brotli/Zstandard compresson support –
+urllib3 already supports them</li>
+</ul>
+<p>Reasons to not move to HTTPX:</p>
+<ul>
+<li>not 1.0 yet (but coming soon)</li>
+<li>not as battle-tested as Requests (but can use urllib3 as transport)</li>
+</ul>
+<p>So, when is this happening?
+Nothing's actually burning, so soon™, but not <em>that</em> soon;
+watch <a class="external" href="https://github.com/lemon24/reader/issues/360">#360</a> if you're interested in this.</p>
 <hr />
 <p>That's it for now.
 For more details, see the full <a class="external" href="https://reader.readthedocs.io/en/stable/changelog.html#version-3-15">changelog</a>.</p>
@@ -238,7 +278,7 @@ or give the <a class="external" href="https://reader.readthedocs.io/en/stable/tu
 <li>want an easier way to store, filter, sort and search feeds and entries?</li>
 <li>want to get back type-annotated objects instead of dicts?</li>
 <li>want to restrict or deny file-system access?</li>
-<li>want to change the way feeds are retrieved by using <a class="external" href="https://requests.readthedocs.io">Requests</a>?</li>
+<li>want to change the way feeds are retrieved by using <a class="external" href="https://requests.readthedocs.io/">Requests</a>?</li>
 <li>want to also support <a class="external" href="https://jsonfeed.org/">JSON Feed</a>?</li>
 <li>want to support custom information sources?</li>
 </ul>
