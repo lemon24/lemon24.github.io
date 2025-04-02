@@ -1,0 +1,247 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!doctype html>
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+<link rel="icon" href="/_static/xo-system-icon.svg">
+<link rel="apple-touch-icon" href="/_static/xo-system-icon.svg">
+
+
+
+
+
+
+
+<title>Process​ThreadPoolExecutor: for when IO becomes CPU bound - death and gravity</title>
+
+
+
+<meta property="og:title" content="Process​ThreadPoolExecutor: for when IO becomes CPU bound">
+<meta property="og:site_name" content="death and gravity">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://death.andgravity.com/ptpe">
+
+
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1 class="heading-noindex">Process​ThreadPoolExecutor: for when IO becomes CPU bound</h1>
+
+<p class="text-gray text-nowrap">
+
+
+
+<small>
+<span class="tooltip" data-tooltip="published on 2025-04-01">April 2025</span>
+∙ two minute read
+∙
+</small><span class="share-icons">
+<a
+    class="share-icon pycoders"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+>PyCoder's Weekly</a>
+<a
+    class="share-icon hacker-news"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/ptpe&t=Process%E2%80%8BThreadPoolExecutor%3A%20for%20when%20IO%20becomes%20CPU%20bound"
+>HN</a>
+<a
+    class="share-icon reddit"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/ptpe&title=Process%E2%80%8BThreadPoolExecutor%3A%20for%20when%20IO%20becomes%20CPU%20bound"
+>Reddit</a>
+<a
+    class="share-icon linkedin"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/ptpe"
+>linkedin</a>
+<a
+    class="share-icon twitter"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Process%E2%80%8BThreadPoolExecutor%3A%20for%20when%20IO%20becomes%20CPU%20bound&url=https%3A//death.andgravity.com/ptpe&via=_andgravity"
+>Twitter</a>
+</span>
+
+
+</p>
+
+
+
+
+
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<p>run to saturation; show cpu 100%; maybe also show saturated vs unsaturated iowait or smth</p>
+<p>uh oh</p>
+<p>we could process pool, but then we don't use connection pool properly; also presumably more memory (if we can show/measure, even better)</p>
+<p>aside: asyncio in itself is no solution, you will saturate the (one) cpu/thread there too</p>
+<p>reasonable way would be to somehow split the input into batches and pass batches to process executor, which then runs batches in thread executor</p>
+<p>but reasonable is not fun, and means we have to change our code :(</p>
+<p>cue ... solution tbd</p>
+<h2 id="simulation-measurement-time">simulation/measurement time<span class="headerlink">&nbsp;<a href="#simulation-measurement-time" title="permalink">#</a></span></h2>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Client</span><span class="p">:</span>
+    <span class="n">io_time</span> <span class="o">=</span> <span class="mf">0.02</span>
+    <span class="n">cpu_time</span> <span class="o">=</span> <span class="mf">0.0008</span>
+    
+    <span class="k">def</span> <span class="nf">method</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
+        <span class="c1"># simulate I/O</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">io_time</span><span class="p">)</span>
+
+        <span class="c1"># simulate CPU-bound work</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+        <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">cpu_time</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span> <span class="n">i</span><span class="o">**</span><span class="n">i</span>
+
+        <span class="k">return</span> <span class="n">arg</span>
+</code></pre></div>
+
+<p>we could simulate a connection pool using a semaphore, 
+but that's not relevant for what we're trying to measure;
+nevertheless, keep in mind the connection pool 
+is a resource we're trying to share between threads if possible</p>
+<p>since we'll also use this from multiple processes,
+we'll put the work in a function, and use a global client,
+initialized by a function passed to e.g. ProcessPoolExecutor initializer=</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">client</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="k">def</span> <span class="nf">init_client</span><span class="p">():</span>
+    <span class="k">global</span> <span class="n">client</span>
+    <span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">()</span>
+    
+<span class="k">def</span> <span class="nf">do_stuff</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">client</span><span class="o">.</span><span class="n">method</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+</code></pre></div>
+
+<p>make ourselves a timing context manager</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@contextmanager</span>
+<span class="k">def</span> <span class="nf">timed</span><span class="p">():</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+    <span class="k">yield</span>
+    <span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;elapsed: </span><span class="si">{</span><span class="n">end</span><span class="o">-</span><span class="n">start</span><span class="si">:</span><span class="s2">1.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<p>we can then put these together in a benchmark function</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">timed</span><span class="o">=</span><span class="n">timed</span><span class="p">):</span>
+    <span class="k">with</span> <span class="n">executor</span><span class="p">:</span>
+        <span class="c1"># make sure all the workers are started, </span>
+        <span class="c1"># so we don&#39;t measure their startup time</span>
+        <span class="nb">list</span><span class="p">(</span><span class="n">executor</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">200</span><span class="p">))</span>
+
+        <span class="k">with</span> <span class="n">timed</span><span class="p">():</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">executor</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="n">chunksize</span><span class="o">=</span><span class="mi">10</span><span class="p">))</span>
+
+        <span class="k">assert</span> <span class="n">values</span> <span class="o">==</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)),</span> <span class="n">values</span>
+</code></pre></div>
+
+<h2 id="baseline-threads">baseline threads<span class="headerlink">&nbsp;<a href="#baseline-threads" title="permalink">#</a></span></h2>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">concurrent.futures</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">client</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">init_client</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
+<span class="go">elapsed: 2.430</span>
+</code></pre></div>
+<p>more threads</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">20</span><span class="p">))</span>
+<span class="go">elapsed: 1.259</span>
+</code></pre></div>
+<p>good. more!</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">))</span>
+<span class="go">elapsed: 0.875</span>
+</code></pre></div>
+<p>good. MORE!</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">40</span><span class="p">))</span>
+<span class="go">elapsed: 0.872</span>
+</code></pre></div>
+<p>?! question mark cat</p>
+<p>...</p>
+<p>more?</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">50</span><span class="p">))</span>
+<span class="go">elapsed: 0.874</span>
+</code></pre></div>
+<p>what in tarnation cat</p>
+<h2 id="top">top<span class="headerlink">&nbsp;<a href="#top" title="permalink">#</a></span></h2>
+<p>TBD</p>
+
+
+
+
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+
+
+
+</footer>
+
+
+</div>
