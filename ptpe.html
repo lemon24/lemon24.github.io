@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-04-01">April 2025</span>
-∙ two minute read
+∙ three minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -138,7 +138,7 @@ window.addEventListener('resize', set_vh);
         <span class="c1"># simulate CPU-bound work</span>
         <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
         <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">cpu_time</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span> <span class="n">i</span><span class="o">**</span><span class="n">i</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span> <span class="n">i</span> <span class="o">**</span> <span class="n">i</span>
 
         <span class="k">return</span> <span class="n">arg</span>
 </code></pre></div>
@@ -162,7 +162,7 @@ initialized by a function passed to e.g. ProcessPoolExecutor initializer=</p>
 
 <p>make ourselves a timing context manager</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@contextmanager</span>
-<span class="k">def</span> <span class="nf">timed</span><span class="p">():</span>
+<span class="k">def</span> <span class="nf">timer</span><span class="p">():</span>
     <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
     <span class="k">yield</span>
     <span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
@@ -170,13 +170,13 @@ initialized by a function passed to e.g. ProcessPoolExecutor initializer=</p>
 </code></pre></div>
 
 <p>we can then put these together in a benchmark function</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">timed</span><span class="o">=</span><span class="n">timed</span><span class="p">):</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">timer</span><span class="p">):</span>
     <span class="k">with</span> <span class="n">executor</span><span class="p">:</span>
         <span class="c1"># make sure all the workers are started, </span>
         <span class="c1"># so we don&#39;t measure their startup time</span>
         <span class="nb">list</span><span class="p">(</span><span class="n">executor</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">200</span><span class="p">))</span>
 
-        <span class="k">with</span> <span class="n">timed</span><span class="p">():</span>
+        <span class="k">with</span> <span class="n">timer</span><span class="p">():</span>
             <span class="n">values</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">executor</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="n">chunksize</span><span class="o">=</span><span class="mi">10</span><span class="p">))</span>
 
         <span class="k">assert</span> <span class="n">values</span> <span class="o">==</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)),</span> <span class="n">values</span>
@@ -209,7 +209,53 @@ initialized by a function passed to e.g. ProcessPoolExecutor initializer=</p>
 </code></pre></div>
 <p>what in tarnation cat</p>
 <h2 id="top">top<span class="headerlink">&nbsp;<a href="#top" title="permalink">#</a></span></h2>
-<p>TBD</p>
+<p>so, it's about time we look in more detail at what our process is doing</p>
+<p>i'd normally go with the <a class="external" href="https://linux.die.net/man/1/top">top</a> command for this, 
+but since both the flags and the output vary with the operating system,
+let's implement our own using the <a class="external" href="https://psutil.readthedocs.io/">psutil</a> library.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@contextmanager</span>
+<span class="k">def</span> <span class="nf">top</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Print CPU and memory info for the current and child processes.</span>
+
+<span class="sd">    %CPU is the CPU utilization while in the context manager.</span>
+<span class="sd">    RES is the resident set size when exiting the context manager.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">process</span> <span class="o">=</span> <span class="n">psutil</span><span class="o">.</span><span class="n">Process</span><span class="p">()</span>
+    <span class="n">processes</span> <span class="o">=</span> <span class="p">[</span><span class="n">process</span><span class="p">]</span> <span class="o">+</span> <span class="n">process</span><span class="o">.</span><span class="n">children</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">processes</span><span class="p">:</span>
+        <span class="n">p</span><span class="o">.</span><span class="n">cpu_percent</span><span class="p">()</span>
+
+    <span class="k">yield</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;PID&#39;</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;RES&#39;</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;%CPU&#39;</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">processes</span><span class="p">:</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">memory_info</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">pid</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">m</span><span class="o">.</span><span class="n">rss</span><span class="o">/</span><span class="mi">2</span><span class="o">**</span><span class="mi">20</span><span class="si">:</span><span class="s2">6.1f</span><span class="si">}</span><span class="s2">m </span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">cpu_percent</span><span class="p">()</span><span class="si">:</span><span class="s2">7.1f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<p>since it's a context manager, we can use it instead of the timer
+(how convenient :)</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">concurrent.futures</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">client</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">init_client</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">20</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
+<span class="go">    PID     RES    %CPU</span>
+<span class="go">   4867   18.3m    71.1</span>
+</code></pre></div>
+<p>so what happens if we increase the number of threads?</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
+<span class="go">    PID     RES    %CPU</span>
+<span class="go">   4923   18.9m    99.0</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">40</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
+<span class="go">    PID     RES    %CPU</span>
+<span class="go">   4923   19.0m   100.2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">50</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
+<span class="go">    PID     RES    %CPU</span>
+<span class="go">   4923   20.3m   102.8</span>
+</code></pre></div>
+<p>uh oh</p>
 
 
 
