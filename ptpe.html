@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-04-01">April 2025</span>
-∙ three minute read
+∙ five minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -126,12 +126,22 @@ window.addEventListener('resize', set_vh);
 <p>reasonable way would be to somehow split the input into batches and pass batches to process executor, which then runs batches in thread executor</p>
 <p>but reasonable is not fun, and means we have to change our code :(</p>
 <p>cue ... solution tbd</p>
+<section class="toc">
+<ul>
+<li><a href="#simulation-measurement-time">simulation/measurement time</a></li>
+<li><a href="#baseline-threads">baseline threads</a></li>
+<li><a href="#top">top</a></li>
+<li><a href="#processes">processes</a></li>
+<li><a href="#memory">memory</a></li>
+<li><a href="#ptpe">ptpe!</a></li>
+</ul>
+</section>
 <h2 id="simulation-measurement-time">simulation/measurement time<span class="headerlink">&nbsp;<a href="#simulation-measurement-time" title="permalink">#</a></span></h2>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span> <span class="nc">Client</span><span class="p">:</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Client</span><span class="p">:</span>
     <span class="n">io_time</span> <span class="o">=</span> <span class="mf">0.02</span>
     <span class="n">cpu_time</span> <span class="o">=</span> <span class="mf">0.0008</span>
-    
-    <span class="k">def</span> <span class="nf">method</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">method</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
         <span class="c1"># simulate I/O</span>
         <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">io_time</span><span class="p">)</span>
 
@@ -143,36 +153,37 @@ window.addEventListener('resize', set_vh);
         <span class="k">return</span> <span class="n">arg</span>
 </code></pre></div>
 
-<p>we could simulate a connection pool using a semaphore, 
+<p>we could simulate a connection pool using a semaphore,
 but that's not relevant for what we're trying to measure;
-nevertheless, keep in mind the connection pool 
+nevertheless, keep in mind the connection pool
 is a resource we're trying to share between threads if possible</p>
 <p>since we'll also use this from multiple processes,
 we'll put the work in a function, and use a global client,
 initialized by a function passed to e.g. ProcessPoolExecutor initializer=</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">client</span> <span class="o">=</span> <span class="kc">None</span>
 
-<span class="k">def</span> <span class="nf">init_client</span><span class="p">():</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">init_client</span><span class="p">():</span>
     <span class="k">global</span> <span class="n">client</span>
     <span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">()</span>
-    
-<span class="k">def</span> <span class="nf">do_stuff</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">do_stuff</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">client</span><span class="o">.</span><span class="n">method</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
 </code></pre></div>
 
 <p>make ourselves a timing context manager</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@contextmanager</span>
-<span class="k">def</span> <span class="nf">timer</span><span class="p">():</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">timer</span><span class="p">():</span>
     <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
     <span class="k">yield</span>
     <span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;elapsed: </span><span class="si">{</span><span class="n">end</span><span class="o">-</span><span class="n">start</span><span class="si">:</span><span class="s2">1.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
 
-<p>we can then put these together in a benchmark function</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span> <span class="nf">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">timer</span><span class="p">):</span>
+<p>we can then put these together in a benchmark function;
+note the chunksize (again, nod to using processes late)</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">timer</span><span class="p">):</span>
     <span class="k">with</span> <span class="n">executor</span><span class="p">:</span>
-        <span class="c1"># make sure all the workers are started, </span>
+        <span class="c1"># make sure all the workers are started,</span>
         <span class="c1"># so we don&#39;t measure their startup time</span>
         <span class="nb">list</span><span class="p">(</span><span class="n">executor</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">200</span><span class="p">))</span>
 
@@ -183,8 +194,8 @@ initialized by a function passed to e.g. ProcessPoolExecutor initializer=</p>
 </code></pre></div>
 
 <h2 id="baseline-threads">baseline threads<span class="headerlink">&nbsp;<a href="#baseline-threads" title="permalink">#</a></span></h2>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">concurrent.futures</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">client</span> <span class="kn">import</span> <span class="o">*</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">client</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">init_client</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
 <span class="go">elapsed: 2.430</span>
@@ -210,52 +221,137 @@ initialized by a function passed to e.g. ProcessPoolExecutor initializer=</p>
 <p>what in tarnation cat</p>
 <h2 id="top">top<span class="headerlink">&nbsp;<a href="#top" title="permalink">#</a></span></h2>
 <p>so, it's about time we look in more detail at what our process is doing</p>
-<p>i'd normally go with the <a class="external" href="https://linux.die.net/man/1/top">top</a> command for this, 
+<p>i'd normally go with the <a class="external" href="https://linux.die.net/man/1/top">top</a> command for this,
 but since both the flags and the output vary with the operating system,
-let's implement our own using the <a class="external" href="https://psutil.readthedocs.io/">psutil</a> library.</p>
+let's implement our own using the <a class="external" href="https://psutil.readthedocs.io/">psutil</a> library. (it might even work on windows)</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@contextmanager</span>
-<span class="k">def</span> <span class="nf">top</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Print CPU and memory info for the current and child processes.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">top</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Print information about current and child processes.</span>
 
-<span class="sd">    %CPU is the CPU utilization while in the context manager.</span>
-<span class="sd">    RES is the resident set size when exiting the context manager.</span>
+<span class="sd">    RES is the resident set size. USS is the unique set size.</span>
+<span class="sd">    %CPU is the CPU utilization. nTH is the number of threads.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">process</span> <span class="o">=</span> <span class="n">psutil</span><span class="o">.</span><span class="n">Process</span><span class="p">()</span>
     <span class="n">processes</span> <span class="o">=</span> <span class="p">[</span><span class="n">process</span><span class="p">]</span> <span class="o">+</span> <span class="n">process</span><span class="o">.</span><span class="n">children</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
-
-    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">processes</span><span class="p">:</span>
-        <span class="n">p</span><span class="o">.</span><span class="n">cpu_percent</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">processes</span><span class="p">:</span> <span class="n">p</span><span class="o">.</span><span class="n">cpu_percent</span><span class="p">()</span>
 
     <span class="k">yield</span>
 
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;PID&#39;</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;RES&#39;</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;%CPU&#39;</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;PID&#39;</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;RES&#39;</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;USS&#39;</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;%CPU&#39;</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;nTH&#39;</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">processes</span><span class="p">:</span>
-        <span class="n">m</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">memory_info</span><span class="p">()</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">pid</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">m</span><span class="o">.</span><span class="n">rss</span><span class="o">/</span><span class="mi">2</span><span class="o">**</span><span class="mi">20</span><span class="si">:</span><span class="s2">6.1f</span><span class="si">}</span><span class="s2">m </span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">cpu_percent</span><span class="p">()</span><span class="si">:</span><span class="s2">7.1f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">m</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">memory_full_info</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">psutil</span><span class="o">.</span><span class="n">AccessDenied</span><span class="p">:</span>
+            <span class="n">m</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">memory_info</span><span class="p">()</span>
+        <span class="n">rss</span> <span class="o">=</span> <span class="n">m</span><span class="o">.</span><span class="n">rss</span> <span class="o">/</span> <span class="mi">2</span><span class="o">**</span><span class="mi">20</span>
+        <span class="n">uss</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="s1">&#39;uss&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="o">**</span><span class="mi">20</span>
 </code></pre></div>
 
 <p>since it's a context manager, we can use it instead of the timer
 (how convenient :)</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">concurrent.futures</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">client</span> <span class="kn">import</span> <span class="o">*</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">client</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">init_client</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">20</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
-<span class="go">    PID     RES    %CPU</span>
-<span class="go">   4867   18.3m    71.1</span>
+<span class="go">    PID     RES     USS    %CPU     nTH</span>
+<span class="go">  13912   16.8m   13.2m    70.7      21</span>
 </code></pre></div>
 <p>so what happens if we increase the number of threads?</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
-<span class="go">    PID     RES    %CPU</span>
-<span class="go">   4923   18.9m    99.0</span>
+<span class="go">    PID     RES     USS    %CPU     nTH</span>
+<span class="go">  13912   17.0m   13.4m    99.1      31</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">40</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
-<span class="go">    PID     RES    %CPU</span>
-<span class="go">   4923   19.0m   100.2</span>
+<span class="go">    PID     RES     USS    %CPU     nTH</span>
+<span class="go">  13912   17.3m   13.7m   100.9      41</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">50</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
-<span class="go">    PID     RES    %CPU</span>
-<span class="go">   4923   20.3m   102.8</span>
+<span class="go">    PID     RES     USS    %CPU     nTH</span>
+<span class="go">  13912   17.6m   14.0m   101.4      51</span>
 </code></pre></div>
 <p>uh oh</p>
+<p>so, it looks like with enough threads,
+the cpu-bound part of our mostly io-bound task becomes dominant,
+saturating the CPU
+(and we can't use more than one CPU with threads alone
+because of the GIL,
+although that may change in a few python versions)</p>
+<h2 id="processes">processes<span class="headerlink">&nbsp;<a href="#processes" title="permalink">#</a></span></h2>
+<p>i know, let's use ProcessPoolExecutor instead!</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
+<span class="go">elapsed: 2.500</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
+<span class="go">elapsed: 1.446</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
+<span class="go">elapsed: 1.110</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
+<span class="go">elapsed: 0.750</span>
+</code></pre></div>
+<p>a bit more time for 10-30 processes, likely due to ipc overhead,
+but for 40 processes it's a bit faster than with threads</p>
+<p>more? more!</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">60</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
+<span class="go">elapsed: 0.633</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">80</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
+<span class="go">elapsed: 0.501</span>
+</code></pre></div>
+<p>note these are the minimums of multiple runs,
+most of them aren't as good.</p>
+<p>it's faster, but ... for twice the number of processes,
+it became only 33% faster.
+and it's only 43% faster than using 40 threads,
+when it theory now it can use 4 times as many CPUs.</p>
+<p>also, if our client connects to many different hosts,
+like a requests Session would,
+we're not making the best use of the connection pooling,
+since we now have 80 connection pools!
+(this isn't that big of an issue if our client talks to just one host,
+like an aws client would, since each pool would end up having just one connection)</p>
+<h2 id="memory">memory<span class="headerlink">&nbsp;<a href="#memory" title="permalink">#</a></span></h2>
+<p>but it gets worse!</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">80</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
+<span class="go">    PID     RES     USS    %CPU     nTH</span>
+<span class="go">  14516   14.8m   11.1m     9.2       3</span>
+<span class="go">  14518    9.5m    6.4m     0.0       1</span>
+<span class="go">  14519   12.6m    9.0m     2.3       1</span>
+<span class="go">  ... 78 more lines ...</span>
+<span class="go">  14598   12.5m    9.0m    13.3       1</span>
+</code></pre></div>
+<p>12.5 MiB * 80 ~= 1 GiB ... that's a lot of memory...</p>
+<p>now, there's some nuance to be had here.</p>
+<p>First, on most operating systems that use virtual memory,
+<a class="external" href="https://en.wikipedia.org/wiki/Code_segment">code segment</a> pages are usually shared between processes
+(there's no point in having the same Python interpreter binary in memory 80 times).</p>
+<p>The <a class="external" href="https://en.wikipedia.org/wiki/Unique_set_size">unique set size</a> is probably a better measurement than the <a class="external" href="https://en.wikipedia.org/wiki/Resident_set_size">resident set size</a>,
+since it excludes memory shared between processes.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
+So, for the output above, from macOS<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>,
+the actual usage is more like 9 MiB * 80 ~= 720 MiB
+(excluding memory taken by the main process to make the math easier).</p>
+<p>Second, if you use the <em>fork</em> (or <em>forkserver</em>) <a class="external" href="https://docs.python.org/3.14/library/multiprocessing.html#contexts-and-start-methods">start method</a>,
+processes also share memory allocated before the <a class="external" href="https://en.wikipedia.org/wiki/Fork_(system_call)">fork()</a> call
+through a mechanism called <a class="external" href="https://en.wikipedia.org/wiki/Copy-on-write#In_virtual_memory_management">copy-on-write</a>;
+for Python, this includes modules and (global) variables.</p>
+<p>On Linux, for example:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">80</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
+<span class="go">    PID     RES     USS    %CPU     nTH</span>
+<span class="go"> 259344   14.4m    3.8m     5.2       3</span>
+<span class="go"> 259357   13.1m    1.7m     0.0       1</span>
+<span class="go">  ... 78 more lines ...</span>
+<span class="go"> 259436   13.3m    1.8m     0.0       1</span>
+</code></pre></div>
+<p>...the actual usage is more like 1.7 MiB * 80 = 136 MiB.</p>
+<p>of course, that's only a lower bound –
+once each process starts doing actual work,
+memory allocated for that will not be shared.</p>
+<h2 id="ptpe">ptpe!<span class="headerlink">&nbsp;<a href="#ptpe" title="permalink">#</a></span></h2>
+<p>TBD</p>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>psutil <a class="external" href="https://psutil.readthedocs.io/en/latest/#psutil.Process.memory_full_info">memory_full_info()</a> explain the difference quite nicely
+(<a class="internal" href="/output#good-libraries-educate">good libraries educate</a>). <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>note that on macOS I had to run Python with sudo
+to be able to get USS for child processes <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
 
 
 
