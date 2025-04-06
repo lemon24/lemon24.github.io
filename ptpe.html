@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-04-01">April 2025</span>
-∙ six minute read
+∙ eight minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -129,7 +129,8 @@ window.addEventListener('resize', set_vh);
 <li><a href="#memory">memory</a></li>
 <li><a href="#">...</a></li>
 <li><a href="#a-minimal-plausible-solution">A minimal plausible solution</a></li>
-<li><a href="#-1">...</a></li>
+<li><a href="#getting-results-back">getting results back</a></li>
+<li><a href="#matching-results-to-futures">matching results to futures</a></li>
 </ul>
 </section>
 <h2 id="simulation-measurement-time">simulation/measurement time<span class="headerlink">&nbsp;<a href="#simulation-measurement-time" title="permalink">#</a></span></h2>
@@ -432,20 +433,141 @@ let's use it and see if it works:</p>
 <span class="go">The above exception was the direct cause of the following exception:</span>
 
 <span class="go">Traceback (most recent call last):</span>
+<span class="go">  File &quot;ptpe.py&quot;, line 41, in &lt;module&gt;</span>
+<span class="go">    print(list(e.map(_do_stuff, [0, 1, 2])))</span>
 <span class="go">  ...</span>
 <span class="go">TypeError: cannot pickle &#39;_thread.RLock&#39; object</span>
 </code></pre></div>
 <p>so, the work started, since we're seeing the <code>doing ...</code> lines,
 but the Future returned by the thread pool executor can't be pickled;
 not surprising, to be honest, it couldn't have been that easy</p>
-<h2 id="-1">...<span class="headerlink">&nbsp;<a href="#-1" title="permalink">#</a></span></h2>
-<p>traceback above has hint, use a queue to send back results</p>
+<h2 id="getting-results-back">getting results back<span class="headerlink">&nbsp;<a href="#getting-results-back" title="permalink">#</a></span></h2>
+<p>if we look carefully at the traceback above,
+we can find a hint of how we can ge the results back.
+ProcessPoolExecutor seems to be using a result queue;
+if we look at its <a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/concurrent/futures/process.py">source code</a>
+(linked from the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">documentation</a>),
+we even find this neat data-flow diagram:</p>
+<pre class="code code-container"><code>|======================= In-process =====================|== Out-of-process ==|
+
++----------+     +----------+       +--------+     +-----------+    +---------+
+|          |  =&gt; | Work Ids |       |        |     | Call Q    |    | Process |
+|          |     +----------+       |        |     +-----------+    |  Pool   |
+|          |     | ...      |       |        |     | ...       |    +---------+
+|          |     | 6        |    =&gt; |        |  =&gt; | 5, call() | =&gt; |         |
+|          |     | 7        |       |        |     | ...       |    |         |
+| Process  |     | ...      |       | Local  |     +-----------+    | Process |
+|  Pool    |     +----------+       | Worker |                      |  #1..n  |
+| Executor |                        | Thread |                      |         |
+|          |     +----------- +     |        |     +-----------+    |         |
+|          | &lt;=&gt; | Work Items | &lt;=&gt; |        | &lt;=  | Result Q  | &lt;= |         |
+|          |     +------------+     |        |     +-----------+    |         |
+|          |     | 6: call()  |     |        |     | ...       |    |         |
+|          |     |    future  |     |        |     | 4, result |    |         |
+|          |     | ...        |     |        |     | 3, except |    |         |
++----------+     +------------+     +--------+     +-----------+    +---------+
+</code></pre>
+<p>now, we could probably use ProcessPoolExecutor's own result queue,
+but that would involve touching a lot of (private) internals;<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>
+instead, we can use our own, separate queue.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initargs</span><span class="o">=</span><span class="p">()):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__result_queue</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">initializer</span><span class="o">=</span><span class="n">_init_process</span><span class="p">,</span>
+            <span class="n">initargs</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__result_queue</span><span class="p">,</span> <span class="n">max_threads</span><span class="p">,</span> <span class="n">initializer</span><span class="p">,</span> <span class="n">initargs</span><span class="p">)</span>
+        <span class="p">)</span>
+</code></pre></div>
+
+<p>Note we're using <a class="external" href="https://docs.python.org/3/tutorial/classes.html#tut-private">double underscores</a> for <code>__result_queue</code>,
+since ProcessPoolExecutor already has a <code>_result_queue</code> attribute.</p>
+<p>We pass the queue to each worker,
+and on the worker side, we make it globally accessible:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">_executor</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">_result_queue</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_init_process</span><span class="p">(</span><span class="n">queue</span><span class="p">,</span> <span class="n">max_threads</span><span class="p">,</span> <span class="n">initializer</span><span class="p">,</span> <span class="n">initargs</span><span class="p">):</span>
+    <span class="k">global</span> <span class="n">_executor</span><span class="p">,</span> <span class="n">_result_queue</span>
+
+    <span class="n">_executor</span> <span class="o">=</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_threads</span><span class="p">)</span>
+    <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">_executor</span><span class="o">.</span><span class="n">shutdown</span><span class="p">)</span>
+
+    <span class="n">_result_queue</span> <span class="o">=</span> <span class="n">queue</span>
+    <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">_result_queue</span><span class="o">.</span><span class="n">close</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">initializer</span><span class="p">:</span>
+        <span class="n">initializer</span><span class="p">(</span><span class="o">*</span><span class="n">initargs</span><span class="p">)</span>
+</code></pre></div>
+
+<p>...so it can be used in callback registered in _submit:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">task</span> <span class="o">=</span> <span class="n">_executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="n">task</span><span class="o">.</span><span class="n">add_done_callback</span><span class="p">(</span><span class="n">_put_result</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_put_result</span><span class="p">(</span><span class="n">task</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">exception</span> <span class="o">:=</span> <span class="n">task</span><span class="o">.</span><span class="n">exception</span><span class="p">():</span>
+        <span class="n">_result_queue</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="kc">False</span><span class="p">,</span> <span class="n">exception</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">_result_queue</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="kc">True</span><span class="p">,</span> <span class="n">task</span><span class="o">.</span><span class="n">result</span><span class="p">()))</span>
+</code></pre></div>
+
+<p>Back in the main process, we need to do something with the results.
+Either way, we'll have a background thread that waits on the queue.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initargs</span><span class="o">=</span><span class="p">()):</span>
+        <span class="c1"># ...</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__result_handler</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">__handle_results</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__result_handler</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+</code></pre></div>
+
+<p>For now, let's just print them:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">__handle_results</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">ok</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__result_queue</span><span class="o">.</span><span class="n">get</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">ok</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;result: </span><span class="si">{</span><span class="n">result</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">result</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">__result_queue</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</code></pre></div>
+
+<p>since we need a way to tell the thread to end,
+we use None as a <a class="internal" href="/sentinels#what-s-a-sentinel-and-why-do-i-need-one">sentinel</a>,
+which we pass when the executor shuts down:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__result_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">wait</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__result_handler</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="n">wait</span><span class="p">)</span>
+</code></pre></div>
+
+<p>let's see if it works:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>ptpe.py
+<span class="go">doing 0</span>
+<span class="go">doing 1</span>
+<span class="go">result: [0]</span>
+<span class="go">result: [1]</span>
+<span class="go">doing 2</span>
+<span class="go">Traceback (most recent call last):</span>
+<span class="go">  File &quot;ptpe.py&quot;, line 70, in &lt;module&gt;</span>
+<span class="go">    print(list(e.map(_do_stuff, [0, 1, 2])))</span>
+<span class="go">  File &quot;concurrent/futures/process.py&quot;, line 598, in _chain_from_iterable_of_lists</span>
+<span class="go">    element.reverse()</span>
+<span class="go">AttributeError: &#39;NoneType&#39; object has no attribute &#39;reverse&#39;</span>
+</code></pre></div>
+<p>it works – we can see the <code>result: ...</code> lines printed by the handler thread.</p>
+<p>the AttributeError is because map() expects
+the result of the future returned by submit() to be a chunk of results,
+but we're returning None from <code>_submit()</code>,
+since there's nothing to return.</p>
+<p>we need to somehow make submit() return the result we get back in the worker thread.</p>
+<h2 id="matching-results-to-futures">matching results to futures<span class="headerlink">&nbsp;<a href="#matching-results-to-futures" title="permalink">#</a></span></h2>
+<p>TBD</p>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>psutil <a class="external" href="https://psutil.readthedocs.io/en/latest/#psutil.Process.memory_full_info">memory_full_info()</a> explain the difference quite nicely
 (<a class="internal" href="/output#good-libraries-educate">good libraries educate</a>). <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-2"><p>note that on macOS I had to run Python with sudo
 to be able to get USS for child processes <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>https://github.com/nilp0inter/threadedprocess <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
