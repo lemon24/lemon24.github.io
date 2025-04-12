@@ -122,11 +122,14 @@ window.addEventListener('resize', set_vh);
 <p>aside: asyncio in itself is no solution, you will saturate the (one) cpu/thread there too</p>
 <section class="toc">
 <ul>
-<li><a href="#simulation-measurement-time">simulation/measurement time</a></li>
-<li><a href="#baseline-threads">baseline threads</a></li>
-<li><a href="#top">top</a></li>
-<li><a href="#processes">processes</a></li>
+<li><a href="#establishing-a-baseline">Establishing a baseline</a>
+<ul>
+<li><a href="#threads">Threads</a></li>
+<li><a href="#problem-cpu-becomes-a-bottleneck-when-you-do-enough-i-o">Problem: CPU becomes a bottleneck when you do enough I‍/‍O</a></li>
+<li><a href="#processes">Processes?</a></li>
 <li><a href="#memory">memory</a></li>
+</ul>
+</li>
 <li><a href="#">...</a></li>
 <li><a href="#a-minimal-plausible-solution">A minimal plausible solution</a></li>
 <li><a href="#getting-results-back">getting results back</a></li>
@@ -135,7 +138,12 @@ window.addEventListener('resize', set_vh);
 <li><a href="#bonus-free-threading">Bonus: free threading</a></li>
 </ul>
 </section>
-<h2 id="simulation-measurement-time">simulation/measurement time<span class="headerlink">&nbsp;<a href="#simulation-measurement-time" title="permalink">#</a></span></h2>
+<h2 id="establishing-a-baseline">Establishing a baseline<span class="headerlink">&nbsp;<a href="#establishing-a-baseline" title="permalink">#</a></span></h2>
+<p>To showcase the problem,
+we'll use a client that pretends to do <a class="external" href="https://en.wikipedia.org/wiki/I%E2%80%8D/%E2%80%8DO_bound">mostly I‍/‍O</a>,
+with a sprinkling of <a class="external" href="https://en.wikipedia.org/wiki/CPU-bound">CPU-bound</a> work thrown in
+– a stand-in for something like a database connection,
+a Requests <a class="external" href="https://requests.readthedocs.io/en/latest/user/advanced/#session-objects">session</a> or a Boto3 <a class="external" href="https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html#DynamoDB.Client">DynamoDB client</a>.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Client</span><span class="p">:</span>
     <span class="n">io_time</span> <span class="o">=</span> <span class="mf">0.02</span>
     <span class="n">cpu_time</span> <span class="o">=</span> <span class="mf">0.0008</span>
@@ -152,13 +160,20 @@ window.addEventListener('resize', set_vh);
         <span class="k">return</span> <span class="n">arg</span>
 </code></pre></div>
 
-<p>we could simulate a connection pool using a semaphore,
-but that's not relevant for what we're trying to measure;
-nevertheless, keep in mind the connection pool
-is a resource we're trying to share between threads if possible</p>
-<p>since we'll also use this from multiple processes,
-we'll put the work in a function, and use a global client,
-initialized by a function passed to e.g. ProcessPoolExecutor initializer=</p>
+<p>We use <a class="external" href="https://docs.python.org/3/library/time.html#time.sleep">sleep()</a> for I‍/‍O, an do some math in a loop for the CPU stuff.
+It doesn't exactly matter how long each takes,
+as long as time spent doing I‍/‍O dominates.</p>
+<p>Real clients meant to be shared between threads
+are usually backed by a connection pool
+to allow connection reuse;
+we could simulate one using a <a class="external" href="https://docs.python.org/3/library/threading.html#semaphore-objects">semaphore</a>,
+but it's not relevant here
+– we're assuming the connection pool if effectively unbounded.</p>
+<p>Since we'll also use this from multiple processes,
+we set up a global function that uses a global client
+to be created by an <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">executor</a>'s <code>initializer</code>;
+we could just do it on first use,
+but this way it's obvious who is creating the client.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">client</span> <span class="o">=</span> <span class="kc">None</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">init_client</span><span class="p">():</span>
@@ -169,7 +184,7 @@ initialized by a function passed to e.g. ProcessPoolExecutor initializer=</p>
     <span class="k">return</span> <span class="n">client</span><span class="o">.</span><span class="n">method</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
 </code></pre></div>
 
-<p>make ourselves a timing context manager</p>
+<p>Finally, we make a timing context manager:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@contextmanager</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">timer</span><span class="p">():</span>
     <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
@@ -178,43 +193,45 @@ initialized by a function passed to e.g. ProcessPoolExecutor initializer=</p>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;elapsed: </span><span class="si">{</span><span class="n">end</span><span class="o">-</span><span class="n">start</span><span class="si">:</span><span class="s2">1.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
 
-<p>we can then put these together in a benchmark function;
-note the chunksize (again, nod to using processes late)</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">10_000</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">timer</span><span class="p">):</span>
+<p>...and put everything together in a benchmark function
+that uses the client a bunch of times in parallel
+using a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> executor:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">10_000</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">timer</span><span class="p">,</span> <span class="n">chunksize</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
     <span class="k">with</span> <span class="n">executor</span><span class="p">:</span>
         <span class="c1"># make sure all the workers are started,</span>
         <span class="c1"># so we don&#39;t measure their startup time</span>
         <span class="nb">list</span><span class="p">(</span><span class="n">executor</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">200</span><span class="p">))</span>
 
         <span class="k">with</span> <span class="n">timer</span><span class="p">():</span>
-            <span class="n">values</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">executor</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="n">chunksize</span><span class="o">=</span><span class="mi">10</span><span class="p">))</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">executor</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">do_stuff</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="n">chunksize</span><span class="o">=</span><span class="n">chunksize</span><span class="p">))</span>
 
         <span class="k">assert</span> <span class="n">values</span> <span class="o">==</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)),</span> <span class="n">values</span>
 </code></pre></div>
 
-<h2 id="baseline-threads">baseline threads<span class="headerlink">&nbsp;<a href="#baseline-threads" title="permalink">#</a></span></h2>
-<!-- TODO: maybe note all timings on python 3.13.2 -->
+<h3 id="threads">Threads<span class="headerlink">&nbsp;<a href="#threads" title="permalink">#</a></span></h3>
+<!-- FIXME: note about python version and computer used -->
+<p>So, a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">ThreadPoolExecutor</a> should suffice here,
+since we're mostly doing I‍/‍O, right?</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">bench</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">init_client</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
 <span class="go">elapsed: 24.693</span>
 </code></pre></div>
-<p>more threads</p>
+<p>More threads!</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">20</span><span class="p">))</span>
 <span class="go">elapsed: 12.405</span>
 </code></pre></div>
-<p>good. more!</p>
+<p>Good, doubling the threads makes it twice as fast. More!</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">))</span>
 <span class="go">elapsed: 8.718</span>
 </code></pre></div>
-<p>good. MORE!</p>
+<p>Good, three times the threads makes it three times faster. MORE!</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">40</span><span class="p">))</span>
 <span class="go">elapsed: 8.638</span>
 </code></pre></div>
-<p>?! question mark cat</p>
-<p>...</p>
-<p>more?</p>
+<p><img class="img-responsive" src="/_file/ptpe/confused.jpg" alt="confused cat with question marks around its head" /></p>
+<p>... more?</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">50</span><span class="p">))</span>
 <span class="go">elapsed: 8.458</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">60</span><span class="p">))</span>
@@ -222,12 +239,14 @@ note the chunksize (again, nod to using processes late)</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">70</span><span class="p">))</span>
 <span class="go">elapsed: 8.428</span>
 </code></pre></div>
-<p>what in tarnation cat</p>
-<h2 id="top">top<span class="headerlink">&nbsp;<a href="#top" title="permalink">#</a></span></h2>
-<p>so, it's about time we look in more detail at what our process is doing</p>
-<p>i'd normally go with the <a class="external" href="https://linux.die.net/man/1/top">top</a> command for this,
+<p><img class="img-responsive" src="/_file/ptpe/confused2.jpg" alt="confused cat with raised eyebrow collage" /></p>
+<!-- !["what in tarnation" shiba inu dog wearing a cowboy hat](attachment:tarnation.jpg) -->
+<!-- !["what in tarnation?" cat wearing a cowboy hat](attachment:tarnation2.jpg) -->
+<h3 id="problem-cpu-becomes-a-bottleneck-when-you-do-enough-i-o">Problem: CPU becomes a bottleneck when you do enough I‍/‍O<span class="headerlink">&nbsp;<a href="#problem-cpu-becomes-a-bottleneck-when-you-do-enough-i-o" title="permalink">#</a></span></h3>
+<p>It's time we take a closer look at what our process is doing.</p>
+<p>I'd normally use the <a class="external" href="https://linux.die.net/man/1/top">top</a> command for this,
 but since both the flags and the output vary with the operating system,
-let's implement our own using the <a class="external" href="https://psutil.readthedocs.io/">psutil</a> library. (it might even work on windows)</p>
+we'll implement our own using the excellent <a class="external" href="https://psutil.readthedocs.io/">psutil</a> library.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@contextmanager</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">top</span><span class="p">():</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Print information about current and child processes.</span>
@@ -255,47 +274,41 @@ let's implement our own using the <a class="external" href="https://psutil.readt
         <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">pid</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">rss</span><span class="si">:</span><span class="s2">6.1f</span><span class="si">}</span><span class="s2">m </span><span class="si">{</span><span class="n">uss</span><span class="si">:</span><span class="s2">6.1f</span><span class="si">}</span><span class="s2">m </span><span class="si">{</span><span class="n">cpu</span><span class="si">:</span><span class="s2">7.1f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">nth</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
 
-<p>since it's a context manager, we can use it instead of the timer
-(how convenient :)</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">bench</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">init_client</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">20</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
+<p>Because it's a context manager, we can conveniently use it as a timer:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">init_client</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
+<span class="go">    PID     RES     USS    %CPU     nTH</span>
+<span class="go">  51395   35.2m   28.5m    38.7      11</span>
+</code></pre></div>
+<p>So, what happens if we increase the number of threads?</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">20</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
 <span class="go">    PID     RES     USS    %CPU     nTH</span>
 <span class="go">  13912   16.8m   13.2m    70.7      21</span>
-</code></pre></div>
-<p>so what happens if we increase the number of threads?</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
 <span class="go">    PID     RES     USS    %CPU     nTH</span>
 <span class="go">  13912   17.0m   13.4m    99.1      31</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">40</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
 <span class="go">    PID     RES     USS    %CPU     nTH</span>
 <span class="go">  13912   17.3m   13.7m   100.9      41</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">50</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
-<span class="go">    PID     RES     USS    %CPU     nTH</span>
-<span class="go">  13912   17.6m   14.0m   101.4      51</span>
 </code></pre></div>
-<p>uh oh</p>
-<p>so, it looks like with enough threads,
-the cpu-bound part of our mostly io-bound task becomes dominant,
-saturating the CPU
-(and we can't use more than one CPU with threads alone
-because of the GIL,
-although that may change in a few python versions)</p>
-<h2 id="processes">processes<span class="headerlink">&nbsp;<a href="#processes" title="permalink">#</a></span></h2>
-<p>i know, let's use ProcessPoolExecutor instead!</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
-<span class="go">elapsed: 24.349</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
+<p>It looks like the more threads we have,
+the more the compute part of our I/O bound workload increases,
+eventually becoming high enough to saturate one CPU
+– and due to the <a class="external" href="https://docs.python.org/3/glossary.html#term-global-interpreter-lock">global interpreter lock</a>,
+we can use <em>at most one CPU</em> for pure-Python code,
+regardless of the number of threads.</p>
+<!-- FIXME: if you know something the others don't, wait until the end ;) -->
+<h3 id="processes">Processes?<span class="headerlink">&nbsp;<a href="#processes" title="permalink">#</a></span></h3>
+<p>I know, let's use a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a> instead!</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
 <span class="go">elapsed: 12.374</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
 <span class="go">elapsed: 8.330</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
 <span class="go">elapsed: 6.273</span>
 </code></pre></div>
-<p>a bit more time for 10-30 processes, likely due to ipc overhead,
-but for 40 processes it's a bit faster than with threads</p>
-<p>more? more!</p>
+<p>Hmmm... I guess it <em>is</em> a little bit better.</p>
+<p>More? More!</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">60</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
 <span class="go">elapsed: 4.751</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">80</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
@@ -303,19 +316,17 @@ but for 40 processes it's a bit faster than with threads</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
 <span class="go">elapsed: 3.824</span>
 </code></pre></div>
-<p>note these are the minimums of multiple runs,
-most of them aren't as good.</p>
-<p>it's faster, but ... for twice the number of processes,
-it became only 33% faster.
-and it's only 43% faster than using 40 threads,
-when it theory now it can use 4 times as many CPUs.</p>
+<p>It's faster, but with diminishing returns
+– after 80 processes, there's no more improvement;
+and even then, it's only 2.2x faster than the best time with threads,
+when, in theory, it can now use all 4 CPUs.</p>
 <p>also, if our client connects to many different hosts,
 like a requests Session would,
 we're not making the best use of the connection pooling,
 since we now have 80 connection pools!
 (this isn't that big of an issue if our client talks to just one host,
 like an aws client would, since each pool would end up having just one connection)</p>
-<h2 id="memory">memory<span class="headerlink">&nbsp;<a href="#memory" title="permalink">#</a></span></h2>
+<h3 id="memory">memory<span class="headerlink">&nbsp;<a href="#memory" title="permalink">#</a></span></h3>
 <p>but it gets worse!</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">80</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
 <span class="go">    PID     RES     USS    %CPU     nTH</span>

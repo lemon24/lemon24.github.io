@@ -42,14 +42,14 @@ def timer():
     print(f"elapsed: {end-start:1.3f}")
 
 
-def benchmark(executor, n=10_000, timer=timer):
+def benchmark(executor, n=10_000, timer=timer, chunksize=10):
     with executor:
         # make sure all the workers are started,
         # so we don't measure their startup time
         list(executor.map(time.sleep, [0] * 200))
 
         with timer():
-            values = list(executor.map(do_stuff, range(n), chunksize=10))
+            values = list(executor.map(do_stuff, range(n), chunksize=chunksize))
 
         assert values == list(range(n)), values
 
