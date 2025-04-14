@@ -130,11 +130,14 @@ window.addEventListener('resize', set_vh);
 <li><a href="#problem-processes-use-more-memory">Problem: processes use more memory</a></li>
 </ul>
 </li>
-<li><a href="#">...</a></li>
+<li><a href="#being-unreasonable">Being unreasonable</a>
+<ul>
 <li><a href="#a-minimal-plausible-solution">A minimal plausible solution</a></li>
 <li><a href="#getting-results-back">getting results back</a></li>
 <li><a href="#matching-results-to-futures">matching results to futures</a></li>
 <li><a href="#dead-workers">dead workers</a></li>
+</ul>
+</li>
 <li><a href="#bonus-free-threading">Bonus: free threading</a></li>
 </ul>
 </section>
@@ -143,7 +146,7 @@ window.addEventListener('resize', set_vh);
 we'll use a client that pretends to do <a class="external" href="https://en.wikipedia.org/wiki/I%E2%80%8D/%E2%80%8DO_bound">mostly I‍/‍O</a>,
 with a sprinkling of <a class="external" href="https://en.wikipedia.org/wiki/CPU-bound">CPU-bound</a> work thrown in
 – a stand-in for something like a database connection,
-a Requests <a class="external" href="https://requests.readthedocs.io/en/latest/user/advanced/#session-objects">session</a> or a Boto3 <a class="external" href="https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html#DynamoDB.Client">DynamoDB client</a>.</p>
+a Requests <a class="external" href="https://requests.readthedocs.io/en/latest/user/advanced/#session-objects">session</a> or a <a class="external" href="https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html#DynamoDB.Client">DynamoDB client</a>.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Client</span><span class="p">:</span>
     <span class="n">io_time</span> <span class="o">=</span> <span class="mf">0.02</span>
     <span class="n">cpu_time</span> <span class="o">=</span> <span class="mf">0.0008</span>
@@ -160,7 +163,8 @@ a Requests <a class="external" href="https://requests.readthedocs.io/en/latest/u
         <span class="k">return</span> <span class="n">arg</span>
 </code></pre></div>
 
-<p>We use <a class="external" href="https://docs.python.org/3/library/time.html#time.sleep">sleep()</a> for I‍/‍O, an do some math in a loop for the CPU stuff.
+<p>We use <a class="external" href="https://docs.python.org/3/library/time.html#time.sleep">sleep()</a> for the I‍/‍O,
+and do some math in a loop for the CPU stuff.
 It doesn't exactly matter how long each takes,
 as long as time spent doing I‍/‍O dominates.</p>
 <p>Real clients meant to be shared between threads
@@ -169,16 +173,17 @@ to allow connection reuse;
 we could simulate one using a <a class="external" href="https://docs.python.org/3/library/threading.html#semaphore-objects">semaphore</a>,
 but it's not relevant here
 – we're assuming the connection pool is effectively unbounded.</p>
-<p>Since we'll also use this from multiple processes,
-we set up a global function that uses a global client
-to be created by an <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">executor</a>'s <code>initializer</code>;
-we could just do it on first use,
-but this way it's obvious who is creating the client.</p>
+<p>Since we'll use this from multiple processes,
+we set up a global client and a global function that uses it;
+<code>init_client()</code> is meant to be used as
+an <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">executor</a>'s <code>initializer</code>,
+which also allows us to pass arguments to the client
+when creating it.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">client</span> <span class="o">=</span> <span class="kc">None</span>
 
-<span class="k">def</span><span class="w"> </span><span class="nf">init_client</span><span class="p">():</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">init_client</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
     <span class="k">global</span> <span class="n">client</span>
-    <span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">()</span>
+    <span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">do_stuff</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">client</span><span class="o">.</span><span class="n">method</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
@@ -222,11 +227,11 @@ since we're mostly doing I‍/‍O, right?</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">20</span><span class="p">))</span>
 <span class="go">elapsed: 12.405</span>
 </code></pre></div>
-<p>Good, doubling the threads makes it twice as fast. More!</p>
+<p>Good, twice as fast. More!</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">))</span>
 <span class="go">elapsed: 8.718</span>
 </code></pre></div>
-<p>Good, three times the threads makes it three times faster. MORE!</p>
+<p>Good, three times as fast. MORE!</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">40</span><span class="p">))</span>
 <span class="go">elapsed: 8.638</span>
 </code></pre></div>
@@ -243,7 +248,8 @@ since we're mostly doing I‍/‍O, right?</p>
 <!-- !["what in tarnation" shiba inu dog wearing a cowboy hat](attachment:tarnation.jpg) -->
 <!-- !["what in tarnation?" cat wearing a cowboy hat](attachment:tarnation2.jpg) -->
 <!-- ![confused cat snarling](attachment:wtf.jpg) -->
-<p><img class="img-responsive" src="/_file/ptpe/concern.jpg" alt="concerned cat looking at reader" /></p>
+<!-- ![slightly concerned cat looking at reader](attachment:concern.jpg) -->
+<p><img class="img-responsive" src="/_file/ptpe/confused3.jpg" alt="squinting confused cat" /></p>
 <h3 id="problem-cpu-becomes-a-bottleneck-when-you-do-enough-i-o">Problem: CPU becomes a bottleneck when you do enough I‍/‍O<span class="headerlink">&nbsp;<a href="#problem-cpu-becomes-a-bottleneck-when-you-do-enough-i-o" title="permalink">#</a></span></h3>
 <p>It's time we take a closer look at what our process is doing.</p>
 <p>I'd normally use the <a class="external" href="https://linux.die.net/man/1/top">top</a> command for this,
@@ -318,7 +324,7 @@ regardless of the number of threads.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
 <span class="go">elapsed: 3.824</span>
 </code></pre></div>
-<p>It's faster, but with diminishing returns
+<p>OK, it's faster, but with diminishing returns
 – after 80 processes, there's no more improvement;
 and even then, it's only 2.2x faster than the best time with threads,
 when, in theory, it can now use all 4 CPUs.</p>
@@ -361,26 +367,27 @@ the actual usage is 1.7 MiB * 80 = 136 MiB:</p>
 <span class="go">  ... 78 more lines ...</span>
 <span class="go"> 329881   13.3m    1.7m     2.0       1</span>
 </code></pre></div>
-<p>However,  that's only a lower bound –
-once the processes start doing real work,
-new memory allocated for that is not shared.</p>
-<h2 id="">...<span class="headerlink">&nbsp;<a href="#" title="permalink">#</a></span></h2>
-<p>one reasonable way of dealing with this
-would be to split the input into multiple batches,
-once per CPU, and pass them to a process executor,
-which in turn runs the batch in a thread executor</p>
-<p>but this means we'd need to change our code, and that's no fun;
-if we could only have an executor that magically spreads the work
-across multiple processes and threads</p>
-<h2 id="a-minimal-plausible-solution">A minimal plausible solution<span class="headerlink">&nbsp;<a href="#a-minimal-plausible-solution" title="permalink">#</a></span></h2>
-<p>in line with what I hope has
+<p>However,  that's just a lower bound;
+memory allocated after the <a class="external" href="https://en.wikipedia.org/wiki/Fork_(system_call)">fork()</a> 
+(as needed when doing actual work)
+is not shared.</p>
+<h2 id="being-unreasonable">Being unreasonable<span class="headerlink">&nbsp;<a href="#being-unreasonable" title="permalink">#</a></span></h2>
+<p>One reasonable way of dealing with this
+would be to split the input into batches,
+one per CPU, and pass them to a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a>,
+which in turn runs the items in a batch in a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">ThreadPoolExecutor</a>.</p>
+<p>But that would mean we need to change our code, and that's no fun;
+if only there was an executor that
+<em>transparently spread the work across processes and threads</em>.</p>
+<h3 id="a-minimal-plausible-solution">A minimal plausible solution<span class="headerlink">&nbsp;<a href="#a-minimal-plausible-solution" title="permalink">#</a></span></h3>
+<p>In line with what I hope has
 <a class="internal" href="/pwned#a-minimal-plausible-solution">become</a>
 <a class="internal" href="/lru-cache#a-minimal-plausible-solution">tradition</a>
 by now,
 we'll take an iterative, <a class="external" href="https://hintjens.gitbooks.io/scalable-c/content/chapter1.html#problem-what-do-we-do-next">problem-solution</a> approach to this;
 since we're <em>not sure what to do yet</em>,
 we start with <a class="external" href="https://wiki.c2.com/?DoTheSimplestThingThatCouldPossiblyWork">the simplest thing that could possibly work</a>.</p>
-<p>we know we want to have a process pool executor
+<p>We know we want a process pool executor
 that starts one thread pool executor in each process,
 so let's deal with that first.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ProcessPoolExecutor</span><span class="p">):</span>
@@ -392,14 +399,14 @@ so let's deal with that first.</p>
         <span class="p">)</span>
 </code></pre></div>
 
-<p>subclassing ProcessPoolExecutor gives us the map() implementation for free.
-by not passing any max_workers to super(),
-we get the default of one process per CPU;
-the rest of the arguments we can add later.</p>
-<p>we pass the user-defined (process) initializer and arguments
+<p>Subclassing ProcessPoolExecutor gets us the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> implementation for free.
+By not passing any <code>max_workers</code> to <code>super().__init__()</code>,
+we get the default of one process per CPU (which is what we want).
+The rest of the arguments we can add later.</p>
+<p>W pass the user-defined (process) initializer and arguments
 to our own, custom initializer,
-so we can set up a global ThreadPoolExecutor
-before calling them.</p>
+so we can set up a global <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">ThreadPoolExecutor</a>
+before calling it:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">_executor</span> <span class="o">=</span> <span class="kc">None</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_init_process</span><span class="p">(</span><span class="n">max_threads</span><span class="p">,</span> <span class="n">initializer</span><span class="p">,</span> <span class="n">initargs</span><span class="p">):</span>
@@ -412,22 +419,21 @@ before calling them.</p>
         <span class="n">initializer</span><span class="p">(</span><span class="o">*</span><span class="n">initargs</span><span class="p">)</span>
 </code></pre></div>
 
-<p>like the <code>__init__</code> arguments,
-we also have to pass the arguments to submit()
-along to a custom function that can submit the work
-to the ThreadPoolExecutor instead</p>
+<p>Like the <code>__init__</code> arguments,
+we pass the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> arguments
+to a custom function that submits the work
+to the ThreadPoolExecutor instead:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ProcessPoolExecutor</span><span class="p">):</span>
     <span class="c1"># ...</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">submit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">_submit</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 </code></pre></div>
 
-<p>...kinda like this:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">_executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
 </code></pre></div>
 
-<p>ok, that looks good enough;
+<p>OK, that looks good enough;
 let's use it and see if it works:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_do_stuff</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;doing: </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
@@ -438,7 +444,38 @@ let's use it and see if it works:</p>
         <span class="nb">print</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">_do_stuff</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">])))</span>
 </code></pre></div>
 
-<p>here goes:</p>
+<p>Here goes:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp"> $ </span>python<span class="w"> </span>ptpe.py
+<span class="go">doing: 0</span>
+<span class="go">doing: 1</span>
+<span class="go">doing: 2</span>
+<span class="go">[0, 1, 4]</span>
+</code></pre></div>
+<p>Wait, we got it worked on the first try?!</p>
+<p>Let's measure that:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">bench</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">ptpe</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">),</span> <span class="n">n</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+<span class="go">elapsed: 6.161</span>
+</code></pre></div>
+<p>Hmmm... that's unexpectedly slow... almost as if:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">multiprocessing</span><span class="o">.</span><span class="n">cpu_count</span><span class="p">()</span>
+<span class="go">4</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">),</span> <span class="n">n</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+<span class="go">elapsed: 6.067</span>
+</code></pre></div>
+<p>Ah, <code>_submit()</code> waits for <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Future.result">result()</a> in the worker process main thread,
+making this just a ProcessPoolExecutor with extra steps.</p>
+<hr />
+<p>What if we send back the future instead?</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">submit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">_submit</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+</code></pre></div>
+
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">_executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</code></pre></div>
+
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>ptpe.py
 <span class="go">doing: 0</span>
 <span class="go">doing: 1</span>
@@ -463,41 +500,11 @@ let's use it and see if it works:</p>
 <span class="go">  ...</span>
 <span class="go">TypeError: cannot pickle &#39;_thread.RLock&#39; object</span>
 </code></pre></div>
-<p>so, the work started, since we're seeing the <code>doing: ...</code> lines,
-but the Future returned by the thread pool executor can't be pickled;
-not surprising, to be honest, it couldn't have been that easy</p>
-<hr />
-<!-- TODO: consider reordering this so that it's first -->
-<p>What if we wait for the result on the worker side?</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">_executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
-</code></pre></div>
-
-<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp"> $ </span>python<span class="w"> </span>ptpe.py
-<span class="go">doing: 0</span>
-<span class="go">doing: 1</span>
-<span class="go">doing: 2</span>
-<span class="go">[0, 1, 4]</span>
-</code></pre></div>
-<p>it works?!</p>
-<p>let's measure it:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">bench</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">ptpe</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">),</span> <span class="n">n</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
-<span class="go">elapsed: 6.161</span>
-</code></pre></div>
-<p>hmmmm... that's unexpectedly slow ...almost as if:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">multiprocessing</span><span class="o">.</span><span class="n">cpu_count</span><span class="p">()</span>
-<span class="go">4</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">),</span> <span class="n">n</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
-<span class="go">elapsed: 6.067</span>
-</code></pre></div>
-<p>ah.
-result() waits in _submit(),
-which runs in the worker main thread,
-making this just a ProcessPoolExecutor with extra steps</p>
-<h2 id="getting-results-back">getting results back<span class="headerlink">&nbsp;<a href="#getting-results-back" title="permalink">#</a></span></h2>
+<p>It may not look it, but this is a partial success:
+the work did start, since we're seeing <code>doing: ...</code> lines,
+but the future returned by the thread pool executor can't be pickled.
+To be honest, that's not surprising, it couldn't have been <em>that</em> easy.</p>
+<h3 id="getting-results-back">getting results back<span class="headerlink">&nbsp;<a href="#getting-results-back" title="permalink">#</a></span></h3>
 <p>if we look carefully at the traceback above,
 we can find a hint of how we can get the results back faster.
 ProcessPoolExecutor seems to be using a result queue;
@@ -615,7 +622,7 @@ to be the return value of <code>fn()</code>
 (the result of the work),
 but instead it gets the return value of <code>_submit()</code>
 (the result of <em>enqueing</em> the work).</p>
-<h2 id="matching-results-to-futures">matching results to futures<span class="headerlink">&nbsp;<a href="#matching-results-to-futures" title="permalink">#</a></span></h2>
+<h3 id="matching-results-to-futures">matching results to futures<span class="headerlink">&nbsp;<a href="#matching-results-to-futures" title="permalink">#</a></span></h3>
 <p>so, we'll make our own futures:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initargs</span><span class="o">=</span><span class="p">()):</span>
         <span class="c1"># ...</span>
@@ -689,7 +696,7 @@ and set its result accordingly:</p>
 ...that's not <em>quite</em> the 4 CPUs my laptop has,
 but it's pretty close,
 and much better than the 2.3x we got from using processes alone</p>
-<h2 id="dead-workers">dead workers<span class="headerlink">&nbsp;<a href="#dead-workers" title="permalink">#</a></span></h2>
+<h3 id="dead-workers">dead workers<span class="headerlink">&nbsp;<a href="#dead-workers" title="permalink">#</a></span></h3>
 <p>The ProcessPoolExecutor documentation keeps talking about broken pools.
 I wonder what happens if we kill a worker process.</p>
 <p>Since we can aready customize the behavior of <code>benchmark()</code>

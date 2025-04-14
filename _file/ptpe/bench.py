@@ -26,9 +26,9 @@ class Client:
 
 client = None
 
-def init_client():
+def init_client(*args):
     global client
-    client = Client()
+    client = Client(*args)
 
 def do_stuff(*args):
     return client.method(*args)
