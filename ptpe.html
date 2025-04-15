@@ -133,9 +133,9 @@ window.addEventListener('resize', set_vh);
 <li><a href="#being-unreasonable">Being unreasonable</a>
 <ul>
 <li><a href="#a-minimal-plausible-solution">A minimal plausible solution</a></li>
-<li><a href="#getting-results-back">Getting results back</a></li>
-<li><a href="#matching-results-to-futures">matching results to futures</a></li>
-<li><a href="#dead-workers">dead workers</a></li>
+<li><a href="#getting-results">Getting results</a></li>
+<li><a href="#making-our-own-futures">Making our own futures</a></li>
+<li><a href="#death-becomes-a-problem">Death becomes a problem</a></li>
 </ul>
 </li>
 <li><a href="#bonus-free-threading">Bonus: free threading</a></li>
@@ -505,11 +505,12 @@ the <code>doing: ...</code> lines confirm that the work happens,
 we just can't get anything back because
 the future returned by the thread pool executorcan't be pickled.</p>
 <p>To be honest, that's not surprising, it couldn't have been <em>that</em> easy.</p>
-<h3 id="getting-results-back">Getting results back<span class="headerlink">&nbsp;<a href="#getting-results-back" title="permalink">#</a></span></h3>
+<h3 id="getting-results">Getting results<span class="headerlink">&nbsp;<a href="#getting-results" title="permalink">#</a></span></h3>
 <p>If you look carefully at the traceback above,
 you can find a hint of how to get results back
 – <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a> seems to be using a result queue;
 the <a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/concurrent/futures/process.py">module docstring</a> even has a neat data flow diagram:</p>
+<p><a name="data-flow"></a></p>
 <pre class="code code-container"><code>|======================= In-process =====================|== Out-of-process ==|
 
 +----------+     +----------+       +--------+     +-----------+    +---------+
@@ -622,20 +623,14 @@ on executor shutdown:</p>
 </code></pre></div>
 <p>Yay, the results are making it to the handler thread!
 The error is because instead of returning a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#future-objects">Future</a>,
-<a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> returns the result of <code>_submit()</code>, which is always None.</p>
-<h3 id="matching-results-to-futures">matching results to futures<span class="headerlink">&nbsp;<a href="#matching-results-to-futures" title="permalink">#</a></span></h3>
-<p>fine, we'll make our own futures:</p>
+our <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> returns the result of <code>_submit()</code>, which is always None.</p>
+<h3 id="making-our-own-futures">Making our own futures<span class="headerlink">&nbsp;<a href="#making-our-own-futures" title="permalink">#</a></span></h3>
+<p>Fine, we'll make our own futures:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initargs</span><span class="o">=</span><span class="p">()):</span>
         <span class="c1"># ...</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__tasks</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__result_handler</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">__handle_results</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__result_handler</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="c1"># ...</span>
 </code></pre></div>
-
-<p>in order to map the result back to its future,
-we need some sort unique id;
-the id() of the outer future should do,
-since it's guaranteed unique during its lifetime.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">submit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">outer</span> <span class="o">=</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">Future</span><span class="p">()</span>
         <span class="n">task_id</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">outer</span><span class="p">)</span>
@@ -647,10 +642,14 @@ since it's guaranteed unique during its lifetime.</p>
         <span class="k">return</span> <span class="n">outer</span>
 </code></pre></div>
 
-<p>the id gets passed to <code>_submit()</code>,
-which in turn passes it to <code>_put_result()</code>
-by setting it as an attribute on the task,
-which in turn puts it on the queue with the result:</p>
+<p>In order to map each result back to its future,
+we need some sort of unique identifier;
+the <a class="external" href="https://docs.python.org/3/library/functions.html#id">id()</a> of the outer future should do,
+since it's unique during the future's lifetime.</p>
+<p>The id gets passed to <code>_submit()</code>,
+which passes it to <code>_put_result()</code>
+as an attribute on the thread pool executor future,
+so it can go in the queue with the result:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_submit</span><span class="p">(</span><span class="n">task_id</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="n">task</span> <span class="o">=</span> <span class="n">_executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
     <span class="n">task</span><span class="o">.</span><span class="n">task_id</span> <span class="o">=</span> <span class="n">task_id</span>
@@ -663,9 +662,9 @@ which in turn puts it on the queue with the result:</p>
         <span class="n">_result_queue</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="n">task</span><span class="o">.</span><span class="n">task_id</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">task</span><span class="o">.</span><span class="n">result</span><span class="p">()))</span>
 </code></pre></div>
 
-<p>back in the result handler,
+<p>Back in the result handler,
 we find the maching future,
-and set its result accordingly:</p>
+and set the result accordingly:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">__handle_results</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">for</span> <span class="n">task_id</span><span class="p">,</span> <span class="n">ok</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__result_queue</span><span class="o">.</span><span class="n">get</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
             <span class="n">outer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__tasks</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">task_id</span><span class="p">)</span>
@@ -675,29 +674,27 @@ and set its result accordingly:</p>
                 <span class="n">outer</span><span class="o">.</span><span class="n">set_exception</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
 </code></pre></div>
 
-<p>and it works:</p>
+<p>And it works:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>ptpe.py
 <span class="go">doing: 0</span>
 <span class="go">doing: 1</span>
 <span class="go">doing: 2</span>
 <span class="go">[0, 1, 4]</span>
 </code></pre></div>
-<p>but does it really?</p>
+<p>It <em>really</em> works:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
 <span class="go">elapsed: 6.220</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
 <span class="go">elapsed: 3.397</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
-<span class="go">elapsed: 2.600</span>
+<span class="go">elapsed: 2.575</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
 <span class="go">elapsed: 2.664</span>
 </code></pre></div>
-<p>it does!</p>
-<p>8.8s / 2.6s ~= 3.3x
-...that's not <em>quite</em> the 4 CPUs my laptop has,
+<p>8.8s / 2.6s ~= 3.3x is not <em>quite</em> the 4 CPUs my laptop has,
 but it's pretty close,
-and much better than the 2.3x we got from using processes alone</p>
-<h3 id="dead-workers">dead workers<span class="headerlink">&nbsp;<a href="#dead-workers" title="permalink">#</a></span></h3>
+and much better than the 2.2x we got from using processes alone</p>
+<h3 id="death-becomes-a-problem">Death becomes a problem<span class="headerlink">&nbsp;<a href="#death-becomes-a-problem" title="permalink">#</a></span></h3>
 <p>The ProcessPoolExecutor documentation keeps talking about broken pools.
 I wonder what happens if we kill a worker process.</p>
 <p>Since we can aready customize the behavior of <code>benchmark()</code>
