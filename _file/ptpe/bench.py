@@ -82,11 +82,8 @@ def top():
 
 
 @contextmanager
-def terminate_children(interval=1):
-    def terminate():
-        for child in psutil.Process().children():
-            child.terminate()
-    threading.Timer(interval, terminate).start()
+def terminate_child(interval=1):
+    threading.Timer(interval, psutil.Process().children()[-1].terminate).start()
     yield
 
 
@@ -124,7 +121,7 @@ def debug_kill(kill_interval=1, print_interval=.5, cls=ProcessThreadPoolExecutor
         threading.Timer(print_interval, print_debug).start()
 
     print_debug()
-    benchmark(executor, timer=lambda: terminate_children(kill_interval))
+    benchmark(executor, timer=lambda: terminate_child(kill_interval))
     print('done')
 
 

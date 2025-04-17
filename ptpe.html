@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-04-01">April 2025</span>
-∙ 13 minute read
+∙ 14 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -119,13 +119,12 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>aside: asyncio in itself is no solution, you will saturate the (one) cpu/thread there too</p>
 <section class="toc">
 <ul>
 <li><a href="#establishing-a-baseline">Establishing a baseline</a>
 <ul>
 <li><a href="#threads">Threads</a></li>
-<li><a href="#problem-cpu-becomes-a-bottleneck-when-you-do-enough-i-o">Problem: CPU becomes a bottleneck when you do enough I‍/‍O</a></li>
+<li><a href="#problem-cpu-becomes-a-bottleneck">Problem: CPU becomes a bottleneck</a></li>
 <li><a href="#processes">Processes?</a></li>
 <li><a href="#problem-processes-use-more-memory">Problem: processes use more memory</a></li>
 </ul>
@@ -134,7 +133,7 @@ window.addEventListener('resize', set_vh);
 <ul>
 <li><a href="#a-minimal-plausible-solution">A minimal plausible solution</a></li>
 <li><a href="#getting-results">Getting results</a></li>
-<li><a href="#making-our-own-futures">Making our own futures</a></li>
+<li><a href="#fine-we-ll-make-our-own-futures">Fine, we'll make our own futures</a></li>
 <li><a href="#death-becomes-a-problem">Death becomes a problem</a></li>
 </ul>
 </li>
@@ -250,7 +249,8 @@ since we're mostly doing I‍/‍O, right?</p>
 <!-- ![confused cat snarling](attachment:wtf.jpg) -->
 <!-- ![slightly concerned cat looking at reader](attachment:concern.jpg) -->
 <p><img class="img-responsive" src="/_file/ptpe/confused3.jpg" alt="squinting confused cat" /></p>
-<h3 id="problem-cpu-becomes-a-bottleneck-when-you-do-enough-i-o">Problem: CPU becomes a bottleneck when you do enough I‍/‍O<span class="headerlink">&nbsp;<a href="#problem-cpu-becomes-a-bottleneck-when-you-do-enough-i-o" title="permalink">#</a></span></h3>
+<!-- ## Problem: CPU becomes a bottleneck when you do enough I‍/‍O -->
+<h3 id="problem-cpu-becomes-a-bottleneck">Problem: CPU becomes a bottleneck<span class="headerlink">&nbsp;<a href="#problem-cpu-becomes-a-bottleneck" title="permalink">#</a></span></h3>
 <p>It's time we take a closer look at what our process is doing.</p>
 <p>I'd normally use the <a class="external" href="https://linux.die.net/man/1/top">top</a> command for this,
 but since both the flags and the output vary with the operating system,
@@ -305,7 +305,6 @@ eventually becoming high enough to saturate one CPU
 – and due to the <a class="external" href="https://docs.python.org/3/glossary.html#term-global-interpreter-lock">global interpreter lock</a>,
 we can use <em>at most one CPU</em> for pure-Python code,
 regardless of the number of threads.</p>
-<!-- FIXME: if you know something the others don't, wait until the end ;) -->
 <h3 id="processes">Processes?<span class="headerlink">&nbsp;<a href="#processes" title="permalink">#</a></span></h3>
 <p>I know, let's use a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a> instead!</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
@@ -374,7 +373,7 @@ and that's unavoidable if you're doing actual work.</p>
 <p>One reasonable way of dealing with this
 would be to split the input into batches,
 one per CPU, and pass them to a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a>,
-which in turn runs the items in a batch in a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">ThreadPoolExecutor</a>.</p>
+which in turn runs the items in a batch in a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">ThreadPoolExecutor</a>.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
 <p>But that would mean we need to change our code, and that's no fun;
 if only there was an executor that
 <em>transparently spread the work across processes and threads</em>.</p>
@@ -402,10 +401,9 @@ so let's deal with that first.</p>
 By not passing any <code>max_workers</code> to <code>super().__init__()</code>,
 we get the default of one process per CPU (which is what we want).
 The rest of the arguments we can add later.</p>
-<p>W pass the user-defined (process) initializer and arguments
+<p>We pass the user-defined (process) initializer and arguments
 to our own, custom initializer,
-so we can set up a global <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">ThreadPoolExecutor</a>
-before calling it:</p>
+so we can set up a global <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">ThreadPoolExecutor</a> first:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">_executor</span> <span class="o">=</span> <span class="kc">None</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_init_process</span><span class="p">(</span><span class="n">max_threads</span><span class="p">,</span> <span class="n">initializer</span><span class="p">,</span> <span class="n">initargs</span><span class="p">):</span>
@@ -531,7 +529,7 @@ the <a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/co
 +----------+     +------------+     +--------+     +-----------+    +---------+
 </code></pre>
 <p>Now, we could probably use that result queue somehow,
-but it would involve touching a lot of (private) internals.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>
+but it would involve touching a lot of (private) internals.<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup>
 Instead, let's use a separate queue:</p>
 <!--
 this is one of the rare cases where
@@ -624,7 +622,8 @@ on executor shutdown:</p>
 <p>Yay, the results are making it to the handler thread!
 The error is because instead of returning a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#future-objects">Future</a>,
 our <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> returns the result of <code>_submit()</code>, which is always None.</p>
-<h3 id="making-our-own-futures">Making our own futures<span class="headerlink">&nbsp;<a href="#making-our-own-futures" title="permalink">#</a></span></h3>
+<!-- ## Making our own futures -->
+<h3 id="fine-we-ll-make-our-own-futures">Fine, we'll make our own futures<span class="headerlink">&nbsp;<a href="#fine-we-ll-make-our-own-futures" title="permalink">#</a></span></h3>
 <p>Fine, we'll make our own futures:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initargs</span><span class="o">=</span><span class="p">()):</span>
         <span class="c1"># ...</span>
@@ -691,56 +690,57 @@ and set the result accordingly:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
 <span class="go">elapsed: 2.664</span>
 </code></pre></div>
-<p>8.8s / 2.6s ~= 3.3x is not <em>quite</em> the 4 CPUs my laptop has,
+<p><strong>3.3x</strong> is not <em>quite</em> the 4 CPUs my laptop has,
 but it's pretty close,
-and much better than the 2.2x we got from using processes alone</p>
+and much better than the 2.2x we got from processes alone.</p>
 <h3 id="death-becomes-a-problem">Death becomes a problem<span class="headerlink">&nbsp;<a href="#death-becomes-a-problem" title="permalink">#</a></span></h3>
-<p>The ProcessPoolExecutor documentation keeps talking about broken pools.
-I wonder what happens if we kill a worker process.</p>
-<p>Since we can aready customize the behavior of <code>benchmark()</code>
-via <code>timer</code>, let's do it like that
-(a combo of pgrep and pkill would do it as well,
-but it gets kinda tedious after the first few times).</p>
+<p>I wonder what happens if we kill a worker process.</p>
+<p>For example, the initializer can fail:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">executor</span> <span class="o">=</span> <span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="n">initializer</span><span class="o">=</span><span class="nb">divmod</span><span class="p">,</span> <span class="n">initargs</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+<span class="go">Exception in initializer:</span>
+<span class="gt">Traceback (most recent call last):</span>
+<span class="w">  </span><span class="c">...</span>
+<span class="gr">ZeroDivisionError</span>: <span class="n">integer division or modulo by zero</span>
+<span class="gt">Traceback (most recent call last):</span>
+<span class="w">  </span><span class="c">...</span>
+<span class="gr">concurrent.futures.process.BrokenProcessPool</span>: <span class="n">A process in the process pool was terminated abruptly while the future was running or pending.</span>
+</code></pre></div>
+<p>...or a worker can die later,
+which we can help with a custom <code>timer</code>:<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup></p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@contextmanager</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">terminate_children</span><span class="p">(</span><span class="n">interval</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">terminate</span><span class="p">():</span>
-        <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">psutil</span><span class="o">.</span><span class="n">Process</span><span class="p">()</span><span class="o">.</span><span class="n">children</span><span class="p">():</span>
-            <span class="n">child</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
-    <span class="n">threading</span><span class="o">.</span><span class="n">Timer</span><span class="p">(</span><span class="n">interval</span><span class="p">,</span> <span class="n">terminate</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">terminate_child</span><span class="p">(</span><span class="n">interval</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+    <span class="n">threading</span><span class="o">.</span><span class="n">Timer</span><span class="p">(</span><span class="n">interval</span><span class="p">,</span> <span class="n">psutil</span><span class="o">.</span><span class="n">Process</span><span class="p">()</span><span class="o">.</span><span class="n">children</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">terminate</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
     <span class="k">yield</span>
 </code></pre></div>
 
-<p>First, a baseline:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">terminate_children</span><span class="p">)</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">executor</span> <span class="o">=</span> <span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">terminate_child</span><span class="p">)</span>
 <span class="go">[ one second later ]</span>
 <span class="gt">Traceback (most recent call last):</span>
 <span class="w">  </span><span class="c">...</span>
-  File <span class="nb">&quot;concurrent/futures/_base.py&quot;</span>, line <span class="m">317</span>, in <span class="n">_result_or_cancel</span>
-<span class="w">    </span><span class="k">return</span> <span class="n">fut</span><span class="o">.</span><span class="n">result</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>
-  File <span class="nb">&quot;concurrent/futures/_base.py&quot;</span>, line <span class="m">456</span>, in <span class="n">result</span>
-<span class="w">    </span><span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_result</span><span class="p">()</span>
-  File <span class="nb">&quot;concurrent/futures/_base.py&quot;</span>, line <span class="m">401</span>, in <span class="n">__get_result</span>
-<span class="w">    </span><span class="k">raise</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exception</span>
 <span class="gr">concurrent.futures.process.BrokenProcessPool</span>: <span class="n">A process in the process pool was terminated abruptly while the future was running or pending.</span>
 </code></pre></div>
-<p>Neat!</p>
-<p>What about <em>our</em> executor?</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">terminate_children</span><span class="p">)</span>
+<p>Now let's see <em>our</em> executor:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">executor</span> <span class="o">=</span> <span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">terminate_child</span><span class="p">)</span>
 <span class="go">[ one second later ]</span>
 <span class="go">[ ... ]</span>
-<span class="go">[ one eternity later ]</span>
+<span class="go">[ still waiting ]</span>
 <span class="go">[ ... ]</span>
-<span class="go">[ it never ends ]</span>
+<span class="go">[ hello? ]</span>
 </code></pre></div>
-<p>so, there's actually two scenarios here,
-and in either case we want to fail <em>all</em> pending tasks with BrokenProcessPool.</p>
-<!-- TODO: quote docs -->
-<p>First, if map() is still submitting tasks,
-<code>inner</code> will fail with BrokenProcessPool.</p>
-<p>As we'll see, we don't need to do any special handling here,
-since fixing the second case fixes this one too.
-However, we should still propagate <code>inner</code> exceptions to the <code>outer</code> task,
-otherwise we may end up shadowing other exceptions.</p>
+<p>There's actually two scenarios here:</p>
+<ol>
+<li>if <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> is still submitting tasks, <code>inner</code> will silently fail with <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.process.BrokenProcessPool">BrokenProcessPool</a></li>
+<li>if <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> is already waiting for results, it'll keep waiting, forever</li>
+</ol>
+<p>Either way, we want to fail <em>all</em> pending tasks with <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.process.BrokenProcessPool">BrokenProcessPool</a>.</p>
+<p>For the first case, we don't need any special handling,
+since it's fixed by handling the second one.
+Nevertheless,
+we should still propagate <code>inner</code> exceptions to the <code>outer</code> task,
+otherwise we may ignore other exceptions.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">submit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="c1"># ...</span>
         <span class="n">inner</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">_submit</span><span class="p">,</span> <span class="n">task_id</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -750,8 +750,7 @@ otherwise we may end up shadowing other exceptions.</p>
         <span class="k">return</span> <span class="n">outer</span>
 </code></pre></div>
 
-<p>Of note, we need to expect by the task to have been already
-handled by the handling of the second case:</p>
+<p>Of note, the task may have already been handled by the second case:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">__handle_inner</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inner</span><span class="p">):</span>
         <span class="n">task_id</span> <span class="o">=</span> <span class="n">inner</span><span class="o">.</span><span class="n">task_id</span>
         <span class="k">if</span> <span class="n">exception</span> <span class="o">:=</span> <span class="n">inner</span><span class="o">.</span><span class="n">exception</span><span class="p">():</span>
@@ -759,21 +758,19 @@ handled by the handling of the second case:</p>
                 <span class="n">outer</span><span class="o">.</span><span class="n">set_exception</span><span class="p">(</span><span class="n">exception</span><span class="p">)</span>
 </code></pre></div>
 
-<p>This already fixes the case where the worker dies almost instantly:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="n">timer</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">terminate_children</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
-<span class="gp">... </span><span class="p">)</span>
+<p>This already fixes the case where a worker dies almost instantly:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">executor</span> <span class="o">=</span> <span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">terminate_child</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
 <span class="gt">Traceback (most recent call last):</span>
 <span class="w">  </span><span class="c">...</span>
 <span class="gr">concurrent.futures.process.BrokenProcessPool</span>: <span class="n">A process in the process pool was terminated abruptly while the future was running or pending.</span>
 </code></pre></div>
-<p>Second, if map() already finished submitting tasks,
-it'll wait forever for results that will never come.</p>
-<p>We need to somehow check regularly if the executor is broken – but how?
-Technically <code>ProcessPoolExecutor._broken</code> exists,
-but we don't want to depend on internals.
-Alterntively, we can try submitting a dummy task ourselves:</p>
+<p>For the second case,
+we need to check if the executor is broken
+– but how?
+<a class="external" href="https://github.com/python/cpython/blob/db7ad1c89f8b8f0319ec2f3a20f2f3c226a406ed/Lib/concurrent/futures/process.py#L706">ProcessPoolExecutor​._broken</a> exists,
+but we decided we don't want to depend on internals.
+Maybe we can submit a dummy task and see if it fails:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">__handle_results</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
@@ -806,30 +803,106 @@ Alterntively, we can try submitting a dummy task ourselves:</p>
             <span class="n">outer</span><span class="o">.</span><span class="n">set_exception</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span>
 </code></pre></div>
 
-<p>We take advantage of the Queue.get() timeout feature
-to only submit the dummy task if we're not receiving results.
-When the executor is broken, submit() raises BrokenExecutor,
-which breaks us out of the while true loop
-so we can fail the pending tasks.
-Like so:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">terminate_children</span><span class="p">)</span>
+<p>We can use the <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.Queue.get">Queue.get()</a> timeout
+to submit the dummy task only if we're not receiving results fast enough.
+When the executor is broken, <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> fails,
+which breaks us out of the while loop where we can fail the pending tasks.</p>
+<p>Like so:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">executor</span> <span class="o">=</span> <span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">terminate_child</span><span class="p">)</span>
 <span class="gt">Traceback (most recent call last):</span>
 <span class="w">  </span><span class="c">...</span>
 <span class="gr">concurrent.futures.process.BrokenProcessPool</span>: <span class="n">A child process terminated abruptly, the process pool is not usable anymore</span>
 </code></pre></div>
+<p><img class="img-responsive" src="/_file/ptpe/cool.jpg" alt="cool smoking cat wearing denim jacket and sunglasses" /></p>
 <hr />
 <p>So, yeah, I think we're done.
 Here's the final <a class="attachment" href="/_file/ptpe/ptpe.py">executor</a> and <a class="attachment" href="/_file/ptpe/bench.py">benchmark</a> code.</p>
-<p>Some features that are left as an exercise for the reader:</p>
+<p>Some features are left as an exercise for the reader:</p>
 <ul>
-<li>allow providing an initialized for the ThreadPoolExecutor as well</li>
-<li>allow selecting the mutliprocessing context</li>
-<li>support <code>shutdown(cancel_futures=True)</code></li>
+<li>providing an initializer for the ThreadPoolExecutor as well</li>
+<li>using other multiprocessing <a class="external" href="https://docs.python.org/3.14/library/multiprocessing.html#contexts-and-start-methods">start methods</a></li>
+<li><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>'s <code>cancel_futures</code></li>
 </ul>
+<p><strong>Learned something new today?</strong> Share this with others, it really helps! <span class="text-large">
+<span class="share-icons">
+<a
+    class="share-icon pycoders color"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+>PyCoder's Weekly</a>
+<a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/ptpe&t=Process%E2%80%8BThreadPoolExecutor%3A%20for%20when%20IO%20becomes%20CPU%20bound"
+>HN</a>
+<a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/ptpe&title=Process%E2%80%8BThreadPoolExecutor%3A%20for%20when%20IO%20becomes%20CPU%20bound"
+>Reddit</a>
+<a
+    class="share-icon linkedin color"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/ptpe"
+>linkedin</a>
+<a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Process%E2%80%8BThreadPoolExecutor%3A%20for%20when%20IO%20becomes%20CPU%20bound&url=https%3A//death.andgravity.com/ptpe&via=_andgravity"
+>Twitter</a>
+</span>
+</span></p>
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=ptpe"
+    method="post"
+    id="embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 <h2 id="bonus-free-threading">Bonus: free threading<span class="headerlink">&nbsp;<a href="#bonus-free-threading" title="permalink">#</a></span></h2>
-<p>So, a lot of people have been very excited
-for the experimental free threading support added to Python 3.13,
-and for good reasons; behold:</p>
+<p>You may have heard people being excited
+about the experimental <a class="external" href="https://docs.python.org/3/whatsnew/3.13.html#free-threaded-cpython">free threading</a> support added in Python 3.13,
+which allows running Python code on multiple CPUs.</p>
+<p>And for good reason:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="go">$ python3.13t</span>
 <span class="go">Python 3.13.2 experimental free-threading build</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
@@ -842,23 +915,29 @@ and for good reasons; behold:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="mi">120</span><span class="p">))</span>
 <span class="go">elapsed: 2.323</span>
 </code></pre></div>
-<p>Even better than the best ProcessThreadPoolExecutor time,
-without any of the fuss!</p>
-<p>Alas, I had to comment out the bits that used psutil, since:</p>
+<p><strong>3.6x</strong> over to the <a class="external" href="https://docs.python.org/3/glossary.html#term-global-interpreter-lock">GIL</a> version,
+with none of the shenanigans we've been up to!</p>
+<p>Alas, packages with extensions need to be updated to support it:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">psutil</span>
 <span class="go">zsh: segmentation fault  python3.13t</span>
 </code></pre></div>
-<p>[ soon cat here ]</p>
-<p>Soon.™</p>
+<p><a class="external" href="https://hugovk.github.io/free-threaded-wheels/">Soon.</a></p>
+<p><img class="img-responsive" src="/_file/ptpe/patient.jpg" alt="cat patiently waiting on balcony" /></p>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>The psutil documentation for <a class="external" href="https://psutil.readthedocs.io/en/latest/#psutil.Process.memory_full_info">memory_full_info()</a>
 explains the difference quite nicely and links to further resources,
 because <a class="internal" href="/output#good-libraries-educate">good libraries educate</a>. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-2"><p>You may have to run Python as root to get the USS of child processes. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-3"><p>Check out
+<li id="fn-3"><p>And no, <a class="external" href="https://docs.python.org/3/library/asyncio.html">asyncio</a> is not a solution,
+since the event loop runs in a single thread,
+so you'd  still need to run one event loop per CPU in dedicated processes. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-4"><p>Check out
 <a class="external" href="https://github.com/nilp0inter/threadedprocess">nilp0inter/threadedprocess</a>
-for an idea of what that looks like. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
+for an idea of what that looks like. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-5"><p><code>pkill -fn '[Pp]ython'</code> would do it too,
+but it gets tedious after the first few times,
+and won't work on Windows. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
