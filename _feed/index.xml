@@ -299,15 +299,15 @@ which in turn runs the batch items using a &lt;a class="external" href="https://
 If only there was an executor that
 &lt;em&gt;works seamlessly across processes and threads&lt;/em&gt;.&lt;/p&gt;
 &lt;h3 id="a-minimal-plausible-solution"&gt;A minimal plausible solution&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#a-minimal-plausible-solution" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
-&lt;p&gt;In keeping with what I hope has
+&lt;p&gt;In keeping with what has
 &lt;a class="internal" href="/pwned#a-minimal-plausible-solution"&gt;become&lt;/a&gt;
 &lt;a class="internal" href="/lru-cache#a-minimal-plausible-solution"&gt;tradition&lt;/a&gt;
 by now,
-we'll take an iterative, &lt;a class="external" href="https://hintjens.gitbooks.io/scalable-c/content/chapter1.html#problem-what-do-we-do-next"&gt;problem-solution&lt;/a&gt; approach to this;
+we'll take an iterative, &lt;a class="external" href="https://hintjens.gitbooks.io/scalable-c/content/chapter1.html#problem-what-do-we-do-next"&gt;problem-solution&lt;/a&gt; approach;
 since we're &lt;em&gt;not sure what to do yet&lt;/em&gt;,
 we start with &lt;a class="external" href="https://wiki.c2.com/?DoTheSimplestThingThatCouldPossiblyWork"&gt;the simplest thing that could possibly work&lt;/a&gt;.&lt;/p&gt;
 &lt;p&gt;We know we want a process pool executor
-that starts one thread pool executor in each process,
+that starts one thread pool executor per process,
 so let's deal with that first.&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nc"&gt;ProcessThreadPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;concurrent&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;futures&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ProcessPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
 
@@ -318,13 +318,13 @@ so let's deal with that first.&lt;/p&gt;
         &lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
-&lt;p&gt;Subclassing ProcessPoolExecutor gets us the &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map"&gt;map()&lt;/a&gt; implementation for free.
-By not passing any &lt;code&gt;max_workers&lt;/code&gt; to &lt;code&gt;super().__init__()&lt;/code&gt;,
-we get the default of one process per CPU (which is what we want).
-The rest of the arguments we can add later.&lt;/p&gt;
-&lt;p&gt;We pass the user-defined (process) initializer and arguments
-to our own, custom initializer,
-so we can set up a global &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor"&gt;ThreadPoolExecutor&lt;/a&gt; first:&lt;/p&gt;
+&lt;p&gt;By subclassing ProcessPoolExecutor, we get the &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map"&gt;map()&lt;/a&gt; implementation for free.
+By going with the default &lt;code&gt;max_workers&lt;/code&gt;,
+we get one process per CPU (which is what we want);
+we can add more arguments later if needed.&lt;/p&gt;
+&lt;p&gt;In our custom process initializer,
+we set up a global thread pool executor,
+and then call the initializer provided by the user:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;_executor&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
 
 &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;_init_process&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;max_threads&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initargs&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
@@ -337,10 +337,8 @@ so we can set up a global &lt;a class="external" href="https://docs.python.org/3
         &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;initargs&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
-&lt;p&gt;Like the &lt;code&gt;__init__&lt;/code&gt; arguments,
-we pass the &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit"&gt;submit()&lt;/a&gt; arguments
-to a custom function that submits the work
-to the ThreadPoolExecutor instead:&lt;/p&gt;
+&lt;p&gt;Likewise, &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit"&gt;submit()&lt;/a&gt; passes the work along
+to the thread pool executor:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nc"&gt;ProcessThreadPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;concurrent&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;futures&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ProcessPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
     &lt;span class="c1"&gt;# ...&lt;/span&gt;
     &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;submit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;fn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
@@ -362,7 +360,6 @@ let's use it and see if it works:&lt;/p&gt;
         &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_do_stuff&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;])))&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
-&lt;p&gt;Here goes:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt; $ &lt;/span&gt;python&lt;span class="w"&gt; &lt;/span&gt;ptpe.py
 &lt;span class="go"&gt;doing: 0&lt;/span&gt;
 &lt;span class="go"&gt;doing: 1&lt;/span&gt;
@@ -382,10 +379,11 @@ let's use it and see if it works:&lt;/p&gt;
 &lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ProcessPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;4&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;init_client&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;n&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;1000&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;span class="go"&gt;elapsed: 6.067&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;Ah, &lt;code&gt;_submit()&lt;/code&gt; waits for &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Future.result"&gt;result()&lt;/a&gt; in the worker process main thread,
-making this just a ProcessPoolExecutor with extra steps.&lt;/p&gt;
+&lt;p&gt;Ah, because &lt;code&gt;_submit()&lt;/code&gt; waits for the &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Future.result"&gt;result()&lt;/a&gt;
+in the main thread of the worker process,
+this is just a ProcessPoolExecutor with extra steps.&lt;/p&gt;
 &lt;hr /&gt;
-&lt;p&gt;What if we send back the future instead?&lt;/p&gt;
+&lt;p&gt;But what if we send back the future instead?&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;submit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;fn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
         &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;super&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;submit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_submit&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;fn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
@@ -420,15 +418,14 @@ making this just a ProcessPoolExecutor with extra steps.&lt;/p&gt;
 &lt;span class="gr"&gt;TypeError&lt;/span&gt;: &lt;span class="n"&gt;cannot pickle &amp;#39;_thread.RLock&amp;#39; object&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;It may not seem like it, but this is a partial success:
-the &lt;code&gt;doing: ...&lt;/code&gt; lines confirm that the work happens,
-we just can't get anything back because
-the future returned by the thread pool executorcan't be pickled.&lt;/p&gt;
-&lt;p&gt;To be honest, that's not surprising, it couldn't have been &lt;em&gt;that&lt;/em&gt; easy.&lt;/p&gt;
+the work happens,
+we just can't get anything back.
+Not surprising, to be honest, it couldn't have been &lt;em&gt;that&lt;/em&gt; easy.&lt;/p&gt;
 &lt;h3 id="getting-results"&gt;Getting results&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#getting-results" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
-&lt;p&gt;If you look carefully at the traceback above,
-you can find a hint of how to get results back
-– &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor"&gt;ProcessPoolExecutor&lt;/a&gt; seems to be using a result queue;
-the &lt;a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/concurrent/futures/process.py"&gt;module docstring&lt;/a&gt; even has a neat data flow diagram:&lt;/p&gt;
+&lt;p&gt;If you look carefully at the traceback,
+you'll find a hint of how &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor"&gt;ProcessPoolExecutor&lt;/a&gt; gets results back from workers
+– it uses a queue;
+the &lt;a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/concurrent/futures/process.py"&gt;module docstring&lt;/a&gt; even has a neat data-flow diagram:&lt;/p&gt;
 &lt;p&gt;&lt;a name="data-flow"&gt;&lt;/a&gt;&lt;/p&gt;
 &lt;pre class="code code-container"&gt;&lt;code&gt;|======================= In-process =====================|== Out-of-process ==|
 
@@ -449,7 +446,7 @@ the &lt;a class="external" href="https://github.com/python/cpython/blob/3.13/Lib
 |          |     | ...        |     |        |     | 3, except |    |         |
 +----------+     +------------+     +--------+     +-----------+    +---------+
 &lt;/code&gt;&lt;/pre&gt;
-&lt;p&gt;Now, we could probably use that result queue somehow,
+&lt;p&gt;Now, we could probably use the same queue somehow,
 but it would involve touching a lot of (private) internals.&lt;sup class="footnote-ref" id="fnref-5"&gt;&lt;a href="#fn-5"&gt;5&lt;/a&gt;&lt;/sup&gt;
 Instead, let's use a separate queue:&lt;/p&gt;
 &lt;!--
@@ -465,7 +462,7 @@ otherwise we'll clobber the original `_result_queue` attribute.
         &lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
-&lt;p&gt;On the worker side, we make the it globally accessible:&lt;/p&gt;
+&lt;p&gt;On the worker side, we make it globally accessible:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;_executor&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
 &lt;span class="n"&gt;_result_queue&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
 
@@ -482,7 +479,7 @@ otherwise we'll clobber the original `_result_queue` attribute.
         &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;initargs&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
-&lt;p&gt;...so we can use it from a callback registered in &lt;code&gt;_submit()&lt;/code&gt;:&lt;/p&gt;
+&lt;p&gt;...so we can use it from a task callback registered by &lt;code&gt;_submit()&lt;/code&gt;:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;_submit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;fn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
     &lt;span class="n"&gt;task&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;_executor&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;submit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;fn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
     &lt;span class="n"&gt;task&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;add_done_callback&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_put_result&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
@@ -494,20 +491,19 @@ otherwise we'll clobber the original `_result_queue` attribute.
         &lt;span class="n"&gt;_result_queue&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;put&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;task&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;()))&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
-&lt;p&gt;Back in the main process, we need a thread to handle the results.&lt;/p&gt;
+&lt;p&gt;Back in the main process, we handle the results in a thread:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="fm"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;max_threads&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initargs&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;()):&lt;/span&gt;
         &lt;span class="c1"&gt;# ...&lt;/span&gt;
         &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;__result_handler&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;threading&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Thread&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;target&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;__handle_results&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
         &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;__result_handler&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;start&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
-&lt;p&gt;For now, we can just print them:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;__handle_results&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
         &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;result&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="nb"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;__result_queue&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
             &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;ok&amp;#39;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;error&amp;#39;&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;: &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
-&lt;p&gt;To stop the thread,
+&lt;p&gt;Finally, to stop the handler,
 we use None as a &lt;a class="internal" href="/sentinels#what-s-a-sentinel-and-why-do-i-need-one"&gt;sentinel&lt;/a&gt;
 on executor shutdown:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;shutdown&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;wait&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
@@ -540,12 +536,12 @@ on executor shutdown:&lt;/p&gt;
 &lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c"&gt;...&lt;/span&gt;
 &lt;span class="gr"&gt;AttributeError&lt;/span&gt;: &lt;span class="n"&gt;&amp;#39;NoneType&amp;#39; object has no attribute &amp;#39;cancel&amp;#39;&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;Yay, the results are making it to the handler thread!
-The error is because instead of returning a &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#future-objects"&gt;Future&lt;/a&gt;,
+&lt;p&gt;Yay, the results are making it to the handler!&lt;/p&gt;
+&lt;p&gt;The error happens because instead of returning a &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#future-objects"&gt;Future&lt;/a&gt;,
 our &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit"&gt;submit()&lt;/a&gt; returns the result of &lt;code&gt;_submit()&lt;/code&gt;, which is always None.&lt;/p&gt;
 &lt;!-- ## Making our own futures --&gt;
 &lt;h3 id="fine-we-ll-make-our-own-futures"&gt;Fine, we'll make our own futures&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#fine-we-ll-make-our-own-futures" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
-&lt;p&gt;Fine, we'll make our own futures:&lt;/p&gt;
+&lt;p&gt;But &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit"&gt;submit()&lt;/a&gt; has to return a future, so we'll make our own:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="fm"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;max_threads&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initargs&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;()):&lt;/span&gt;
         &lt;span class="c1"&gt;# ...&lt;/span&gt;
         &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;__tasks&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{}&lt;/span&gt;
