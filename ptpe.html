@@ -119,6 +119,15 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
+<p>if only there was an executor that transparently spread the work across processes and threads.</p>
+<p>do mostly I‍/‍O, with a</p>
+<p>– a stand-in for something like a database connection,
+a Requests <a class="external" href="https://requests.readthedocs.io/en/latest/user/advanced/#session-objects">session</a>, or a <a class="external" href="https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html#DynamoDB.Client">DynamoDB client</a>.</p>
+<p>So, you're doing some I/O stuff, repeatedly, many times.</p>
+<p>Like, hundreds of thousands of times.</p>
+<p>Maybe you're scraping some data; Requests</p>
+<p>Maybe you're updating 10 million rows in a database,
+or deleting 10 million items in a DynamoDB table.</p>
 <section class="toc">
 <ul>
 <li><a href="#establishing-a-baseline">Establishing a baseline</a>
@@ -141,11 +150,11 @@ window.addEventListener('resize', set_vh);
 </ul>
 </section>
 <h2 id="establishing-a-baseline">Establishing a baseline<span class="headerlink">&nbsp;<a href="#establishing-a-baseline" title="permalink">#</a></span></h2>
-<p>To showcase the problem,
-we'll use a client that pretends to do <a class="external" href="https://en.wikipedia.org/wiki/I%E2%80%8D/%E2%80%8DO_bound">mostly I‍/‍O</a>,
+<p>To measure the problem,
+we'll use a client that pretends to do <a class="external" href="https://en.wikipedia.org/wiki/I/O_bound">mostly I‍/‍O</a>,
 with a sprinkling of <a class="external" href="https://en.wikipedia.org/wiki/CPU-bound">CPU-bound</a> work thrown in
 – a stand-in for something like a database connection,
-a Requests <a class="external" href="https://requests.readthedocs.io/en/latest/user/advanced/#session-objects">session</a> or a <a class="external" href="https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html#DynamoDB.Client">DynamoDB client</a>.</p>
+a Requests <a class="external" href="https://requests.readthedocs.io/en/latest/user/advanced/#session-objects">session</a>, or a <a class="external" href="https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html#DynamoDB.Client">DynamoDB client</a>.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Client</span><span class="p">:</span>
     <span class="n">io_time</span> <span class="o">=</span> <span class="mf">0.02</span>
     <span class="n">cpu_time</span> <span class="o">=</span> <span class="mf">0.0008</span>
@@ -162,7 +171,7 @@ a Requests <a class="external" href="https://requests.readthedocs.io/en/latest/u
         <span class="k">return</span> <span class="n">arg</span>
 </code></pre></div>
 
-<p>We use <a class="external" href="https://docs.python.org/3/library/time.html#time.sleep">sleep()</a> for the I‍/‍O,
+<p>We <a class="external" href="https://docs.python.org/3/library/time.html#time.sleep">sleep()</a> for the I‍/‍O,
 and do some math in a loop for the CPU stuff.
 It doesn't exactly matter how long each takes,
 as long as time spent doing I‍/‍O dominates.</p>
@@ -197,7 +206,7 @@ when creating it.</p>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;elapsed: </span><span class="si">{</span><span class="n">end</span><span class="o">-</span><span class="n">start</span><span class="si">:</span><span class="s2">1.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
 
-<p>...and put everything together in a benchmark function
+<p>...and put everything together in a function
 that uses the client a bunch of times in parallel
 using a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> executor:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">10_000</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">timer</span><span class="p">,</span> <span class="n">chunksize</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
@@ -249,7 +258,7 @@ since we're mostly doing I‍/‍O, right?</p>
 <!-- ![confused cat snarling](attachment:wtf.jpg) -->
 <!-- ![slightly concerned cat looking at reader](attachment:concern.jpg) -->
 <p><img class="img-responsive" src="/_file/ptpe/confused3.jpg" alt="squinting confused cat" /></p>
-<!-- ## Problem: CPU becomes a bottleneck when you do enough I‍/‍O -->
+<!-- ## Problem: CPU becomes a bottleneck when you do enough I&zwj;/&zwj;O -->
 <h3 id="problem-cpu-becomes-a-bottleneck">Problem: CPU becomes a bottleneck<span class="headerlink">&nbsp;<a href="#problem-cpu-becomes-a-bottleneck" title="permalink">#</a></span></h3>
 <p>It's time we take a closer look at what our process is doing.</p>
 <p>I'd normally use the <a class="external" href="https://linux.die.net/man/1/top">top</a> command for this,
