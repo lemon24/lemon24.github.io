@@ -13,23 +13,23 @@
     <id>https://death.andgravity.com/ptpe</id>
     <title>Process​Thread​Pool​Executor: when I‍/‍O becomes CPU-bound</title>
     <updated>2025-04-18T18:00:00+00:00</updated>
-    <content type="html">&lt;p&gt;So, you're doing some I‍/‍O bound stuff, in parallel, many times.&lt;/p&gt;
-&lt;p&gt;Maybe you're scraping some websites – a lot of websites.&lt;/p&gt;
-&lt;p&gt;Maybe you're deleting tens of millions of DynamoDB items.&lt;/p&gt;
+    <content type="html">&lt;p&gt;So, you're doing some I‍/‍O bound stuff, in parallel.&lt;/p&gt;
+&lt;p&gt;Maybe you're scraping some websites – a &lt;em&gt;lot&lt;/em&gt; of websites.&lt;/p&gt;
+&lt;p&gt;Maybe you're deleting many millions of DynamoDB items.&lt;/p&gt;
 &lt;p&gt;You've got your &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor"&gt;ThreadPoolExecutor&lt;/a&gt;,
-you've increased the number of threads and connections...
+you've increased the number of threads and tuned connection limits...
 but after some point, &lt;strong&gt;it's just not getting any faster&lt;/strong&gt;.
-You look at your Python process with &lt;a class="external" href="https://linux.die.net/man/1/top"&gt;top&lt;/a&gt;,
-and you see CPU utilization hovers around 100%.&lt;/p&gt;
+You look at your Python process,
+and you see CPU utilization hovers above 100%.&lt;/p&gt;
 &lt;p&gt;You &lt;em&gt;could&lt;/em&gt; split the your work into batches
 and pass them to a &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor"&gt;ProcessPoolExecutor&lt;/a&gt;,
-which in turn runs your original code in separate processes.
-But that requires extra code, which is no fun.
-And maybe your input is hard to split into batches.&lt;/p&gt;
-&lt;p&gt;If only there was an executor that
-&lt;strong&gt;transparently spread the work across processes and threads&lt;/strong&gt;.
-Well, you're in luck, since that's exactly what we're building today!&lt;/p&gt;
-&lt;p&gt;And you're even luckier, since in a couple years you won't even need it anymore.&lt;/p&gt;
+which then runs your code in separate processes.
+But that requires yet more code, and a bunch of changes, which is no fun.
+And maybe your input is not that easy to split into batches.&lt;/p&gt;
+&lt;p&gt;If only we had an executor that
+&lt;strong&gt;works seamlessly across processes and threads&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;Well, you're in luck, since that's exactly what we're building today!&lt;/p&gt;
+&lt;p&gt;And even better, in a couple years you won't even need it anymore.&lt;/p&gt;
 &lt;section class="toc"&gt;
 &lt;ul&gt;
 &lt;li&gt;&lt;a href="#establishing-a-baseline"&gt;Establishing a baseline&lt;/a&gt;
@@ -52,8 +52,8 @@ Well, you're in luck, since that's exactly what we're building today!&lt;/p&gt;
 &lt;/ul&gt;
 &lt;/section&gt;
 &lt;h2 id="establishing-a-baseline"&gt;Establishing a baseline&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#establishing-a-baseline" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
-&lt;p&gt;To measure the problem,
-we'll use a client that pretends to do &lt;a class="external" href="https://en.wikipedia.org/wiki/I/O_bound"&gt;mostly I‍/‍O&lt;/a&gt;,
+&lt;p&gt;To measure things,
+we'll use a mock that pretends to do &lt;a class="external" href="https://en.wikipedia.org/wiki/I/O_bound"&gt;mostly I‍/‍O&lt;/a&gt;,
 with a sprinkling of &lt;a class="external" href="https://en.wikipedia.org/wiki/CPU-bound"&gt;CPU-bound&lt;/a&gt; work thrown in
 – a stand-in for something like a database connection,
 a Requests &lt;a class="external" href="https://requests.readthedocs.io/en/latest/user/advanced/#session-objects"&gt;session&lt;/a&gt;, or a &lt;a class="external" href="https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html#DynamoDB.Client"&gt;DynamoDB client&lt;/a&gt;.&lt;/p&gt;
@@ -74,20 +74,19 @@ a Requests &lt;a class="external" href="https://requests.readthedocs.io/en/lates
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
 &lt;p&gt;We &lt;a class="external" href="https://docs.python.org/3/library/time.html#time.sleep"&gt;sleep()&lt;/a&gt; for the I‍/‍O,
-and do some math in a loop for the CPU stuff.
-It doesn't exactly matter how long each takes,
-as long as time spent doing I‍/‍O dominates.&lt;/p&gt;
-&lt;p&gt;Real clients meant to be shared between threads
-are usually backed by a connection pool
-to allow connection reuse;
+and do some math in a loop for the CPU stuff;
+it doesn't matter exactly how long each takes,
+as long I‍/‍O time dominates.&lt;/p&gt;
+&lt;p&gt;Real multi-threaded clients
+are usually backed by a connection pool;
 we could simulate one using a &lt;a class="external" href="https://docs.python.org/3/library/threading.html#semaphore-objects"&gt;semaphore&lt;/a&gt;,
 but it's not relevant here
 – we're assuming the connection pool is effectively unbounded.&lt;/p&gt;
-&lt;p&gt;Since we'll use this from multiple processes,
-we set up a global client and a global function that uses it;
-&lt;code&gt;init_client()&lt;/code&gt; is meant to be used as
-an &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor"&gt;executor&lt;/a&gt;'s &lt;code&gt;initializer&lt;/code&gt;,
-which also allows us to pass arguments to the client
+&lt;p&gt;Since we'll use our client from multiple processes,
+we set up a global instance and a function that uses it;
+we can then pass &lt;code&gt;init_client()&lt;/code&gt; as 
+an &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor"&gt;executor&lt;/a&gt; initializer,
+which also allows us passing arguments to the client
 when creating it.&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;client&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
 
@@ -99,7 +98,7 @@ when creating it.&lt;/p&gt;
     &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;client&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;method&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
-&lt;p&gt;Finally, we make a timing context manager:&lt;/p&gt;
+&lt;p&gt;Finally, we make a simple timing context manager:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@contextmanager&lt;/span&gt;
 &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;timer&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
     &lt;span class="n"&gt;start&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;time&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;perf_counter&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
@@ -109,7 +108,8 @@ when creating it.&lt;/p&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
 &lt;p&gt;...and put everything together in a function
-that uses the client a bunch of times in parallel
+that measures how long it takes 
+to do a bunch of work
 using a &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html"&gt;concurrent.futures&lt;/a&gt; executor:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;executor&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;n&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;10_000&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;timer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;timer&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;chunksize&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
     &lt;span class="k"&gt;with&lt;/span&gt; &lt;span class="n"&gt;executor&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
@@ -137,16 +137,16 @@ since we're mostly doing I‍/‍O, right?&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ThreadPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;20&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
 &lt;span class="go"&gt;elapsed: 12.405&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;Good, twice as fast. More!&lt;/p&gt;
+&lt;p&gt;Twice the threads, twice as fast. More!&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ThreadPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;30&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
 &lt;span class="go"&gt;elapsed: 8.718&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;Good, three times as fast. MORE!&lt;/p&gt;
+&lt;p&gt;Good, it's still scaling linearly. MORE!&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ThreadPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;40&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
 &lt;span class="go"&gt;elapsed: 8.638&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;&lt;img class="img-responsive" src="/_file/ptpe/confused.jpg" alt="confused cat with question marks around its head" /&gt;&lt;/p&gt;
-&lt;p&gt;... more?&lt;/p&gt;
+&lt;p&gt;...more?&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ThreadPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;50&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
 &lt;span class="go"&gt;elapsed: 8.458&lt;/span&gt;
 &lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ThreadPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;60&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
@@ -164,7 +164,7 @@ since we're mostly doing I‍/‍O, right?&lt;/p&gt;
 &lt;h3 id="problem-cpu-becomes-a-bottleneck"&gt;Problem: CPU becomes a bottleneck&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#problem-cpu-becomes-a-bottleneck" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
 &lt;p&gt;It's time we take a closer look at what our process is doing.&lt;/p&gt;
 &lt;p&gt;I'd normally use the &lt;a class="external" href="https://linux.die.net/man/1/top"&gt;top&lt;/a&gt; command for this,
-but since both the flags and the output vary with the operating system,
+but since the flags and output vary with the operating system,
 we'll implement our own using the excellent &lt;a class="external" href="https://psutil.readthedocs.io/"&gt;psutil&lt;/a&gt; library.&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@contextmanager&lt;/span&gt;
 &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;top&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
@@ -193,7 +193,7 @@ we'll implement our own using the excellent &lt;a class="external" href="https:/
         &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;pid&lt;/span&gt;&lt;span class="si"&gt;:&lt;/span&gt;&lt;span class="s2"&gt;&amp;gt;7&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;rss&lt;/span&gt;&lt;span class="si"&gt;:&lt;/span&gt;&lt;span class="s2"&gt;6.1f&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;m &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;uss&lt;/span&gt;&lt;span class="si"&gt;:&lt;/span&gt;&lt;span class="s2"&gt;6.1f&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;m &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;cpu&lt;/span&gt;&lt;span class="si"&gt;:&lt;/span&gt;&lt;span class="s2"&gt;7.1f&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;nth&lt;/span&gt;&lt;span class="si"&gt;:&lt;/span&gt;&lt;span class="s2"&gt;&amp;gt;7&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
-&lt;p&gt;Because it's a context manager, we can use it as a timer ;)&lt;/p&gt;
+&lt;p&gt;And because it's a context manager, we can use it as a timer:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;init_client&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
 &lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ThreadPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;timer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;top&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;span class="go"&gt;    PID     RES     USS    %CPU     nTH&lt;/span&gt;
@@ -210,12 +210,10 @@ we'll implement our own using the excellent &lt;a class="external" href="https:/
 &lt;span class="go"&gt;    PID     RES     USS    %CPU     nTH&lt;/span&gt;
 &lt;span class="go"&gt;  13912   17.3m   13.7m   100.9      41&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;It looks like the more threads we have,
-the more the compute part of our I/O bound workload increases,
+&lt;p&gt;With more threads, the compute part of our I‍/‍O bound workload increases,
 eventually becoming high enough to saturate one CPU
 – and due to the &lt;a class="external" href="https://docs.python.org/3/glossary.html#term-global-interpreter-lock"&gt;global interpreter lock&lt;/a&gt;,
-we can use &lt;em&gt;at most one CPU&lt;/em&gt; for pure-Python code,
-regardless of the number of threads.&lt;/p&gt;
+&lt;em&gt;one CPU is all we can use&lt;/em&gt;, regardless of the number of threads.&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
 &lt;h3 id="processes"&gt;Processes?&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#processes" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
 &lt;p&gt;I know, let's use a &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor"&gt;ProcessPoolExecutor&lt;/a&gt; instead!&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ProcessPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;20&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;init_client&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
@@ -234,16 +232,16 @@ regardless of the number of threads.&lt;/p&gt;
 &lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ProcessPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;100&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;init_client&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
 &lt;span class="go"&gt;elapsed: 3.824&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;OK, it's faster, but with diminishing returns
-– after 80 processes, there's no more improvement;
-and even then, it's only 2.2x faster than the best time with threads,
-when, in theory, it can now use all 4 CPUs.&lt;/p&gt;
-&lt;p&gt;Also, we're not making the best use of connection pooling
+&lt;p&gt;OK, it's better, but with diminishing returns
+– there's no improvement after 80 processes,
+and even then, it's only &lt;strong&gt;2.2x&lt;/strong&gt; faster than the best time with threads,
+when, in theory, it should be able to make full use of all 4 CPUs.&lt;/p&gt;
+&lt;p&gt;Also, we're not making best use of connection pooling
 (relevant if the client connects to many different hosts,
-since we now have 80 distinct connection pools),
-or multiplexing
+since we now have 80 pools),
+nor multiplexing
 (relevant with protocols like HTTP/2 or newer,
-since we now have 80 distinct connections).&lt;/p&gt;
+since we now have 80 connections).&lt;/p&gt;
 &lt;h3 id="problem-processes-use-more-memory"&gt;Problem: processes use more memory&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#problem-processes-use-more-memory" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
 &lt;p&gt;But it gets worse!&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ProcessPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;80&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;init_client&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;timer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;top&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
@@ -256,20 +254,19 @@ since we now have 80 distinct connections).&lt;/p&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;13.8 MiB * 80 ~= 1 GiB ... that is &lt;em&gt;a lot&lt;/em&gt; of memory.&lt;/p&gt;
 &lt;p&gt;&lt;strong&gt;Now, there's some nuance to be had here.&lt;/strong&gt;&lt;/p&gt;
-&lt;p&gt;First, on most operating systems that use virtual memory,
-&lt;a class="external" href="https://en.wikipedia.org/wiki/Code_segment"&gt;code segment&lt;/a&gt; pages are usually shared between processes
-(there's no point in having 80 separate copies
-of the Python interpreter in memory).&lt;/p&gt;
+&lt;p&gt;First, on most operating systems that have virtual memory,
+&lt;a class="external" href="https://en.wikipedia.org/wiki/Code_segment"&gt;code segment&lt;/a&gt; pages are shared between processes
+– there's no point in having 80 copies
+of libc or the Python interpreter in memory.&lt;/p&gt;
 &lt;p&gt;The &lt;a class="external" href="https://en.wikipedia.org/wiki/Unique_set_size"&gt;unique set size&lt;/a&gt; is probably a better measurement
 than the &lt;a class="external" href="https://en.wikipedia.org/wiki/Resident_set_size"&gt;resident set size&lt;/a&gt;,
-since it excludes memory shared between processes.&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;
-So, for the macOS&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt; output above,
+since it excludes memory shared between processes.&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt;
+So, for the macOS output above,&lt;sup class="footnote-ref" id="fnref-3"&gt;&lt;a href="#fn-3"&gt;3&lt;/a&gt;&lt;/sup&gt;
 the actual usage is more like 8.5 MiB * 80 = 680 MiB.&lt;/p&gt;
 &lt;p&gt;Second, if you use the &lt;em&gt;fork&lt;/em&gt; or &lt;em&gt;forkserver&lt;/em&gt; &lt;a class="external" href="https://docs.python.org/3.14/library/multiprocessing.html#contexts-and-start-methods"&gt;start methods&lt;/a&gt;,
 processes also share memory allocated before the &lt;a class="external" href="https://en.wikipedia.org/wiki/Fork_(system_call)"&gt;fork()&lt;/a&gt; via &lt;a class="external" href="https://en.wikipedia.org/wiki/Copy-on-write#In_virtual_memory_management"&gt;copy-on-write&lt;/a&gt;;
-for Python, this includes module code and (global) variables.&lt;/p&gt;
-&lt;p&gt;On Linux, for example,
-the actual usage is 1.7 MiB * 80 = 136 MiB:&lt;/p&gt;
+for Python, this includes module code and variables.
+On Linux, the actual usage is 1.7 MiB * 80 = 136 MiB:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ProcessPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;80&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;init_client&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;timer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;top&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;span class="go"&gt;    PID     RES     USS    %CPU     nTH&lt;/span&gt;
 &lt;span class="go"&gt; 329801   17.0m    6.6m     5.1       3&lt;/span&gt;
@@ -277,9 +274,9 @@ the actual usage is 1.7 MiB * 80 = 136 MiB:&lt;/p&gt;
 &lt;span class="go"&gt;  ... 78 more lines ...&lt;/span&gt;
 &lt;span class="go"&gt; 329881   13.3m    1.7m     2.0       1&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;However,  that's just a lower bound;
-memory allocated after the &lt;a class="external" href="https://en.wikipedia.org/wiki/Fork_(system_call)"&gt;fork()&lt;/a&gt; is not shared,
-and that's unavoidable if you're doing actual work.&lt;/p&gt;
+&lt;p&gt;However, it's important to note that's just a lower bound;
+memory allocated after &lt;a class="external" href="https://en.wikipedia.org/wiki/Fork_(system_call)"&gt;fork()&lt;/a&gt; is not shared,
+and most real work will unavoidably allocate more memory.&lt;/p&gt;
 
 
 
@@ -297,10 +294,10 @@ and that's unavoidable if you're doing actual work.&lt;/p&gt;
 &lt;p&gt;One reasonable way of dealing with this
 would be to split the input into batches,
 one per CPU, and pass them to a &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor"&gt;ProcessPoolExecutor&lt;/a&gt;,
-which in turn runs the items in a batch in a &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor"&gt;ThreadPoolExecutor&lt;/a&gt;.&lt;sup class="footnote-ref" id="fnref-3"&gt;&lt;a href="#fn-3"&gt;3&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
-&lt;p&gt;But that would mean we need to change our code, and that's no fun;
-if only there was an executor that
-&lt;em&gt;transparently spread the work across processes and threads&lt;/em&gt;.&lt;/p&gt;
+which in turn runs the batch items using a &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor"&gt;ThreadPoolExecutor&lt;/a&gt;.&lt;sup class="footnote-ref" id="fnref-4"&gt;&lt;a href="#fn-4"&gt;4&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;But that would mean we need to change our code, and that's no fun.
+If only there was an executor that
+&lt;em&gt;works seamlessly across processes and threads&lt;/em&gt;.&lt;/p&gt;
 &lt;h3 id="a-minimal-plausible-solution"&gt;A minimal plausible solution&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#a-minimal-plausible-solution" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
 &lt;p&gt;In keeping with what I hope has
 &lt;a class="internal" href="/pwned#a-minimal-plausible-solution"&gt;become&lt;/a&gt;
@@ -453,7 +450,7 @@ the &lt;a class="external" href="https://github.com/python/cpython/blob/3.13/Lib
 +----------+     +------------+     +--------+     +-----------+    +---------+
 &lt;/code&gt;&lt;/pre&gt;
 &lt;p&gt;Now, we could probably use that result queue somehow,
-but it would involve touching a lot of (private) internals.&lt;sup class="footnote-ref" id="fnref-4"&gt;&lt;a href="#fn-4"&gt;4&lt;/a&gt;&lt;/sup&gt;
+but it would involve touching a lot of (private) internals.&lt;sup class="footnote-ref" id="fnref-5"&gt;&lt;a href="#fn-5"&gt;5&lt;/a&gt;&lt;/sup&gt;
 Instead, let's use a separate queue:&lt;/p&gt;
 &lt;!--
 this is one of the rare cases where
@@ -631,7 +628,7 @@ and much better than the 2.2x we got from processes alone.&lt;/p&gt;
 &lt;span class="gr"&gt;concurrent.futures.process.BrokenProcessPool&lt;/span&gt;: &lt;span class="n"&gt;A process in the process pool was terminated abruptly while the future was running or pending.&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;...or a worker can die later,
-which we can help with a custom &lt;code&gt;timer&lt;/code&gt;:&lt;sup class="footnote-ref" id="fnref-5"&gt;&lt;a href="#fn-5"&gt;5&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+which we can help with a custom &lt;code&gt;timer&lt;/code&gt;:&lt;sup class="footnote-ref" id="fnref-6"&gt;&lt;a href="#fn-6"&gt;6&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@contextmanager&lt;/span&gt;
 &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;terminate_child&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;interval&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
     &lt;span class="n"&gt;threading&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Timer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;interval&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;psutil&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Process&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;children&lt;/span&gt;&lt;span class="p"&gt;()[&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;terminate&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;start&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
@@ -821,19 +818,22 @@ with none of the shenanigans we've been up to!&lt;/p&gt;
 &lt;/div&gt;
 &lt;section class="footnotes"&gt;
 &lt;ol&gt;
-&lt;li id="fn-1"&gt;&lt;p&gt;The psutil documentation for &lt;a class="external" href="https://psutil.readthedocs.io/en/latest/#psutil.Process.memory_full_info"&gt;memory_full_info()&lt;/a&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;At least, all we can use for pure-Python code.
+I‍/‍O always releases the &lt;a class="external" href="https://docs.python.org/3/glossary.html#term-global-interpreter-lock"&gt;global interpreter lock&lt;/a&gt;,
+and so do some extension modules. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-2"&gt;&lt;p&gt;The psutil documentation for &lt;a class="external" href="https://psutil.readthedocs.io/en/latest/#psutil.Process.memory_full_info"&gt;memory_full_info()&lt;/a&gt;
 explains the difference quite nicely and links to further resources,
-because &lt;a class="internal" href="/output#good-libraries-educate"&gt;good libraries educate&lt;/a&gt;. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
-&lt;li id="fn-2"&gt;&lt;p&gt;You may have to run Python as root to get the USS of child processes. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
-&lt;li id="fn-3"&gt;&lt;p&gt;And no, &lt;a class="external" href="https://docs.python.org/3/library/asyncio.html"&gt;asyncio&lt;/a&gt; is not a solution,
+because &lt;a class="internal" href="/output#good-libraries-educate"&gt;good libraries educate&lt;/a&gt;. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-3"&gt;&lt;p&gt;You may have to run Python as root to get the USS of child processes. &lt;a href="#fnref-3" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-4"&gt;&lt;p&gt;And no, &lt;a class="external" href="https://docs.python.org/3/library/asyncio.html"&gt;asyncio&lt;/a&gt; is not a solution,
 since the event loop runs in a single thread,
-so you'd  still need to run one event loop per CPU in dedicated processes. &lt;a href="#fnref-3" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
-&lt;li id="fn-4"&gt;&lt;p&gt;Check out
+so you'd  still need to run one event loop per CPU in dedicated processes. &lt;a href="#fnref-4" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-5"&gt;&lt;p&gt;Check out
 &lt;a class="external" href="https://github.com/nilp0inter/threadedprocess"&gt;nilp0inter/threadedprocess&lt;/a&gt;
-for an idea of what that looks like. &lt;a href="#fnref-4" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
-&lt;li id="fn-5"&gt;&lt;p&gt;&lt;code&gt;pkill -fn '[Pp]ython'&lt;/code&gt; would do it too,
+for an idea of what that looks like. &lt;a href="#fnref-5" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-6"&gt;&lt;p&gt;&lt;code&gt;pkill -fn '[Pp]ython'&lt;/code&gt; would do it too,
 but it gets tedious after the first few times,
-and won't work on Windows. &lt;a href="#fnref-5" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+and won't work on Windows. &lt;a href="#fnref-6" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;/ol&gt;
 &lt;/section&gt;
 </content>
