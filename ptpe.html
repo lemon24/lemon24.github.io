@@ -30,11 +30,11 @@
 
 
 
-<title>Process​ThreadPoolExecutor: for when IO becomes CPU bound - death and gravity</title>
+<title>Process​Thread​Pool​Executor: when I‍/‍O becomes CPU-bound - death and gravity</title>
 
 
 
-<meta property="og:title" content="Process​ThreadPoolExecutor: for when IO becomes CPU bound">
+<meta property="og:title" content="Process​Thread​Pool​Executor: when I‍/‍O becomes CPU-bound">
 <meta property="og:site_name" content="death and gravity">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://death.andgravity.com/ptpe">
@@ -54,6 +54,15 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
 
 
 
@@ -71,14 +80,14 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">Process​ThreadPoolExecutor: for when IO becomes CPU bound</h1>
+<h1 class="heading-noindex">Process​Thread​Pool​Executor: when I‍/‍O becomes CPU-bound</h1>
 
 <p class="text-gray text-nowrap">
 
 
 
 <small>
-<span class="tooltip" data-tooltip="published on 2025-04-01">April 2025</span>
+<span class="tooltip" data-tooltip="published on 2025-04-18">April 2025</span>
 ∙ 14 minute read
 ∙
 </small><span class="share-icons">
@@ -89,11 +98,11 @@ window.addEventListener('resize', set_vh);
 >PyCoder's Weekly</a>
 <a
     class="share-icon hacker-news"
-    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/ptpe&t=Process%E2%80%8BThreadPoolExecutor%3A%20for%20when%20IO%20becomes%20CPU%20bound"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/ptpe&t=Process%E2%80%8BThread%E2%80%8BPool%E2%80%8BExecutor%3A%20when%20I%E2%80%8D/%E2%80%8DO%20becomes%20CPU-bound"
 >HN</a>
 <a
     class="share-icon reddit"
-    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/ptpe&title=Process%E2%80%8BThreadPoolExecutor%3A%20for%20when%20IO%20becomes%20CPU%20bound"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/ptpe&title=Process%E2%80%8BThread%E2%80%8BPool%E2%80%8BExecutor%3A%20when%20I%E2%80%8D/%E2%80%8DO%20becomes%20CPU-bound"
 >Reddit</a>
 <a
     class="share-icon linkedin"
@@ -101,7 +110,7 @@ window.addEventListener('resize', set_vh);
 >linkedin</a>
 <a
     class="share-icon twitter"
-    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Process%E2%80%8BThreadPoolExecutor%3A%20for%20when%20IO%20becomes%20CPU%20bound&url=https%3A//death.andgravity.com/ptpe&via=_andgravity"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Process%E2%80%8BThread%E2%80%8BPool%E2%80%8BExecutor%3A%20when%20I%E2%80%8D/%E2%80%8DO%20becomes%20CPU-bound&url=https%3A//death.andgravity.com/ptpe&via=_andgravity"
 >Twitter</a>
 </span>
 
@@ -119,15 +128,23 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>if only there was an executor that transparently spread the work across processes and threads.</p>
-<p>do mostly I‍/‍O, with a</p>
-<p>– a stand-in for something like a database connection,
-a Requests <a class="external" href="https://requests.readthedocs.io/en/latest/user/advanced/#session-objects">session</a>, or a <a class="external" href="https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html#DynamoDB.Client">DynamoDB client</a>.</p>
-<p>So, you're doing some I/O stuff, repeatedly, many times.</p>
-<p>Like, hundreds of thousands of times.</p>
-<p>Maybe you're scraping some data; Requests</p>
-<p>Maybe you're updating 10 million rows in a database,
-or deleting 10 million items in a DynamoDB table.</p>
+<p>So, you're doing some I‍/‍O bound stuff, in parallel, many times.</p>
+<p>Maybe you're scraping some websites – a lot of websites.</p>
+<p>Maybe you're deleting tens of millions of DynamoDB items.</p>
+<p>You've got your <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">ThreadPoolExecutor</a>,
+you've increased the number of threads and connections...
+but after some point, <strong>it's just not getting any faster</strong>.
+You look at your Python process with <a class="external" href="https://linux.die.net/man/1/top">top</a>,
+and you see CPU utilization hovers around 100%.</p>
+<p>You <em>could</em> split the your work into batches
+and pass them to a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a>,
+which in turn runs your original code in separate processes.
+But that requires extra code, which is no fun.
+And maybe your input is hard to split into batches.</p>
+<p>If only there was an executor that
+<strong>transparently spread the work across processes and threads</strong>.
+Well, you're in luck, since that's exactly what we're building today!</p>
+<p>And you're even luckier, since in a couple years you won't even need it anymore.</p>
 <section class="toc">
 <ul>
 <li><a href="#establishing-a-baseline">Establishing a baseline</a>
@@ -378,6 +395,19 @@ the actual usage is 1.7 MiB * 80 = 136 MiB:</p>
 <p>However,  that's just a lower bound;
 memory allocated after the <a class="external" href="https://en.wikipedia.org/wiki/Fork_(system_call)">fork()</a> is not shared,
 and that's unavoidable if you're doing actual work.</p>
+
+
+
+<div class="panel inline-panel" >
+    <div class="panel-header text-large">
+        Liking this so far? Here&#39;s another article you might like:
+    </div>
+    <div class="panel-body">
+        <p><a href="/asyncio-bridge">
+            Running async code from sync in Python asyncio
+        </a>
+    </div>
+</div>
 <h2 id="being-unreasonable">Being unreasonable<span class="headerlink">&nbsp;<a href="#being-unreasonable" title="permalink">#</a></span></h2>
 <p>One reasonable way of dealing with this
 would be to split the input into batches,
@@ -842,11 +872,11 @@ Here's the final <a class="attachment" href="/_file/ptpe/ptpe.py">executor</a> a
 >PyCoder's Weekly</a>
 <a
     class="share-icon hacker-news color"
-    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/ptpe&t=Process%E2%80%8BThreadPoolExecutor%3A%20for%20when%20IO%20becomes%20CPU%20bound"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/ptpe&t=Process%E2%80%8BThread%E2%80%8BPool%E2%80%8BExecutor%3A%20when%20I%E2%80%8D/%E2%80%8DO%20becomes%20CPU-bound"
 >HN</a>
 <a
     class="share-icon reddit color"
-    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/ptpe&title=Process%E2%80%8BThreadPoolExecutor%3A%20for%20when%20IO%20becomes%20CPU%20bound"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/ptpe&title=Process%E2%80%8BThread%E2%80%8BPool%E2%80%8BExecutor%3A%20when%20I%E2%80%8D/%E2%80%8DO%20becomes%20CPU-bound"
 >Reddit</a>
 <a
     class="share-icon linkedin color"
@@ -854,7 +884,7 @@ Here's the final <a class="attachment" href="/_file/ptpe/ptpe.py">executor</a> a
 >linkedin</a>
 <a
     class="share-icon twitter color"
-    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Process%E2%80%8BThreadPoolExecutor%3A%20for%20when%20IO%20becomes%20CPU%20bound&url=https%3A//death.andgravity.com/ptpe&via=_andgravity"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Process%E2%80%8BThread%E2%80%8BPool%E2%80%8BExecutor%3A%20when%20I%E2%80%8D/%E2%80%8DO%20becomes%20CPU-bound&url=https%3A//death.andgravity.com/ptpe&via=_andgravity"
 >Twitter</a>
 </span>
 </span></p>
@@ -932,6 +962,19 @@ with none of the shenanigans we've been up to!</p>
 </code></pre></div>
 <p><a class="external" href="https://hugovk.github.io/free-threaded-wheels/">Soon.</a></p>
 <p><img class="img-responsive" src="/_file/ptpe/patient.jpg" alt="cat patiently waiting on balcony" /></p>
+
+
+
+<div class="panel inline-panel" >
+    <div class="panel-header text-large">
+        If you&#39;ve made it this far, you might like:
+    </div>
+    <div class="panel-body">
+        <p><a href="/lru-cache">
+            This is not interview advice: a priority-expiry LRU cache in Python without heaps or trees
+        </a>
+    </div>
+</div>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>The psutil documentation for <a class="external" href="https://psutil.readthedocs.io/en/latest/#psutil.Process.memory_full_info">memory_full_info()</a>
