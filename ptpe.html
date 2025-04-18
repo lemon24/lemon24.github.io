@@ -538,8 +538,9 @@ we just can't get anything back.
 Not surprising, to be honest, it couldn't have been <em>that</em> easy.</p>
 <h3 id="getting-results">Getting results<span class="headerlink">&nbsp;<a href="#getting-results" title="permalink">#</a></span></h3>
 <p>If you look carefully at the traceback,
-you'll find a hint of how <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a> gets results back from workers
-– it uses a queue;
+you'll find a hint of how <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a> 
+gets its own results back from workers
+– a queue;
 the <a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/concurrent/futures/process.py">module docstring</a> even has a neat data-flow diagram:</p>
 <p><a name="data-flow"></a></p>
 <pre class="code code-container"><code>|======================= In-process =====================|== Out-of-process ==|
@@ -654,9 +655,8 @@ on executor shutdown:</p>
 <p>Yay, the results are making it to the handler!</p>
 <p>The error happens because instead of returning a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#future-objects">Future</a>,
 our <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> returns the result of <code>_submit()</code>, which is always None.</p>
-<!-- ## Making our own futures -->
 <h3 id="fine-we-ll-make-our-own-futures">Fine, we'll make our own futures<span class="headerlink">&nbsp;<a href="#fine-we-ll-make-our-own-futures" title="permalink">#</a></span></h3>
-<p>But <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> has to return a future, so we'll make our own:</p>
+<p>But <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> must return a future, so we make our own:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initargs</span><span class="o">=</span><span class="p">()):</span>
         <span class="c1"># ...</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__tasks</span> <span class="o">=</span> <span class="p">{}</span>
@@ -673,14 +673,13 @@ our <a class="external" href="https://docs.python.org/3/library/concurrent.futur
         <span class="k">return</span> <span class="n">outer</span>
 </code></pre></div>
 
-<p>In order to map each result back to its future,
-we need some sort of unique identifier;
+<p>In order to map results to their futures,
+we need an unique identifier;
 the <a class="external" href="https://docs.python.org/3/library/functions.html#id">id()</a> of the outer future should do,
-since it's unique during the future's lifetime.</p>
-<p>The id gets passed to <code>_submit()</code>,
-which passes it to <code>_put_result()</code>
-as an attribute on the thread pool executor future,
-so it can go in the queue with the result:</p>
+since it is unique for the object's lifetime.</p>
+<p>We pass the id to <code>_submit()</code>,
+then to <code>_put_result()</code> as an attribute on the future,
+and finally back in the queue with the result:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_submit</span><span class="p">(</span><span class="n">task_id</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="n">task</span> <span class="o">=</span> <span class="n">_executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
     <span class="n">task</span><span class="o">.</span><span class="n">task_id</span> <span class="o">=</span> <span class="n">task_id</span>
@@ -712,7 +711,7 @@ and set the result accordingly:</p>
 <span class="go">doing: 2</span>
 <span class="go">[0, 1, 4]</span>
 </code></pre></div>
-<p>It <em>really</em> works:</p>
+<p>I mean, it <em>really</em> works:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
 <span class="go">elapsed: 6.220</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">))</span>
@@ -726,7 +725,7 @@ and set the result accordingly:</p>
 but it's pretty close,
 and much better than the 2.2x we got from processes alone.</p>
 <h3 id="death-becomes-a-problem">Death becomes a problem<span class="headerlink">&nbsp;<a href="#death-becomes-a-problem" title="permalink">#</a></span></h3>
-<p>I wonder what happens if we kill a worker process.</p>
+<p>I wonder what happens when a worker process dies.</p>
 <p>For example, the initializer can fail:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">executor</span> <span class="o">=</span> <span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="n">initializer</span><span class="o">=</span><span class="nb">divmod</span><span class="p">,</span> <span class="n">initargs</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
@@ -738,7 +737,7 @@ and much better than the 2.2x we got from processes alone.</p>
 <span class="w">  </span><span class="c">...</span>
 <span class="gr">concurrent.futures.process.BrokenProcessPool</span>: <span class="n">A process in the process pool was terminated abruptly while the future was running or pending.</span>
 </code></pre></div>
-<p>...or a worker can die later,
+<p>...or it can die some time later,
 which we can help with a custom <code>timer</code>:<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup></p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@contextmanager</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">terminate_child</span><span class="p">(</span><span class="n">interval</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
@@ -983,9 +982,9 @@ so you'd  still need to run one event loop per CPU in dedicated processes. <a hr
 <li id="fn-5"><p>Check out
 <a class="external" href="https://github.com/nilp0inter/threadedprocess">nilp0inter/threadedprocess</a>
 for an idea of what that looks like. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-6"><p><code>pkill -fn '[Pp]ython'</code> would do it too,
-but it gets tedious after the first few times,
-and won't work on Windows. <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-6"><p><code>pkill -fn '[Pp]ython'</code> would've done it too,
+but it gets tedious if you do it a lot,
+and it's a different command on Windows. <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 

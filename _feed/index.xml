@@ -423,8 +423,9 @@ we just can't get anything back.
 Not surprising, to be honest, it couldn't have been &lt;em&gt;that&lt;/em&gt; easy.&lt;/p&gt;
 &lt;h3 id="getting-results"&gt;Getting results&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#getting-results" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
 &lt;p&gt;If you look carefully at the traceback,
-you'll find a hint of how &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor"&gt;ProcessPoolExecutor&lt;/a&gt; gets results back from workers
-– it uses a queue;
+you'll find a hint of how &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor"&gt;ProcessPoolExecutor&lt;/a&gt; 
+gets its own results back from workers
+– a queue;
 the &lt;a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/concurrent/futures/process.py"&gt;module docstring&lt;/a&gt; even has a neat data-flow diagram:&lt;/p&gt;
 &lt;p&gt;&lt;a name="data-flow"&gt;&lt;/a&gt;&lt;/p&gt;
 &lt;pre class="code code-container"&gt;&lt;code&gt;|======================= In-process =====================|== Out-of-process ==|
@@ -539,9 +540,8 @@ on executor shutdown:&lt;/p&gt;
 &lt;p&gt;Yay, the results are making it to the handler!&lt;/p&gt;
 &lt;p&gt;The error happens because instead of returning a &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#future-objects"&gt;Future&lt;/a&gt;,
 our &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit"&gt;submit()&lt;/a&gt; returns the result of &lt;code&gt;_submit()&lt;/code&gt;, which is always None.&lt;/p&gt;
-&lt;!-- ## Making our own futures --&gt;
 &lt;h3 id="fine-we-ll-make-our-own-futures"&gt;Fine, we'll make our own futures&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#fine-we-ll-make-our-own-futures" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
-&lt;p&gt;But &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit"&gt;submit()&lt;/a&gt; has to return a future, so we'll make our own:&lt;/p&gt;
+&lt;p&gt;But &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit"&gt;submit()&lt;/a&gt; must return a future, so we make our own:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="fm"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;max_threads&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initargs&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;()):&lt;/span&gt;
         &lt;span class="c1"&gt;# ...&lt;/span&gt;
         &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;__tasks&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{}&lt;/span&gt;
@@ -558,14 +558,13 @@ our &lt;a class="external" href="https://docs.python.org/3/library/concurrent.fu
         &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;outer&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
-&lt;p&gt;In order to map each result back to its future,
-we need some sort of unique identifier;
+&lt;p&gt;In order to map results to their futures,
+we need an unique identifier;
 the &lt;a class="external" href="https://docs.python.org/3/library/functions.html#id"&gt;id()&lt;/a&gt; of the outer future should do,
-since it's unique during the future's lifetime.&lt;/p&gt;
-&lt;p&gt;The id gets passed to &lt;code&gt;_submit()&lt;/code&gt;,
-which passes it to &lt;code&gt;_put_result()&lt;/code&gt;
-as an attribute on the thread pool executor future,
-so it can go in the queue with the result:&lt;/p&gt;
+since it is unique for the object's lifetime.&lt;/p&gt;
+&lt;p&gt;We pass the id to &lt;code&gt;_submit()&lt;/code&gt;,
+then to &lt;code&gt;_put_result()&lt;/code&gt; as an attribute on the future,
+and finally back in the queue with the result:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;_submit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;task_id&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;fn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
     &lt;span class="n"&gt;task&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;_executor&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;submit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;fn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
     &lt;span class="n"&gt;task&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;task_id&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;task_id&lt;/span&gt;
@@ -597,7 +596,7 @@ and set the result accordingly:&lt;/p&gt;
 &lt;span class="go"&gt;doing: 2&lt;/span&gt;
 &lt;span class="go"&gt;[0, 1, 4]&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;It &lt;em&gt;really&lt;/em&gt; works:&lt;/p&gt;
+&lt;p&gt;I mean, it &lt;em&gt;really&lt;/em&gt; works:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ProcessThreadPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;init_client&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
 &lt;span class="go"&gt;elapsed: 6.220&lt;/span&gt;
 &lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ProcessThreadPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;20&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;init_client&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
@@ -611,7 +610,7 @@ and set the result accordingly:&lt;/p&gt;
 but it's pretty close,
 and much better than the 2.2x we got from processes alone.&lt;/p&gt;
 &lt;h3 id="death-becomes-a-problem"&gt;Death becomes a problem&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#death-becomes-a-problem" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
-&lt;p&gt;I wonder what happens if we kill a worker process.&lt;/p&gt;
+&lt;p&gt;I wonder what happens when a worker process dies.&lt;/p&gt;
 &lt;p&gt;For example, the initializer can fail:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;executor&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;ProcessPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="nb"&gt;divmod&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initargs&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
 &lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;executor&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;submit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
@@ -623,7 +622,7 @@ and much better than the 2.2x we got from processes alone.&lt;/p&gt;
 &lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c"&gt;...&lt;/span&gt;
 &lt;span class="gr"&gt;concurrent.futures.process.BrokenProcessPool&lt;/span&gt;: &lt;span class="n"&gt;A process in the process pool was terminated abruptly while the future was running or pending.&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;...or a worker can die later,
+&lt;p&gt;...or it can die some time later,
 which we can help with a custom &lt;code&gt;timer&lt;/code&gt;:&lt;sup class="footnote-ref" id="fnref-6"&gt;&lt;a href="#fn-6"&gt;6&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@contextmanager&lt;/span&gt;
 &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;terminate_child&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;interval&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
@@ -821,9 +820,9 @@ so you'd  still need to run one event loop per CPU in dedicated processes. &lt;a
 &lt;li id="fn-5"&gt;&lt;p&gt;Check out
 &lt;a class="external" href="https://github.com/nilp0inter/threadedprocess"&gt;nilp0inter/threadedprocess&lt;/a&gt;
 for an idea of what that looks like. &lt;a href="#fnref-5" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
-&lt;li id="fn-6"&gt;&lt;p&gt;&lt;code&gt;pkill -fn '[Pp]ython'&lt;/code&gt; would do it too,
-but it gets tedious after the first few times,
-and won't work on Windows. &lt;a href="#fnref-6" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-6"&gt;&lt;p&gt;&lt;code&gt;pkill -fn '[Pp]ython'&lt;/code&gt; would've done it too,
+but it gets tedious if you do it a lot,
+and it's a different command on Windows. &lt;a href="#fnref-6" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;/ol&gt;
 &lt;/section&gt;
 </content>
