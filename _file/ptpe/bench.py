@@ -128,7 +128,7 @@ def debug_kill(kill_interval=1, print_interval=.5, cls=ProcessThreadPoolExecutor
 lines = """\
 # benchmark(ProcessThreadPoolExecutor(10, initializer=init_client))
 # benchmark(ProcessThreadPoolExecutor(20, initializer=init_client))
-# benchmark(ProcessThreadPoolExecutor(30, initializer=init_client))
+benchmark(ProcessThreadPoolExecutor(30, initializer=init_client))
 benchmark(ProcessThreadPoolExecutor(40, initializer=init_client))
 
 init_client()

@@ -1,4 +1,4 @@
-import queue
+import queue, time
 import atexit
 import threading
 import multiprocessing
@@ -29,18 +29,25 @@ class ProcessThreadPoolExecutor(concurrent.futures.ProcessPoolExecutor):
 
         return outer
 
+    def __handle_inner(self, inner):
+        task_id = inner.task_id
+        if exception := inner.exception():
+            if outer := self.__tasks.pop(task_id, None):
+                outer.set_exception(exception)
+
     def __handle_results(self):
+        last_broken_check = time.monotonic()
+
         while True:
+            now = time.monotonic()
+            if now - last_broken_check >= .1:
+                if exc := self.__check_broken():
+                    break
+                last_broken_check = now
+
             try:
                 value = self.__result_queue.get(timeout=.1)
             except queue.Empty:
-                try:
-                    super().submit(int).cancel()
-                except concurrent.futures.BrokenExecutor as e:
-                    exc = type(e)(str(e))
-                    break
-                except RuntimeError as e:
-                    assert 'shutdown' in str(e), e
                 continue
 
             if not value:
@@ -60,11 +67,15 @@ class ProcessThreadPoolExecutor(concurrent.futures.ProcessPoolExecutor):
                 break
             outer.set_exception(exc)
 
-    def __handle_inner(self, inner):
-        task_id = inner.task_id
-        if exception := inner.exception():
-            if outer := self.__tasks.pop(task_id, None):
-                outer.set_exception(exception)
+    def __check_broken(self):
+        try:
+            super().submit(int).cancel()
+        except concurrent.futures.BrokenExecutor as e:
+            return type(e)(str(e))
+        except RuntimeError as e:
+            if 'shutdown' not in str(e):
+                raise
+        return None
 
     def shutdown(self, wait=True):
         super().shutdown(wait=wait)

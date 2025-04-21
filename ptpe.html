@@ -31,14 +31,14 @@
 
 
 <title>Process​Thread​Pool​Executor: when I‍/‍O becomes CPU-bound - death and gravity</title>
-
+<meta name="description" content="...in which we build a hybrid concurrent.futures executor that runs I‍/‍O bound tasks on all available CPUs, thus evading the limitations imposed by the dreaded global interpreter lock on the humble ThreadPoolExecutor." />
 
 
 <meta property="og:title" content="Process​Thread​Pool​Executor: when I‍/‍O becomes CPU-bound">
 <meta property="og:site_name" content="death and gravity">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://death.andgravity.com/ptpe">
-
+<meta property="og:description" content="...in which we build a hybrid concurrent.futures executor that runs I‍/‍O bound tasks on all available CPUs, thus evading the limitations imposed by the dreaded global interpreter lock on the humble ThreadPoolExecutor.">
 
 
 
@@ -130,19 +130,19 @@ window.addEventListener('resize', set_vh);
 
 <p>So, you're doing some I‍/‍O bound stuff, in parallel.</p>
 <p>Maybe you're scraping some websites – a <em>lot</em> of websites.</p>
-<p>Maybe you're deleting many millions of DynamoDB items.</p>
+<p>Maybe you're updating or deleting millions of DynamoDB items.</p>
 <p>You've got your <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">ThreadPoolExecutor</a>,
 you've increased the number of threads and tuned connection limits...
 but after some point, <strong>it's just not getting any faster</strong>.
 You look at your Python process,
 and you see CPU utilization hovers above 100%.</p>
-<p>You <em>could</em> split the your work into batches
-and pass them to a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a>,
-which then runs your code in separate processes.
+<p>You <em>could</em> split the work into batches
+and have a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a>
+run your original code in separate processes.
 But that requires yet more code, and a bunch of changes, which is no fun.
 And maybe your input is not that easy to split into batches.</p>
 <p>If only we had an executor that
-<strong>works seamlessly across processes and threads</strong>.</p>
+<strong>worked seamlessly across processes and threads</strong>.</p>
 <p>Well, you're in luck, since that's exactly what we're building today!</p>
 <p>And even better, in a couple years you won't even need it anymore.</p>
 <section class="toc">
@@ -152,10 +152,10 @@ And maybe your input is not that easy to split into batches.</p>
 <li><a href="#threads">Threads</a></li>
 <li><a href="#problem-cpu-becomes-a-bottleneck">Problem: CPU becomes a bottleneck</a></li>
 <li><a href="#processes">Processes?</a></li>
-<li><a href="#problem-processes-use-more-memory">Problem: processes use more memory</a></li>
+<li><a href="#problem-more-processes-more-memory">Problem: more processes, more memory</a></li>
 </ul>
 </li>
-<li><a href="#being-unreasonable">Being unreasonable</a>
+<li><a href="#why-not-both">Why not both?</a>
 <ul>
 <li><a href="#a-minimal-plausible-solution">A minimal plausible solution</a></li>
 <li><a href="#getting-results">Getting results</a></li>
@@ -199,7 +199,7 @@ but it's not relevant here
 – we're assuming the connection pool is effectively unbounded.</p>
 <p>Since we'll use our client from multiple processes,
 we set up a global instance and a function that uses it;
-we can then pass <code>init_client()</code> as 
+we can then pass <code>init_client()</code> as
 an <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">executor</a> initializer,
 which also allows us passing arguments to the client
 when creating it.</p>
@@ -223,7 +223,7 @@ when creating it.</p>
 </code></pre></div>
 
 <p>...and put everything together in a function
-that measures how long it takes 
+that measures how long it takes
 to do a bunch of work
 using a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> executor:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">10_000</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">timer</span><span class="p">,</span> <span class="n">chunksize</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
@@ -357,7 +357,7 @@ since we now have 80 pools),
 nor multiplexing
 (relevant with protocols like HTTP/2 or newer,
 since we now have 80 connections).</p>
-<h3 id="problem-processes-use-more-memory">Problem: processes use more memory<span class="headerlink">&nbsp;<a href="#problem-processes-use-more-memory" title="permalink">#</a></span></h3>
+<h3 id="problem-more-processes-more-memory">Problem: more processes, more memory<span class="headerlink">&nbsp;<a href="#problem-more-processes-more-memory" title="permalink">#</a></span></h3>
 <p>But it gets worse!</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">80</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
 <span class="go">    PID     RES     USS    %CPU     nTH</span>
@@ -405,14 +405,14 @@ and most real work will unavoidably allocate more memory.</p>
         </a>
     </div>
 </div>
-<h2 id="being-unreasonable">Being unreasonable<span class="headerlink">&nbsp;<a href="#being-unreasonable" title="permalink">#</a></span></h2>
+<h2 id="why-not-both">Why not both?<span class="headerlink">&nbsp;<a href="#why-not-both" title="permalink">#</a></span></h2>
 <p>One reasonable way of dealing with this
 would be to split the input into batches,
 one per CPU, and pass them to a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a>,
 which in turn runs the batch items using a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">ThreadPoolExecutor</a>.<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup></p>
-<p>But that would mean we need to change our code, and that's no fun.
-If only there was an executor that
-<em>works seamlessly across processes and threads</em>.</p>
+<p>But that would mean we need to change our code, and that's no fun.</p>
+<p>If only we had an executor that
+<strong>worked seamlessly across processes and threads</strong>.</p>
 <h3 id="a-minimal-plausible-solution">A minimal plausible solution<span class="headerlink">&nbsp;<a href="#a-minimal-plausible-solution" title="permalink">#</a></span></h3>
 <p>In keeping with what has
 <a class="internal" href="/pwned#a-minimal-plausible-solution">become</a>
@@ -538,7 +538,7 @@ we just can't get anything back.
 Not surprising, to be honest, it couldn't have been <em>that</em> easy.</p>
 <h3 id="getting-results">Getting results<span class="headerlink">&nbsp;<a href="#getting-results" title="permalink">#</a></span></h3>
 <p>If you look carefully at the traceback,
-you'll find a hint of how <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a> 
+you'll find a hint of how <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a>
 gets its own results back from workers
 – a queue;
 the <a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/concurrent/futures/process.py">module docstring</a> even has a neat data-flow diagram:</p>
@@ -656,7 +656,7 @@ on executor shutdown:</p>
 <p>The error happens because instead of returning a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#future-objects">Future</a>,
 our <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> returns the result of <code>_submit()</code>, which is always None.</p>
 <h3 id="fine-we-ll-make-our-own-futures">Fine, we'll make our own futures<span class="headerlink">&nbsp;<a href="#fine-we-ll-make-our-own-futures" title="permalink">#</a></span></h3>
-<p>But <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> must return a future, so we make our own:</p>
+<p>But <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> <em>must</em> return a future, so we make our own:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initargs</span><span class="o">=</span><span class="p">()):</span>
         <span class="c1"># ...</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__tasks</span> <span class="o">=</span> <span class="p">{}</span>
@@ -674,7 +674,7 @@ our <a class="external" href="https://docs.python.org/3/library/concurrent.futur
 </code></pre></div>
 
 <p>In order to map results to their futures,
-we need an unique identifier;
+we can use a unique identifier;
 the <a class="external" href="https://docs.python.org/3/library/functions.html#id">id()</a> of the outer future should do,
 since it is unique for the object's lifetime.</p>
 <p>We pass the id to <code>_submit()</code>,
@@ -737,8 +737,8 @@ and much better than the 2.2x we got from processes alone.</p>
 <span class="w">  </span><span class="c">...</span>
 <span class="gr">concurrent.futures.process.BrokenProcessPool</span>: <span class="n">A process in the process pool was terminated abruptly while the future was running or pending.</span>
 </code></pre></div>
-<p>...or it can die some time later,
-which we can help with a custom <code>timer</code>:<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup></p>
+<p>...or a worker can die some time later,
+which we can help along with a custom <code>timer</code>:<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup></p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@contextmanager</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">terminate_child</span><span class="p">(</span><span class="n">interval</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
     <span class="n">threading</span><span class="o">.</span><span class="n">Timer</span><span class="p">(</span><span class="n">interval</span><span class="p">,</span> <span class="n">psutil</span><span class="o">.</span><span class="n">Process</span><span class="p">()</span><span class="o">.</span><span class="n">children</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">terminate</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
@@ -761,17 +761,19 @@ which we can help with a custom <code>timer</code>:<sup class="footnote-ref" id=
 <span class="go">[ ... ]</span>
 <span class="go">[ hello? ]</span>
 </code></pre></div>
-<p>There's actually two scenarios here:</p>
-<ol>
-<li>if <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> is still submitting tasks, <code>inner</code> will silently fail with <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.process.BrokenProcessPool">BrokenProcessPool</a></li>
-<li>if <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> is already waiting for results, it'll keep waiting, forever</li>
-</ol>
-<p>Either way, we want to fail <em>all</em> pending tasks with <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.process.BrokenProcessPool">BrokenProcessPool</a>.</p>
-<p>For the first case, we don't need any special handling,
-since it's fixed by handling the second one.
-Nevertheless,
-we should still propagate <code>inner</code> exceptions to the <code>outer</code> task,
-otherwise we may ignore other exceptions.</p>
+<p>If the dead worker is not around to send back results,
+its futures never get completed,
+and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> keeps waiting until the end of time,
+when the expected behavior is to detect when this happens, and
+fail all pending tasks with <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.process.BrokenProcessPool">BrokenProcessPool</a>.</p>
+<hr />
+<p>Before we do that, though, let's address a more specific issue.</p>
+<p>If <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> hasn't finished submitting tasks when the worker dies,
+<code>inner</code> fails with <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.process.BrokenProcessPool">BrokenProcessPool</a>,
+which right now we're ignoring entirely.
+While we don't need to do anything about it in particular
+because it gets covered by handling the general case,
+we should still propagate <em>all</em> errors to the <code>outer</code> task anyway.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">submit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="c1"># ...</span>
         <span class="n">inner</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">_submit</span><span class="p">,</span> <span class="n">task_id</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -781,7 +783,6 @@ otherwise we may ignore other exceptions.</p>
         <span class="k">return</span> <span class="n">outer</span>
 </code></pre></div>
 
-<p>Of note, the task may have already been handled by the second case:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">__handle_inner</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inner</span><span class="p">):</span>
         <span class="n">task_id</span> <span class="o">=</span> <span class="n">inner</span><span class="o">.</span><span class="n">task_id</span>
         <span class="k">if</span> <span class="n">exception</span> <span class="o">:=</span> <span class="n">inner</span><span class="o">.</span><span class="n">exception</span><span class="p">():</span>
@@ -789,31 +790,45 @@ otherwise we may ignore other exceptions.</p>
                 <span class="n">outer</span><span class="o">.</span><span class="n">set_exception</span><span class="p">(</span><span class="n">exception</span><span class="p">)</span>
 </code></pre></div>
 
-<p>This already fixes the case where a worker dies almost instantly:</p>
+<p>This fixes the case where a worker dies almost instantly:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">executor</span> <span class="o">=</span> <span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">terminate_child</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
 <span class="gt">Traceback (most recent call last):</span>
 <span class="w">  </span><span class="c">...</span>
 <span class="gr">concurrent.futures.process.BrokenProcessPool</span>: <span class="n">A process in the process pool was terminated abruptly while the future was running or pending.</span>
 </code></pre></div>
-<p>For the second case,
+<hr />
+<p>For the general case,
 we need to check if the executor is broken
 – but how?
-<a class="external" href="https://github.com/python/cpython/blob/db7ad1c89f8b8f0319ec2f3a20f2f3c226a406ed/Lib/concurrent/futures/process.py#L706">ProcessPoolExecutor​._broken</a> exists,
-but we decided we don't want to depend on internals.
-Maybe we can submit a dummy task and see if it fails:</p>
+We've already decided we don't want to depend on internals,
+so we can't use <a class="external" href="https://github.com/python/cpython/blob/db7ad1c89f8b8f0319ec2f3a20f2f3c226a406ed/Lib/concurrent/futures/process.py#L706">Process​Pool​Executor.​​_broken</a>.
+Maybe we can submit a dummy task and see if it fails instead:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">__check_broken</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">BrokenExecutor</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s1">&#39;shutdown&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">):</span>
+                <span class="k">raise</span>
+        <span class="k">return</span> <span class="kc">None</span>
+</code></pre></div>
+
+<p>Using it is a bit involved, but not completely awful:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">__handle_results</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">last_broken_check</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">now</span> <span class="o">-</span> <span class="n">last_broken_check</span> <span class="o">&gt;=</span> <span class="mf">.1</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">exc</span> <span class="o">:=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__check_broken</span><span class="p">():</span>
+                    <span class="k">break</span>
+                <span class="n">last_broken_check</span> <span class="o">=</span> <span class="n">now</span>
+
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__result_queue</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">.1</span><span class="p">)</span>
             <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Empty</span><span class="p">:</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
-                <span class="k">except</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">BrokenExecutor</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                    <span class="n">exc</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
-                    <span class="k">break</span>
-                <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                    <span class="k">assert</span> <span class="s1">&#39;shutdown&#39;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="n">e</span>
                 <span class="k">continue</span>
 
             <span class="k">if</span> <span class="ow">not</span> <span class="n">value</span><span class="p">:</span>
@@ -834,11 +849,14 @@ Maybe we can submit a dummy task and see if it fails:</p>
             <span class="n">outer</span><span class="o">.</span><span class="n">set_exception</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span>
 </code></pre></div>
 
-<p>We can use the <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.Queue.get">Queue.get()</a> timeout
-to submit the dummy task only if we're not receiving results fast enough.
-When the executor is broken, <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> fails,
-which breaks us out of the while loop where we can fail the pending tasks.</p>
-<p>Like so:</p>
+<p>When there's a steady stream of results coming in,
+we don't want to check too often,
+so we enforce a minimum delay between checks.
+When there are <em>no</em> results coming in,
+we want to check regularly,
+so we use the <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.Queue.get">Queue.get()</a> timeout to avoid waiting forever.
+If the check fails, we break out of the loop and fail the pending tasks.
+Like so:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">executor</span> <span class="o">=</span> <span class="n">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">terminate_child</span><span class="p">)</span>
 <span class="gt">Traceback (most recent call last):</span>
@@ -849,10 +867,10 @@ which breaks us out of the while loop where we can fail the pending tasks.</p>
 <hr />
 <p>So, yeah, I think we're done.
 Here's the final <a class="attachment" href="/_file/ptpe/ptpe.py">executor</a> and <a class="attachment" href="/_file/ptpe/bench.py">benchmark</a> code.</p>
-<p>Some features are left as an exercise for the reader:</p>
+<p>Some features left as an exercise for the reader:</p>
 <ul>
-<li>providing an initializer for the ThreadPoolExecutor as well</li>
-<li>using other multiprocessing <a class="external" href="https://docs.python.org/3.14/library/multiprocessing.html#contexts-and-start-methods">start methods</a></li>
+<li>providing a ThreadPoolExecutor initializer</li>
+<li>using other <a class="external" href="https://docs.python.org/3.14/library/multiprocessing.html#contexts-and-start-methods">start methods</a></li>
 <li><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>'s <code>cancel_futures</code></li>
 </ul>
 <p><strong>Learned something new today?</strong> Share this with others, it really helps! <span class="text-large">
@@ -947,12 +965,12 @@ which allows running Python code on multiple CPUs.</p>
 <span class="go">elapsed: 2.323</span>
 </code></pre></div>
 <p><strong>3.6x</strong> over to the <a class="external" href="https://docs.python.org/3/glossary.html#term-global-interpreter-lock">GIL</a> version,
-with none of the shenanigans we've been up to!</p>
+with none of the shenanigans in this article!</p>
 <p>Alas, packages with extensions need to be updated to support it:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">psutil</span>
 <span class="go">zsh: segmentation fault  python3.13t</span>
 </code></pre></div>
-<p><a class="external" href="https://hugovk.github.io/free-threaded-wheels/">Soon.</a></p>
+<p>...but the ecosystem is <a class="external" href="https://hugovk.github.io/free-threaded-wheels/">slowly catching up</a>.</p>
 <p><img class="img-responsive" src="/_file/ptpe/patient.jpg" alt="cat patiently waiting on balcony" /></p>
 
 
@@ -978,7 +996,7 @@ because <a class="internal" href="/output#good-libraries-educate">good libraries
 <li id="fn-3"><p>You may have to run Python as root to get the USS of child processes. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-4"><p>And no, <a class="external" href="https://docs.python.org/3/library/asyncio.html">asyncio</a> is not a solution,
 since the event loop runs in a single thread,
-so you'd  still need to run one event loop per CPU in dedicated processes. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
+so you'd still need to run one event loop per CPU in dedicated processes. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-5"><p>Check out
 <a class="external" href="https://github.com/nilp0inter/threadedprocess">nilp0inter/threadedprocess</a>
 for an idea of what that looks like. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
