@@ -1,5 +1,5 @@
-import queue, time
-import atexit
+import time
+import queue
 import threading
 import multiprocessing
 import concurrent.futures
@@ -87,6 +87,8 @@ class ProcessThreadPoolExecutor(concurrent.futures.ProcessPoolExecutor):
             self.__result_queue = None
 
 
+# this code runs in each worker process
+
 _executor = None
 _result_queue = None
 
@@ -94,14 +96,10 @@ def _init_process(queue, max_threads, initializer, initargs):
     global _executor, _result_queue
 
     _executor = concurrent.futures.ThreadPoolExecutor(max_threads)
-    atexit.register(_executor.shutdown)
-
     _result_queue = queue
-    atexit.register(_result_queue.close)
 
     if initializer:
         initializer(*initargs)
-
 
 def _submit(task_id, fn, *args, **kwargs):
     task = _executor.submit(fn, *args, **kwargs)

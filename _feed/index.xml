@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity</title>
-  <updated>2025-04-21T18:00:00+00:00</updated>
+  <updated>2025-05-06T12:00:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
@@ -12,7 +12,7 @@
   <entry xml:base="https://death.andgravity.com/ptpe">
     <id>https://death.andgravity.com/ptpe</id>
     <title>Process​Thread​Pool​Executor: when I‍/‍O becomes CPU-bound</title>
-    <updated>2025-04-21T18:00:00+00:00</updated>
+    <updated>2025-05-06T12:00:00+00:00</updated>
     <content type="html">&lt;p&gt;So, you're doing some I‍/‍O bound stuff, in parallel.&lt;/p&gt;
 &lt;p&gt;Maybe you're scraping some websites – a &lt;em&gt;lot&lt;/em&gt; of websites.&lt;/p&gt;
 &lt;p&gt;Maybe you're updating or deleting millions of DynamoDB items.&lt;/p&gt;
@@ -77,18 +77,27 @@ a Requests &lt;a class="external" href="https://requests.readthedocs.io/en/lates
 and do some math in a loop for the CPU stuff;
 it doesn't matter exactly how long each takes,
 as long I‍/‍O time dominates.&lt;/p&gt;
-&lt;p&gt;Real multi-threaded clients
-are usually backed by a connection pool;
-we could simulate one using a &lt;a class="external" href="https://docs.python.org/3/library/threading.html#semaphore-objects"&gt;semaphore&lt;/a&gt;,
-but it's not relevant here
+&lt;p&gt;&lt;a id="connection-pool"&gt;&lt;/a&gt;
+Real multi-threaded clients are usually backed by a shared connection pool,
+which allows for connection reuse
+(so we don't pay the cost of a new connection on each request)
+and multiplexing
+(so we can use the same connection for multiple requests at the same time,
+possible with protocols like HTTP/2 or newer).
+We could simulate this with a &lt;a class="external" href="https://docs.python.org/3/library/threading.html#semaphore-objects"&gt;semaphore&lt;/a&gt;,
+but limiting connections is not relevant here
 – we're assuming the connection pool is effectively unbounded.&lt;/p&gt;
 &lt;p&gt;Since we'll use our client from multiple processes,
-we set up a global instance and a function that uses it;
-we can then pass &lt;code&gt;init_client()&lt;/code&gt; as
-an &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor"&gt;executor&lt;/a&gt; initializer,
-which also allows us passing arguments to the client
-when creating it.&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;client&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+we write an initializer function
+to set up a global, per-process client instance
+(remember, we want to share potential connection pools between threads);
+we can then pass the initializer
+to the &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor"&gt;executor&lt;/a&gt; constructor,
+along with any arguments we want to pass to the client.
+Similarly, we do the work through a function that uses this global client.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# this code runs in each worker process&lt;/span&gt;
+
+&lt;span class="n"&gt;client&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
 
 &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;init_client&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
     &lt;span class="k"&gt;global&lt;/span&gt; &lt;span class="n"&gt;client&lt;/span&gt;
@@ -236,12 +245,11 @@ eventually becoming high enough to saturate one CPU
 – there's no improvement after 80 processes,
 and even then, it's only &lt;strong&gt;2.2x&lt;/strong&gt; faster than the best time with threads,
 when, in theory, it should be able to make full use of all 4 CPUs.&lt;/p&gt;
-&lt;p&gt;Also, we're not making best use of connection pooling
-(relevant if the client connects to many different hosts,
-since we now have 80 pools),
+&lt;p&gt;Also, we're not making best use of
+&lt;a class="anchor" href="#connection-pool"&gt;connection pools&lt;/a&gt;
+(since we now have 80 of them, one per process),
 nor multiplexing
-(relevant with protocols like HTTP/2 or newer,
-since we now have 80 connections).&lt;/p&gt;
+(since we now have 80 connections, one per pool).&lt;/p&gt;
 &lt;h3 id="problem-more-processes-more-memory"&gt;Problem: more processes, more memory&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#problem-more-processes-more-memory" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
 &lt;p&gt;But it gets worse!&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;benchmark&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ProcessPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;80&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;init_client&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;timer&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;top&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
@@ -285,8 +293,8 @@ and most real work will unavoidably allocate more memory.&lt;/p&gt;
         Liking this so far? Here&amp;#39;s another article you might like:
     &lt;/div&gt;
     &lt;div class="panel-body"&gt;
-        &lt;p&gt;&lt;a href="/asyncio-bridge"&gt;
-            Running async code from sync in Python asyncio
+        &lt;p&gt;&lt;a href="/same-arguments"&gt;
+            When to use classes in Python? When your functions take the same arguments
         &lt;/a&gt;
     &lt;/div&gt;
 &lt;/div&gt;
@@ -322,16 +330,17 @@ so let's deal with that first.&lt;/p&gt;
 By going with the default &lt;code&gt;max_workers&lt;/code&gt;,
 we get one process per CPU (which is what we want);
 we can add more arguments later if needed.&lt;/p&gt;
-&lt;p&gt;In our custom process initializer,
-we set up a global thread pool executor,
-and then call the initializer provided by the user:&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;_executor&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+&lt;p&gt;In a custom process initializer,
+we set up a global thread pool executor,&lt;sup class="footnote-ref" id="fnref-5"&gt;&lt;a href="#fn-5"&gt;5&lt;/a&gt;&lt;/sup&gt;
+and then call the process initializer provided by the user:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# this code runs in each worker process&lt;/span&gt;
+
+&lt;span class="n"&gt;_executor&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
 
 &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;_init_process&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;max_threads&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initargs&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
     &lt;span class="k"&gt;global&lt;/span&gt; &lt;span class="n"&gt;_executor&lt;/span&gt;
 
     &lt;span class="n"&gt;_executor&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;concurrent&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;futures&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ThreadPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;max_threads&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-    &lt;span class="n"&gt;atexit&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;register&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_executor&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;shutdown&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 
     &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
         &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;initargs&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
@@ -345,7 +354,9 @@ to the thread pool executor:&lt;/p&gt;
         &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;super&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;submit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_submit&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;fn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;_submit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;fn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# this code runs in each worker process&lt;/span&gt;
+&lt;span class="c1"&gt;# ...&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;_submit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;fn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
     &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;_executor&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;submit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;fn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
@@ -448,7 +459,7 @@ the &lt;a class="external" href="https://github.com/python/cpython/blob/3.13/Lib
 +----------+     +------------+     +--------+     +-----------+    +---------+
 &lt;/code&gt;&lt;/pre&gt;
 &lt;p&gt;Now, we could probably use the same queue somehow,
-but it would involve touching a lot of (private) internals.&lt;sup class="footnote-ref" id="fnref-5"&gt;&lt;a href="#fn-5"&gt;5&lt;/a&gt;&lt;/sup&gt;
+but it would involve touching a lot of (private) internals.&lt;sup class="footnote-ref" id="fnref-6"&gt;&lt;a href="#fn-6"&gt;6&lt;/a&gt;&lt;/sup&gt;
 Instead, let's use a separate queue:&lt;/p&gt;
 &lt;!--
 this is one of the rare cases where
@@ -464,17 +475,16 @@ otherwise we'll clobber the original `_result_queue` attribute.
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
 &lt;p&gt;On the worker side, we make it globally accessible:&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;_executor&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# this code runs in each worker process&lt;/span&gt;
+
+&lt;span class="n"&gt;_executor&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
 &lt;span class="n"&gt;_result_queue&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
 
 &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;_init_process&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;queue&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;max_threads&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;initargs&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
     &lt;span class="k"&gt;global&lt;/span&gt; &lt;span class="n"&gt;_executor&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;_result_queue&lt;/span&gt;
 
     &lt;span class="n"&gt;_executor&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;concurrent&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;futures&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ThreadPoolExecutor&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;max_threads&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-    &lt;span class="n"&gt;atexit&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;register&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_executor&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;shutdown&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-
     &lt;span class="n"&gt;_result_queue&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;queue&lt;/span&gt;
-    &lt;span class="n"&gt;atexit&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;register&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_result_queue&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;close&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 
     &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
         &lt;span class="n"&gt;initializer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;initargs&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
@@ -515,7 +525,6 @@ on executor shutdown:&lt;/p&gt;
                 &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;__result_handler&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
             &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;__result_queue&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;close&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
             &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;__result_queue&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;
-
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
 &lt;p&gt;Let's see if it works:&lt;/p&gt;
@@ -623,7 +632,7 @@ and much better than the 2.2x we got from processes alone.&lt;/p&gt;
 &lt;span class="gr"&gt;concurrent.futures.process.BrokenProcessPool&lt;/span&gt;: &lt;span class="n"&gt;A process in the process pool was terminated abruptly while the future was running or pending.&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;...or a worker can die some time later,
-which we can help along with a custom &lt;code&gt;timer&lt;/code&gt;:&lt;sup class="footnote-ref" id="fnref-6"&gt;&lt;a href="#fn-6"&gt;6&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+which we can help along with a custom &lt;code&gt;timer&lt;/code&gt;:&lt;sup class="footnote-ref" id="fnref-7"&gt;&lt;a href="#fn-7"&gt;7&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@contextmanager&lt;/span&gt;
 &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;terminate_child&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;interval&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
     &lt;span class="n"&gt;threading&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Timer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;interval&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;psutil&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Process&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;children&lt;/span&gt;&lt;span class="p"&gt;()[&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;terminate&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;start&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
@@ -835,12 +844,20 @@ because &lt;a class="internal" href="/output#good-libraries-educate"&gt;good lib
 &lt;li id="fn-4"&gt;&lt;p&gt;And no, &lt;a class="external" href="https://docs.python.org/3/library/asyncio.html"&gt;asyncio&lt;/a&gt; is not a solution,
 since the event loop runs in a single thread,
 so you'd still need to run one event loop per CPU in dedicated processes. &lt;a href="#fnref-4" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
-&lt;li id="fn-5"&gt;&lt;p&gt;Check out
+&lt;li id="fn-5"&gt;&lt;p&gt;A previous version of this code
+attempted to &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown"&gt;shut down&lt;/a&gt; the thread pool executor
+on worker process shutdown using &lt;a class="external" href="https://docs.python.org/3/library/atexit.html"&gt;atexit&lt;/a&gt;,
+but since &lt;a class="external" href="https://docs.python.org/3/library/atexit.html"&gt;atexit&lt;/a&gt; functions run &lt;em&gt;after&lt;/em&gt; non-daemon threads finish,
+it wasn't actually doing anything.
+Not shutting down the thread pool executor seems to work,
+but we may still have to do it explicitly
+if we want to support &lt;code&gt;shutdown(cancel_futures=True)&lt;/code&gt; in our executor. &lt;a href="#fnref-5" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-6"&gt;&lt;p&gt;Check out
 &lt;a class="external" href="https://github.com/nilp0inter/threadedprocess"&gt;nilp0inter/threadedprocess&lt;/a&gt;
-for an idea of what that looks like. &lt;a href="#fnref-5" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
-&lt;li id="fn-6"&gt;&lt;p&gt;&lt;code&gt;pkill -fn '[Pp]ython'&lt;/code&gt; would've done it too,
+for an idea of what that looks like. &lt;a href="#fnref-6" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-7"&gt;&lt;p&gt;&lt;code&gt;pkill -fn '[Pp]ython'&lt;/code&gt; would've done it too,
 but it gets tedious if you do it a lot,
-and it's a different command on Windows. &lt;a href="#fnref-6" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+and it's a different command on Windows. &lt;a href="#fnref-7" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;/ol&gt;
 &lt;/section&gt;
 </content>

@@ -88,7 +88,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-04-18">April 2025</span>
-∙ 14 minute read
+∙ 15 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -192,18 +192,27 @@ a Requests <a class="external" href="https://requests.readthedocs.io/en/latest/u
 and do some math in a loop for the CPU stuff;
 it doesn't matter exactly how long each takes,
 as long I‍/‍O time dominates.</p>
-<p>Real multi-threaded clients
-are usually backed by a connection pool;
-we could simulate one using a <a class="external" href="https://docs.python.org/3/library/threading.html#semaphore-objects">semaphore</a>,
-but it's not relevant here
+<p><a id="connection-pool"></a>
+Real multi-threaded clients are usually backed by a shared connection pool,
+which allows for connection reuse
+(so we don't pay the cost of a new connection on each request)
+and multiplexing
+(so we can use the same connection for multiple requests at the same time,
+possible with protocols like HTTP/2 or newer).
+We could simulate this with a <a class="external" href="https://docs.python.org/3/library/threading.html#semaphore-objects">semaphore</a>,
+but limiting connections is not relevant here
 – we're assuming the connection pool is effectively unbounded.</p>
 <p>Since we'll use our client from multiple processes,
-we set up a global instance and a function that uses it;
-we can then pass <code>init_client()</code> as
-an <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">executor</a> initializer,
-which also allows us passing arguments to the client
-when creating it.</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">client</span> <span class="o">=</span> <span class="kc">None</span>
+we write an initializer function
+to set up a global, per-process client instance
+(remember, we want to share potential connection pools between threads);
+we can then pass the initializer
+to the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">executor</a> constructor,
+along with any arguments we want to pass to the client.
+Similarly, we do the work through a function that uses this global client.</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="c1"># this code runs in each worker process</span>
+
+<span class="n">client</span> <span class="o">=</span> <span class="kc">None</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">init_client</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
     <span class="k">global</span> <span class="n">client</span>
@@ -351,12 +360,11 @@ eventually becoming high enough to saturate one CPU
 – there's no improvement after 80 processes,
 and even then, it's only <strong>2.2x</strong> faster than the best time with threads,
 when, in theory, it should be able to make full use of all 4 CPUs.</p>
-<p>Also, we're not making best use of connection pooling
-(relevant if the client connects to many different hosts,
-since we now have 80 pools),
+<p>Also, we're not making best use of
+<a class="anchor" href="#connection-pool">connection pools</a>
+(since we now have 80 of them, one per process),
 nor multiplexing
-(relevant with protocols like HTTP/2 or newer,
-since we now have 80 connections).</p>
+(since we now have 80 connections, one per pool).</p>
 <h3 id="problem-more-processes-more-memory">Problem: more processes, more memory<span class="headerlink">&nbsp;<a href="#problem-more-processes-more-memory" title="permalink">#</a></span></h3>
 <p>But it gets worse!</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">benchmark</span><span class="p">(</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="mi">80</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">),</span> <span class="n">timer</span><span class="o">=</span><span class="n">top</span><span class="p">)</span>
@@ -400,8 +408,8 @@ and most real work will unavoidably allocate more memory.</p>
         Liking this so far? Here&#39;s another article you might like:
     </div>
     <div class="panel-body">
-        <p><a href="/asyncio-bridge">
-            Running async code from sync in Python asyncio
+        <p><a href="/same-arguments">
+            When to use classes in Python? When your functions take the same arguments
         </a>
     </div>
 </div>
@@ -437,16 +445,17 @@ so let's deal with that first.</p>
 By going with the default <code>max_workers</code>,
 we get one process per CPU (which is what we want);
 we can add more arguments later if needed.</p>
-<p>In our custom process initializer,
-we set up a global thread pool executor,
-and then call the initializer provided by the user:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">_executor</span> <span class="o">=</span> <span class="kc">None</span>
+<p>In a custom process initializer,
+we set up a global thread pool executor,<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup>
+and then call the process initializer provided by the user:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="c1"># this code runs in each worker process</span>
+
+<span class="n">_executor</span> <span class="o">=</span> <span class="kc">None</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_init_process</span><span class="p">(</span><span class="n">max_threads</span><span class="p">,</span> <span class="n">initializer</span><span class="p">,</span> <span class="n">initargs</span><span class="p">):</span>
     <span class="k">global</span> <span class="n">_executor</span>
 
     <span class="n">_executor</span> <span class="o">=</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_threads</span><span class="p">)</span>
-    <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">_executor</span><span class="o">.</span><span class="n">shutdown</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">initializer</span><span class="p">:</span>
         <span class="n">initializer</span><span class="p">(</span><span class="o">*</span><span class="n">initargs</span><span class="p">)</span>
@@ -460,7 +469,9 @@ to the thread pool executor:</p>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">_submit</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 </code></pre></div>
 
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="c1"># this code runs in each worker process</span>
+<span class="c1"># ...</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">_executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
 </code></pre></div>
 
@@ -563,7 +574,7 @@ the <a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/co
 +----------+     +------------+     +--------+     +-----------+    +---------+
 </code></pre>
 <p>Now, we could probably use the same queue somehow,
-but it would involve touching a lot of (private) internals.<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup>
+but it would involve touching a lot of (private) internals.<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
 Instead, let's use a separate queue:</p>
 <!--
 this is one of the rare cases where
@@ -579,17 +590,16 @@ otherwise we'll clobber the original `_result_queue` attribute.
 </code></pre></div>
 
 <p>On the worker side, we make it globally accessible:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">_executor</span> <span class="o">=</span> <span class="kc">None</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="c1"># this code runs in each worker process</span>
+
+<span class="n">_executor</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="n">_result_queue</span> <span class="o">=</span> <span class="kc">None</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_init_process</span><span class="p">(</span><span class="n">queue</span><span class="p">,</span> <span class="n">max_threads</span><span class="p">,</span> <span class="n">initializer</span><span class="p">,</span> <span class="n">initargs</span><span class="p">):</span>
     <span class="k">global</span> <span class="n">_executor</span><span class="p">,</span> <span class="n">_result_queue</span>
 
     <span class="n">_executor</span> <span class="o">=</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_threads</span><span class="p">)</span>
-    <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">_executor</span><span class="o">.</span><span class="n">shutdown</span><span class="p">)</span>
-
     <span class="n">_result_queue</span> <span class="o">=</span> <span class="n">queue</span>
-    <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">_result_queue</span><span class="o">.</span><span class="n">close</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">initializer</span><span class="p">:</span>
         <span class="n">initializer</span><span class="p">(</span><span class="o">*</span><span class="n">initargs</span><span class="p">)</span>
@@ -630,7 +640,6 @@ on executor shutdown:</p>
                 <span class="bp">self</span><span class="o">.</span><span class="n">__result_handler</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__result_queue</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__result_queue</span> <span class="o">=</span> <span class="kc">None</span>
-
 </code></pre></div>
 
 <p>Let's see if it works:</p>
@@ -738,7 +747,7 @@ and much better than the 2.2x we got from processes alone.</p>
 <span class="gr">concurrent.futures.process.BrokenProcessPool</span>: <span class="n">A process in the process pool was terminated abruptly while the future was running or pending.</span>
 </code></pre></div>
 <p>...or a worker can die some time later,
-which we can help along with a custom <code>timer</code>:<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup></p>
+which we can help along with a custom <code>timer</code>:<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup></p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@contextmanager</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">terminate_child</span><span class="p">(</span><span class="n">interval</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
     <span class="n">threading</span><span class="o">.</span><span class="n">Timer</span><span class="p">(</span><span class="n">interval</span><span class="p">,</span> <span class="n">psutil</span><span class="o">.</span><span class="n">Process</span><span class="p">()</span><span class="o">.</span><span class="n">children</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">terminate</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
@@ -997,12 +1006,20 @@ because <a class="internal" href="/output#good-libraries-educate">good libraries
 <li id="fn-4"><p>And no, <a class="external" href="https://docs.python.org/3/library/asyncio.html">asyncio</a> is not a solution,
 since the event loop runs in a single thread,
 so you'd still need to run one event loop per CPU in dedicated processes. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-5"><p>Check out
+<li id="fn-5"><p>A previous version of this code
+attempted to <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shut down</a> the thread pool executor
+on worker process shutdown using <a class="external" href="https://docs.python.org/3/library/atexit.html">atexit</a>,
+but since <a class="external" href="https://docs.python.org/3/library/atexit.html">atexit</a> functions run <em>after</em> non-daemon threads finish,
+it wasn't actually doing anything.
+Not shutting down the thread pool executor seems to work,
+but we may still have to do it explicitly
+if we want to support <code>shutdown(cancel_futures=True)</code> in our executor. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-6"><p>Check out
 <a class="external" href="https://github.com/nilp0inter/threadedprocess">nilp0inter/threadedprocess</a>
-for an idea of what that looks like. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-6"><p><code>pkill -fn '[Pp]ython'</code> would've done it too,
+for an idea of what that looks like. <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-7"><p><code>pkill -fn '[Pp]ython'</code> would've done it too,
 but it gets tedious if you do it a lot,
-and it's a different command on Windows. <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
+and it's a different command on Windows. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 

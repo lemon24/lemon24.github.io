@@ -24,6 +24,8 @@ class Client:
         return arg
 
 
+# this code runs in each worker process
+
 client = None
 
 def init_client(*args):
