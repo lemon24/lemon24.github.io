@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #python</title>
-  <updated>2025-05-06T12:00:01+00:00</updated>
+  <updated>2025-05-06T23:00:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
@@ -12,7 +12,7 @@
   <entry xml:base="https://death.andgravity.com/ptpe">
     <id>https://death.andgravity.com/ptpe</id>
     <title>Process​Thread​Pool​Executor: when I‍/‍O becomes CPU-bound</title>
-    <updated>2025-05-06T12:00:01+00:00</updated>
+    <updated>2025-05-06T23:00:00+00:00</updated>
     <content type="html">&lt;p&gt;So, you're doing some I‍/‍O bound stuff, in parallel.&lt;/p&gt;
 &lt;p&gt;Maybe you're scraping some websites – a &lt;em&gt;lot&lt;/em&gt; of websites.&lt;/p&gt;
 &lt;p&gt;Maybe you're updating or deleting millions of DynamoDB items.&lt;/p&gt;
@@ -326,12 +326,14 @@ so let's deal with that first.&lt;/p&gt;
         &lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 
-&lt;p&gt;By subclassing ProcessPoolExecutor, we get the &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map"&gt;map()&lt;/a&gt; implementation for free.
+&lt;p&gt;By subclassing ProcessPoolExecutor,
+we get the &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map"&gt;map()&lt;/a&gt; implementation for free,
+since the original is implemented in terms of &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit"&gt;submit()&lt;/a&gt;.&lt;sup class="footnote-ref" id="fnref-5"&gt;&lt;a href="#fn-5"&gt;5&lt;/a&gt;&lt;/sup&gt;
 By going with the default &lt;code&gt;max_workers&lt;/code&gt;,
 we get one process per CPU (which is what we want);
 we can add more arguments later if needed.&lt;/p&gt;
 &lt;p&gt;In a custom process initializer,
-we set up a global thread pool executor,&lt;sup class="footnote-ref" id="fnref-5"&gt;&lt;a href="#fn-5"&gt;5&lt;/a&gt;&lt;/sup&gt;
+we set up a global thread pool executor,&lt;sup class="footnote-ref" id="fnref-6"&gt;&lt;a href="#fn-6"&gt;6&lt;/a&gt;&lt;/sup&gt;
 and then call the process initializer provided by the user:&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# this code runs in each worker process&lt;/span&gt;
 
@@ -459,7 +461,7 @@ the &lt;a class="external" href="https://github.com/python/cpython/blob/3.13/Lib
 +----------+     +------------+     +--------+     +-----------+    +---------+
 &lt;/code&gt;&lt;/pre&gt;
 &lt;p&gt;Now, we could probably use the same queue somehow,
-but it would involve touching a lot of (private) internals.&lt;sup class="footnote-ref" id="fnref-6"&gt;&lt;a href="#fn-6"&gt;6&lt;/a&gt;&lt;/sup&gt;
+but it would involve touching a lot of (private) internals.&lt;sup class="footnote-ref" id="fnref-7"&gt;&lt;a href="#fn-7"&gt;7&lt;/a&gt;&lt;/sup&gt;
 Instead, let's use a separate queue:&lt;/p&gt;
 &lt;!--
 this is one of the rare cases where
@@ -632,7 +634,7 @@ and much better than the 2.2x we got from processes alone.&lt;/p&gt;
 &lt;span class="gr"&gt;concurrent.futures.process.BrokenProcessPool&lt;/span&gt;: &lt;span class="n"&gt;A process in the process pool was terminated abruptly while the future was running or pending.&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;...or a worker can die some time later,
-which we can help along with a custom &lt;code&gt;timer&lt;/code&gt;:&lt;sup class="footnote-ref" id="fnref-7"&gt;&lt;a href="#fn-7"&gt;7&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+which we can help along with a custom &lt;code&gt;timer&lt;/code&gt;:&lt;sup class="footnote-ref" id="fnref-8"&gt;&lt;a href="#fn-8"&gt;8&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@contextmanager&lt;/span&gt;
 &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;terminate_child&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;interval&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
     &lt;span class="n"&gt;threading&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Timer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;interval&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;psutil&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Process&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;children&lt;/span&gt;&lt;span class="p"&gt;()[&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;terminate&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;start&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
@@ -850,21 +852,35 @@ because &lt;a class="internal" href="/output#good-libraries-educate"&gt;good lib
 &lt;li id="fn-4"&gt;&lt;p&gt;And no, &lt;a class="external" href="https://docs.python.org/3/library/asyncio.html"&gt;asyncio&lt;/a&gt; is not a solution,
 since the event loop runs in a single thread,
 so you'd still need to run one event loop per CPU in dedicated processes. &lt;a href="#fnref-4" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
-&lt;li id="fn-5"&gt;&lt;p&gt;A previous version of this code
+&lt;li id="fn-5"&gt;&lt;p&gt;We could have used &lt;a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance"&gt;composition&lt;/a&gt; instead,
+but then we'd have to implement the full &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor"&gt;Executor&lt;/a&gt; interface,
+defining each method explicitly to delegate to the inner process pool executor,
+and keep things up to date when the interface gets new methods
+(and we'd have no way to trick the inner executor's &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map"&gt;map()&lt;/a&gt; to use our &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit"&gt;submit()&lt;/a&gt;,
+so we'd have to implement it from scratch).&lt;/p&gt;
+&lt;p&gt;Yet another option would be to use both inheritance &lt;em&gt;and&lt;/em&gt; composition –
+inherit the &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor"&gt;Executor&lt;/a&gt; base class directly for the &lt;a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/concurrent/futures/_base.py#L583-L648"&gt;common methods&lt;/a&gt;
+(assuming they're defined there and not in subclasses),
+and delegate to the inner executor only where needed
+(likely just &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map"&gt;map()&lt;/a&gt; and &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown"&gt;shutdown()&lt;/a&gt;).
+But, the only difference from the current code would be
+that it'd say &lt;code&gt;self._inner&lt;/code&gt; instead of &lt;code&gt;super()&lt;/code&gt; in a few places,
+so it's not really worth it, in my opinion. &lt;a href="#fnref-5" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-6"&gt;&lt;p&gt;A previous version of this code
 attempted to &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown"&gt;shut down&lt;/a&gt; the thread pool executor
 using &lt;a class="external" href="https://docs.python.org/3/library/atexit.html"&gt;atexit&lt;/a&gt;,
-but since &lt;a class="external" href="https://docs.python.org/3/library/atexit.html"&gt;atexit&lt;/a&gt; functions run &lt;em&gt;after&lt;/em&gt; non-daemon threads 
+but since &lt;a class="external" href="https://docs.python.org/3/library/atexit.html"&gt;atexit&lt;/a&gt; functions run &lt;em&gt;after&lt;/em&gt; non-daemon threads
 (like the worker threads) finish,
-it wasn't actually doing anything.
-Not shutting it down seems to work,
+it wasn't actually doing anything.&lt;/p&gt;
+&lt;p&gt;Not shutting it down seems to work,
 but we may still have to do it explicitly
-if we want to support &lt;code&gt;shutdown(​cancel_futures=​True)&lt;/code&gt; properly. &lt;a href="#fnref-5" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
-&lt;li id="fn-6"&gt;&lt;p&gt;Check out
+if we want to support &lt;code&gt;shutdown(​cancel_futures=​True)&lt;/code&gt; properly. &lt;a href="#fnref-6" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-7"&gt;&lt;p&gt;Check out
 &lt;a class="external" href="https://github.com/nilp0inter/threadedprocess"&gt;nilp0inter/threadedprocess&lt;/a&gt;
-for an idea of what that looks like. &lt;a href="#fnref-6" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
-&lt;li id="fn-7"&gt;&lt;p&gt;&lt;code&gt;pkill -fn '[Pp]ython'&lt;/code&gt; would've done it too,
+for an idea of what that looks like. &lt;a href="#fnref-7" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-8"&gt;&lt;p&gt;&lt;code&gt;pkill -fn '[Pp]ython'&lt;/code&gt; would've done it too,
 but it gets tedious if you do it a lot,
-and it's a different command on Windows. &lt;a href="#fnref-7" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+and it's a different command on Windows. &lt;a href="#fnref-8" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;/ol&gt;
 &lt;/section&gt;
 </content>

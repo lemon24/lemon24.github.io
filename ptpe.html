@@ -88,7 +88,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-04-18">April 2025</span>
-∙ 15 minute read
+∙ 16 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -441,12 +441,14 @@ so let's deal with that first.</p>
         <span class="p">)</span>
 </code></pre></div>
 
-<p>By subclassing ProcessPoolExecutor, we get the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> implementation for free.
+<p>By subclassing ProcessPoolExecutor,
+we get the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> implementation for free,
+since the original is implemented in terms of <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a>.<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup>
 By going with the default <code>max_workers</code>,
 we get one process per CPU (which is what we want);
 we can add more arguments later if needed.</p>
 <p>In a custom process initializer,
-we set up a global thread pool executor,<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup>
+we set up a global thread pool executor,<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
 and then call the process initializer provided by the user:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="c1"># this code runs in each worker process</span>
 
@@ -574,7 +576,7 @@ the <a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/co
 +----------+     +------------+     +--------+     +-----------+    +---------+
 </code></pre>
 <p>Now, we could probably use the same queue somehow,
-but it would involve touching a lot of (private) internals.<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
+but it would involve touching a lot of (private) internals.<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup>
 Instead, let's use a separate queue:</p>
 <!--
 this is one of the rare cases where
@@ -747,7 +749,7 @@ and much better than the 2.2x we got from processes alone.</p>
 <span class="gr">concurrent.futures.process.BrokenProcessPool</span>: <span class="n">A process in the process pool was terminated abruptly while the future was running or pending.</span>
 </code></pre></div>
 <p>...or a worker can die some time later,
-which we can help along with a custom <code>timer</code>:<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup></p>
+which we can help along with a custom <code>timer</code>:<sup class="footnote-ref" id="fnref-8"><a href="#fn-8">8</a></sup></p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@contextmanager</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">terminate_child</span><span class="p">(</span><span class="n">interval</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
     <span class="n">threading</span><span class="o">.</span><span class="n">Timer</span><span class="p">(</span><span class="n">interval</span><span class="p">,</span> <span class="n">psutil</span><span class="o">.</span><span class="n">Process</span><span class="p">()</span><span class="o">.</span><span class="n">children</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">terminate</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
@@ -1006,21 +1008,35 @@ because <a class="internal" href="/output#good-libraries-educate">good libraries
 <li id="fn-4"><p>And no, <a class="external" href="https://docs.python.org/3/library/asyncio.html">asyncio</a> is not a solution,
 since the event loop runs in a single thread,
 so you'd still need to run one event loop per CPU in dedicated processes. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-5"><p>A previous version of this code
+<li id="fn-5"><p>We could have used <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance">composition</a> instead,
+but then we'd have to implement the full <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> interface,
+defining each method explicitly to delegate to the inner process pool executor,
+and keep things up to date when the interface gets new methods
+(and we'd have no way to trick the inner executor's <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> to use our <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a>,
+so we'd have to implement it from scratch).</p>
+<p>Yet another option would be to use both inheritance <em>and</em> composition –
+inherit the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> base class directly for the <a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/concurrent/futures/_base.py#L583-L648">common methods</a>
+(assuming they're defined there and not in subclasses),
+and delegate to the inner executor only where needed
+(likely just <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>).
+But, the only difference from the current code would be
+that it'd say <code>self._inner</code> instead of <code>super()</code> in a few places,
+so it's not really worth it, in my opinion. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-6"><p>A previous version of this code
 attempted to <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shut down</a> the thread pool executor
 using <a class="external" href="https://docs.python.org/3/library/atexit.html">atexit</a>,
-but since <a class="external" href="https://docs.python.org/3/library/atexit.html">atexit</a> functions run <em>after</em> non-daemon threads 
+but since <a class="external" href="https://docs.python.org/3/library/atexit.html">atexit</a> functions run <em>after</em> non-daemon threads
 (like the worker threads) finish,
-it wasn't actually doing anything.
-Not shutting it down seems to work,
+it wasn't actually doing anything.</p>
+<p>Not shutting it down seems to work,
 but we may still have to do it explicitly
-if we want to support <code>shutdown(​cancel_futures=​True)</code> properly. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-6"><p>Check out
+if we want to support <code>shutdown(​cancel_futures=​True)</code> properly. <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-7"><p>Check out
 <a class="external" href="https://github.com/nilp0inter/threadedprocess">nilp0inter/threadedprocess</a>
-for an idea of what that looks like. <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-7"><p><code>pkill -fn '[Pp]ython'</code> would've done it too,
+for an idea of what that looks like. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-8"><p><code>pkill -fn '[Pp]ython'</code> would've done it too,
 but it gets tedious if you do it a lot,
-and it's a different command on Windows. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
+and it's a different command on Windows. <a href="#fnref-8" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
