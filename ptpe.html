@@ -286,8 +286,8 @@ since we're mostly doing I‍/‍O, right?</p>
 <p><img class="img-responsive" src="/_file/ptpe/confused3.jpg" alt="squinting confused cat" /></p>
 <!-- ## Problem: CPU becomes a bottleneck when you do enough I&zwj;/&zwj;O -->
 <h3 id="problem-cpu-becomes-a-bottleneck">Problem: CPU becomes a bottleneck<span class="headerlink">&nbsp;<a href="#problem-cpu-becomes-a-bottleneck" title="permalink">#</a></span></h3>
-<p>It's time we take a closer look at what our process is doing.</p>
-<p>I'd normally use the <a class="external" href="https://linux.die.net/man/1/top">top</a> command for this,
+<p>It's time we take a closer look at what our process is doing.
+I'd normally use the <a class="external" href="https://linux.die.net/man/1/top">top</a> command for this,
 but since the flags and output vary with the operating system,
 we'll implement our own using the excellent <a class="external" href="https://psutil.readthedocs.io/">psutil</a> library.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@contextmanager</span>
@@ -511,7 +511,7 @@ let's use it and see if it works:</p>
 in the main thread of the worker process,
 this is just a ProcessPoolExecutor with extra steps.</p>
 <hr />
-<p>But what if we send back the future instead?</p>
+<p>But what if we send back the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#future-objects">future</a> object instead?</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">submit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">_submit</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
 </code></pre></div>
@@ -545,9 +545,18 @@ this is just a ProcessPoolExecutor with extra steps.</p>
 <span class="w">  </span><span class="c">...</span>
 <span class="gr">TypeError</span>: <span class="n">cannot pickle &#39;_thread.RLock&#39; object</span>
 </code></pre></div>
+<p>The immediate cause of the error is that
+the future
+<a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/concurrent/futures/_base.py#L330">has a condition</a>
+that <a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/threading.py#L284">has a lock</a>
+that can't be <a class="external" href="https://docs.python.org/3/library/pickle.html#object.__reduce__">pickled</a>,
+because <a class="external" href="https://docs.python.org/3/library/threading.html">threading</a> locks only make sense within the same process.</p>
+<p>The deeper cause is that the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#future-objects">future</a> is not just data,
+but encapsulates state owned by the thread pool executor,
+and <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#sharing-state-between-processes">sharing state between processes</a> requires extra work.</p>
 <p>It may not seem like it, but this is a partial success:
 the work happens,
-we just can't get anything back.
+we just can't get the results back.
 Not surprising, to be honest, it couldn't have been <em>that</em> easy.</p>
 <h3 id="getting-results">Getting results<span class="headerlink">&nbsp;<a href="#getting-results" title="permalink">#</a></span></h3>
 <p>If you look carefully at the traceback,

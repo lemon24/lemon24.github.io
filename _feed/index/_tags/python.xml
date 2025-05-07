@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #python</title>
-  <updated>2025-05-06T23:00:01+00:00</updated>
+  <updated>2025-05-07T18:00:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
@@ -12,7 +12,7 @@
   <entry xml:base="https://death.andgravity.com/ptpe">
     <id>https://death.andgravity.com/ptpe</id>
     <title>Process​Thread​Pool​Executor: when I‍/‍O becomes CPU-bound</title>
-    <updated>2025-05-06T23:00:01+00:00</updated>
+    <updated>2025-05-07T18:00:00+00:00</updated>
     <content type="html">&lt;p&gt;So, you're doing some I‍/‍O bound stuff, in parallel.&lt;/p&gt;
 &lt;p&gt;Maybe you're scraping some websites – a &lt;em&gt;lot&lt;/em&gt; of websites.&lt;/p&gt;
 &lt;p&gt;Maybe you're updating or deleting millions of DynamoDB items.&lt;/p&gt;
@@ -171,8 +171,8 @@ since we're mostly doing I‍/‍O, right?&lt;/p&gt;
 &lt;p&gt;&lt;img class="img-responsive" src="/_file/ptpe/confused3.jpg" alt="squinting confused cat" /&gt;&lt;/p&gt;
 &lt;!-- ## Problem: CPU becomes a bottleneck when you do enough I&amp;zwj;/&amp;zwj;O --&gt;
 &lt;h3 id="problem-cpu-becomes-a-bottleneck"&gt;Problem: CPU becomes a bottleneck&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#problem-cpu-becomes-a-bottleneck" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
-&lt;p&gt;It's time we take a closer look at what our process is doing.&lt;/p&gt;
-&lt;p&gt;I'd normally use the &lt;a class="external" href="https://linux.die.net/man/1/top"&gt;top&lt;/a&gt; command for this,
+&lt;p&gt;It's time we take a closer look at what our process is doing.
+I'd normally use the &lt;a class="external" href="https://linux.die.net/man/1/top"&gt;top&lt;/a&gt; command for this,
 but since the flags and output vary with the operating system,
 we'll implement our own using the excellent &lt;a class="external" href="https://psutil.readthedocs.io/"&gt;psutil&lt;/a&gt; library.&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@contextmanager&lt;/span&gt;
@@ -396,7 +396,7 @@ let's use it and see if it works:&lt;/p&gt;
 in the main thread of the worker process,
 this is just a ProcessPoolExecutor with extra steps.&lt;/p&gt;
 &lt;hr /&gt;
-&lt;p&gt;But what if we send back the future instead?&lt;/p&gt;
+&lt;p&gt;But what if we send back the &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#future-objects"&gt;future&lt;/a&gt; object instead?&lt;/p&gt;
 &lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;submit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;fn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
         &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;super&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;submit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_submit&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;fn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
@@ -430,9 +430,18 @@ this is just a ProcessPoolExecutor with extra steps.&lt;/p&gt;
 &lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c"&gt;...&lt;/span&gt;
 &lt;span class="gr"&gt;TypeError&lt;/span&gt;: &lt;span class="n"&gt;cannot pickle &amp;#39;_thread.RLock&amp;#39; object&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The immediate cause of the error is that
+the future
+&lt;a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/concurrent/futures/_base.py#L330"&gt;has a condition&lt;/a&gt;
+that &lt;a class="external" href="https://github.com/python/cpython/blob/3.13/Lib/threading.py#L284"&gt;has a lock&lt;/a&gt;
+that can't be &lt;a class="external" href="https://docs.python.org/3/library/pickle.html#object.__reduce__"&gt;pickled&lt;/a&gt;,
+because &lt;a class="external" href="https://docs.python.org/3/library/threading.html"&gt;threading&lt;/a&gt; locks only make sense within the same process.&lt;/p&gt;
+&lt;p&gt;The deeper cause is that the &lt;a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#future-objects"&gt;future&lt;/a&gt; is not just data,
+but encapsulates state owned by the thread pool executor,
+and &lt;a class="external" href="https://docs.python.org/3/library/multiprocessing.html#sharing-state-between-processes"&gt;sharing state between processes&lt;/a&gt; requires extra work.&lt;/p&gt;
 &lt;p&gt;It may not seem like it, but this is a partial success:
 the work happens,
-we just can't get anything back.
+we just can't get the results back.
 Not surprising, to be honest, it couldn't have been &lt;em&gt;that&lt;/em&gt; easy.&lt;/p&gt;
 &lt;h3 id="getting-results"&gt;Getting results&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#getting-results" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
 &lt;p&gt;If you look carefully at the traceback,
