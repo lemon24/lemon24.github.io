@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-05-12">May 2025</span>
-∙ four minute read
+∙ five minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -121,12 +121,47 @@ window.addEventListener('resize', set_vh);
 
 <section class="toc">
 <ul>
+<li><a href="#requirements">Requirements</a></li>
+<li><a href="#existing-code">existing code</a></li>
 <li><a href="#inheritance">inheritance</a></li>
 <li><a href="#composition">composition</a></li>
+<li><a href="#functions">functions</a></li>
 <li><a href="#composition-and-inheritance">composition and inheritance</a></li>
 <li><a href="#try-it-out">try it out</a></li>
 </ul>
 </section>
+<blockquote>
+<p>Currently the code is complex due to subclassing and many layers of delegation like &quot;def submit&quot; doing 
+&quot;inner = super().submit(_submit&quot;</p>
+<p>Could this whole solution be coded using functions only, no classes?
+Intuitively I felt classes would be hell to debug.</p>
+</blockquote>
+<h2 id="requirements">Requirements<span class="headerlink">&nbsp;<a href="#requirements" title="permalink">#</a></span></h2>
+<p>The orginal article <a class="internal" href="/ptpe#why-not-both">sets out</a>
+the following functional requirements:</p>
+<ol>
+<li>Implement the <a class="external" href="https://...">Executor</a> interface;
+we want a drop-in replacement
+for existing <a class="external" href="https://...">concurrent.futures</a> executors,
+so that user code doesn't have to change.</li>
+<li>Spread the work to one worker process per CPU,
+and then further to multiple threads inside each worker,
+to work around CPU becoming a bottleneck for I‍/‍O.</li>
+</ol>
+<p>Additionally, we have two implicit non-functional requirements:</p>
+<ol start="3">
+<li>Use the existing executor classes where possible
+(less code means fewer bugs).</li>
+<li>Only depend on stable, documented features;
+we don't want our code to break 
+when <a class="external" href="https://...">concurrent.futures</a> internals change.</li>
+</ol>
+<h2 id="existing-code">existing code<span class="headerlink">&nbsp;<a href="#existing-code" title="permalink">#</a></span></h2>
+<p>&quot;respect what came before&quot;</p>
+<p>Executor</p>
+<p>ThreadPoolExecutor</p>
+<p>ProcessPoolExecutor</p>
+<p>what the code is, and what promisses are made in the documentation</p>
 <h2 id="inheritance">inheritance<span class="headerlink">&nbsp;<a href="#inheritance" title="permalink">#</a></span></h2>
 <p>the original code</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ProcessPoolExecutor</span><span class="p">):</span>
@@ -312,6 +347,22 @@ window.addEventListener('resize', set_vh);
 </code></pre></div>
 
 </details>
+<blockquote>
+<p>We could have used composition over inheritance (our executor having a process executor instead of being one), but this comes with a downside: the executor only has one essential/&quot;primitive&quot; method, submit(), and all the other ones (in this case, just map()) are implemented in terms of it.</p>
+<p>Since we're implementing the full executor interface, we'd need to explicitly define each method, which may be tricky – for example, for map(), we'd need to trick it to use our executor's submit() somehow (instead of the ProcessPoolExecutor's), or implement it from scratch altogether). Also, if new high level methods get added on PPE, by using inheritance we get them for free (we don't need to change our code in any way).</p>
+</blockquote>
+<p>We could have used [composition] instead,
+  but then we'd have to implement the full <a class="external" href="https://...">Executor</a> interface,
+  defining each method explicitly to delegate to the inner process pool executor,
+  and keep things up to date when the interface gets new methods
+  (and we'd have no way to trick the inner executor's [map()] to use our [submit()],
+  so we'd have to implement it from scratch).</p>
+<h2 id="functions">functions<span class="headerlink">&nbsp;<a href="#functions" title="permalink">#</a></span></h2>
+<blockquote>
+<p>With functions only, no, since we have the executor interface we need to implement (our executor can be used as any other executor, without the code using it having to know about the different implementation).</p>
+</blockquote>
+<p>http://localhost:8080/same-functions#counter-example-modules</p>
+<p>https://python-patterns.guide/python/prebound-methods/</p>
 <h2 id="composition-and-inheritance">composition <em>and</em> inheritance<span class="headerlink">&nbsp;<a href="#composition-and-inheritance" title="permalink">#</a></span></h2>
 <p>mostly identical</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">Executor</span><span class="p">):</span>
@@ -382,6 +433,14 @@ window.addEventListener('resize', set_vh);
 </code></pre></div>
 
 </details>
+<p>Yet another option would be to use both inheritance <em>and</em> composition –
+  inherit the <a class="external" href="https://...">Executor</a> base class directly for the [common methods]
+  (assuming they're defined there and not in subclasses),
+  and delegate to the inner executor only where needed
+  (likely just [map()] and [shutdown()]).
+  But, the only difference from the current code would be
+  that it'd say <code>self._inner</code> instead of <code>super()</code> in a few places,
+  so it's not really worth it, in my opinion.</p>
 <h2 id="try-it-out">try it out<span class="headerlink">&nbsp;<a href="#try-it-out" title="permalink">#</a></span></h2>
 <p>as I said before, <a class="internal" href="/same-functions#try-it-out">try it out</a></p>
 <p>took me less than 10 minutes
