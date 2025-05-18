@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-05-12">May 2025</span>
-∙ five minute read
+∙ six minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -122,7 +122,7 @@ window.addEventListener('resize', set_vh);
 <section class="toc">
 <ul>
 <li><a href="#requirements">Requirements</a></li>
-<li><a href="#existing-code">existing code</a></li>
+<li><a href="#concurrent-futures-structure">concurrent.futures structure</a></li>
 <li><a href="#inheritance">inheritance</a></li>
 <li><a href="#composition">composition</a></li>
 <li><a href="#functions">functions</a></li>
@@ -140,9 +140,9 @@ Intuitively I felt classes would be hell to debug.</p>
 <p>The orginal article <a class="internal" href="/ptpe#why-not-both">sets out</a>
 the following functional requirements:</p>
 <ol>
-<li>Implement the <a class="external" href="https://...">Executor</a> interface;
+<li>Implement the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> interface;
 we want a drop-in replacement
-for existing <a class="external" href="https://...">concurrent.futures</a> executors,
+for existing <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> executors,
 so that user code doesn't have to change.</li>
 <li>Spread the work to one worker process per CPU,
 and then further to multiple threads inside each worker,
@@ -154,14 +154,34 @@ to work around CPU becoming a bottleneck for I‍/‍O.</li>
 (less code means fewer bugs).</li>
 <li>Only depend on stable, documented features;
 we don't want our code to break 
-when <a class="external" href="https://...">concurrent.futures</a> internals change.</li>
+when <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> internals change.</li>
 </ol>
-<h2 id="existing-code">existing code<span class="headerlink">&nbsp;<a href="#existing-code" title="permalink">#</a></span></h2>
-<p>&quot;respect what came before&quot;</p>
-<p>Executor</p>
-<p>ThreadPoolExecutor</p>
-<p>ProcessPoolExecutor</p>
-<p>what the code is, and what promisses are made in the documentation</p>
+<h2 id="concurrent-futures-structure">concurrent.futures structure<span class="headerlink">&nbsp;<a href="#concurrent-futures-structure" title="permalink">#</a></span></h2>
+<p>Before we delve into (writing) our own code,
+it's probably a good idea to look at
+how the existing <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> code is structured.</p>
+<section class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>You can read the code of stdlib modules
+ by following the <strong>Source code:</strong> links
+ at the top of each documentation page.</p>
+</section>
+<p><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> is an abstract base class<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup> defined in <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/_base.py#L569">concurrent.futures._base</a>.
+It provides dummy <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a> methods,
+as well as a concrete <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> method implemented in terms of <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a>,
+and <a class="external" href="https://docs.python.org/3/glossary.html#term-context-management-protocol">context manager methods</a> that <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a> the executor on exit.
+Notably, the docs do not mention the concrete methods,
+instead saying that
+&quot;it should not be used directly, but through its concrete subclasses&quot;.</p>
+<p><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">ThreadPoolExecutor</a> is defined in <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/thread.py#L122">concurrent.futures.thread</a>.
+It subclasses <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> 
+and implements <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>,
+inheriting <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> unchanged.</p>
+<p><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a> is defined in <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L630">concurrent.futures.process</a>.
+Like its thread counterpart, 
+it implements <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>.
+However, it <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L808">overrides map()</a> to chop the input iterables
+and pass the chunks to the superclass method with <a class="external" href="https://docs.python.org/3/library/functions.html#super">super()</a>.</p>
 <h2 id="inheritance">inheritance<span class="headerlink">&nbsp;<a href="#inheritance" title="permalink">#</a></span></h2>
 <p>the original code</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ProcessPoolExecutor</span><span class="p">):</span>
@@ -352,10 +372,10 @@ when <a class="external" href="https://...">concurrent.futures</a> internals cha
 <p>Since we're implementing the full executor interface, we'd need to explicitly define each method, which may be tricky – for example, for map(), we'd need to trick it to use our executor's submit() somehow (instead of the ProcessPoolExecutor's), or implement it from scratch altogether). Also, if new high level methods get added on PPE, by using inheritance we get them for free (we don't need to change our code in any way).</p>
 </blockquote>
 <p>We could have used [composition] instead,
-  but then we'd have to implement the full <a class="external" href="https://...">Executor</a> interface,
+  but then we'd have to implement the full <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> interface,
   defining each method explicitly to delegate to the inner process pool executor,
   and keep things up to date when the interface gets new methods
-  (and we'd have no way to trick the inner executor's [map()] to use our [submit()],
+  (and we'd have no way to trick the inner executor's <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> to use our <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a>,
   so we'd have to implement it from scratch).</p>
 <h2 id="functions">functions<span class="headerlink">&nbsp;<a href="#functions" title="permalink">#</a></span></h2>
 <blockquote>
@@ -434,10 +454,10 @@ when <a class="external" href="https://...">concurrent.futures</a> internals cha
 
 </details>
 <p>Yet another option would be to use both inheritance <em>and</em> composition –
-  inherit the <a class="external" href="https://...">Executor</a> base class directly for the [common methods]
+  inherit the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> base class directly for the [common methods]
   (assuming they're defined there and not in subclasses),
   and delegate to the inner executor only where needed
-  (likely just [map()] and [shutdown()]).
+  (likely just <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>).
   But, the only difference from the current code would be
   that it'd say <code>self._inner</code> instead of <code>super()</code> in a few places,
   so it's not really worth it, in my opinion.</p>
@@ -445,6 +465,17 @@ when <a class="external" href="https://...">concurrent.futures</a> internals cha
 <p>as I said before, <a class="internal" href="/same-functions#try-it-out">try it out</a></p>
 <p>took me less than 10 minutes
 to change <a class="anchor" href="#inheritance">inheritance</a> to <a class="anchor" href="#composition">composition</a></p>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> is this in the literal sense, and only by convention:
+it is a <em>base class</em> (other classes are supposed to subclass it),
+and it is <em>abstract</em> (other classes are supposed to provide 
+concrete implementations for some methods).</p>
+<p>Python also allows formalizing <a class="external" href="https://docs.python.org/3/glossary.html#term-abstract-base-class">abstract base classes</a> using the <a class="external" href="https://docs.python.org/3/library/abc.html#module-abc">abc</a> module;
+see <a class="internal" href="/same-functions#formalizing-this">When to use classes in Python? When you repeat similar sets of functions</a>
+for an example of this and other ways of achieving the same goal. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
 
 
 
