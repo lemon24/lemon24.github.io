@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-05-12">May 2025</span>
-∙ six minute read
+∙ seven minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -123,15 +123,16 @@ window.addEventListener('resize', set_vh);
 <ul>
 <li><a href="#requirements">Requirements</a></li>
 <li><a href="#concurrent-futures-structure">concurrent.futures structure</a></li>
-<li><a href="#inheritance">inheritance</a></li>
-<li><a href="#composition">composition</a></li>
+<li><a href="#inheritance">Inheritance</a></li>
+<li><a href="#composition">Composition</a></li>
 <li><a href="#functions">functions</a></li>
 <li><a href="#composition-and-inheritance">composition and inheritance</a></li>
+<li><a href="#comparison">comparison</a></li>
 <li><a href="#try-it-out">try it out</a></li>
 </ul>
 </section>
 <blockquote>
-<p>Currently the code is complex due to subclassing and many layers of delegation like &quot;def submit&quot; doing 
+<p>Currently the code is complex due to subclassing and many layers of delegation like &quot;def submit&quot; doing
 &quot;inner = super().submit(_submit&quot;</p>
 <p>Could this whole solution be coded using functions only, no classes?
 Intuitively I felt classes would be hell to debug.</p>
@@ -153,7 +154,7 @@ to work around CPU becoming a bottleneck for I‍/‍O.</li>
 <li>Use the existing executor classes where possible
 (less code means fewer bugs).</li>
 <li>Only depend on stable, documented features;
-we don't want our code to break 
+we don't want our code to break
 when <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> internals change.</li>
 </ol>
 <h2 id="concurrent-futures-structure">concurrent.futures structure<span class="headerlink">&nbsp;<a href="#concurrent-futures-structure" title="permalink">#</a></span></h2>
@@ -173,17 +174,21 @@ and <a class="external" href="https://docs.python.org/3/glossary.html#term-conte
 Notably, the docs do not mention the concrete methods,
 instead saying that
 &quot;it should not be used directly, but through its concrete subclasses&quot;.</p>
-<p><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">ThreadPoolExecutor</a> is defined in <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/thread.py#L122">concurrent.futures.thread</a>.
-It subclasses <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> 
+<p><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">Thread​Pool​Executor</a> is defined in <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/thread.py#L122">concurrent.futures.thread</a>.
+It subclasses <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a>
 and implements <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>,
 inheriting <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> unchanged.</p>
-<p><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">ProcessPoolExecutor</a> is defined in <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L630">concurrent.futures.process</a>.
-Like its thread counterpart, 
+<p><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a> is defined in <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L630">concurrent.futures.process</a>.
+Like its thread counterpart,
 it implements <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>.
 However, it <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L808">overrides map()</a> to chop the input iterables
 and pass the chunks to the superclass method with <a class="external" href="https://docs.python.org/3/library/functions.html#super">super()</a>.</p>
-<h2 id="inheritance">inheritance<span class="headerlink">&nbsp;<a href="#inheritance" title="permalink">#</a></span></h2>
-<p>the original code</p>
+<h2 id="inheritance">Inheritance<span class="headerlink">&nbsp;<a href="#inheritance" title="permalink">#</a></span></h2>
+<p>First, let's look at the original code, where I use inheritance.
+For brevity, we'll use the version
+right before dealing with dead workers
+(the final version is pretty much the same,
+but with a more involved <code>__handle_results</code> method).</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ProcessPoolExecutor</span><span class="p">):</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initargs</span><span class="o">=</span><span class="p">()):</span>
@@ -225,7 +230,14 @@ and pass the chunks to the superclass method with <a class="external" href="http
 </code></pre></div>
 
 <details>
-<summary>additionally, code that will be the same between versions</summary>
+<summary>
+In addition,
+there are some global functions used in the worker processes,
+either directly by the process pool executor,
+or indirectly as callbacks of the thread pool executor futures;
+this code remains the same
+regardless of the style we use for the main class.
+</summary>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="c1"># this code runs in each worker process</span>
 
 <span class="n">_executor</span> <span class="o">=</span> <span class="kc">None</span>
@@ -253,8 +265,30 @@ and pass the chunks to the superclass method with <a class="external" href="http
 </code></pre></div>
 
 </details>
-<h2 id="composition">composition<span class="headerlink">&nbsp;<a href="#composition" title="permalink">#</a></span></h2>
-<p>mostly identical, super() becomes self._inner</p>
+<p>We override <code>__init__</code>, <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a>, and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>
+to extend the behavior of the original methods,
+but we still use them via <a class="external" href="https://docs.python.org/3/library/functions.html#super">super()</a>.</p>
+<p>The context manager methods and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a>
+we inherit for free,
+including the <code>chunksize</code> optimization.
+Of note,
+this assumes they are implemented
+only in terms of other public methods (i.e. the ones overrode);
+this is true for now,
+but at least for <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> it is not guaranteed by the documentation.</p>
+<p>An effect of subclassing a class with private internals
+is that all the subclass attributes
+have to start with double underscores
+(i.e. rely on the <a class="external" href="https://docs.python.org/3/tutorial/classes.html#tut-private">name mangling</a> mechanism)
+to avoid clashes with superclass ones
+(such as <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L736">_result_queue</a>).</p>
+<h2 id="composition">Composition<span class="headerlink">&nbsp;<a href="#composition" title="permalink">#</a></span></h2>
+<p>OK, now let's use <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance">composition</a> –
+instead of <em>being</em> a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>,
+our Process​Thread​Pool​Executor <em>has</em> a Process​Pool​Executor.
+At a first glance,
+the result is mostly identical to the previous code,
+with <code>super()</code> changed to <code>self._inner</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ProcessThreadPoolExecutor</span><span class="p">:</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initargs</span><span class="o">=</span><span class="p">()):</span>
@@ -295,7 +329,7 @@ and pass the chunks to the superclass method with <a class="external" href="http
             <span class="bp">self</span><span class="o">.</span><span class="n">_result_queue</span> <span class="o">=</span> <span class="kc">None</span>
 </code></pre></div>
 
-<p>except we need to implement the context manager interface</p>
+<p>Except, we need to implement the context manager protocol:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># concurrent.futures._base.Executor.__enter__</span>
         <span class="k">return</span> <span class="bp">self</span>
@@ -306,7 +340,7 @@ and pass the chunks to the superclass method with <a class="external" href="http
         <span class="k">return</span> <span class="kc">False</span>
 </code></pre></div>
 
-<p>except we need to copy map from executor base</p>
+<p>Except, we need to copy <code>map()</code> from <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">iterables</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">chunksize</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="c1"># concurrent.futures._base.Executor.map</span>
 
@@ -329,7 +363,7 @@ and pass the chunks to the superclass method with <a class="external" href="http
         <span class="k">return</span> <span class="n">result_iterator</span><span class="p">()</span>
 </code></pre></div>
 
-<p>except process pool executor also had an implementation of map</p>
+<p>...and the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a> <code>chunksize</code> optimization:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">iterables</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">chunksize</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="c1"># concurrent.futures.process.ProcessPoolExecutor.map</span>
 
@@ -343,7 +377,7 @@ and pass the chunks to the superclass method with <a class="external" href="http
 </code></pre></div>
 
 <details>
-<summary>except, we need to copy a bunch of private functions</summary>
+<summary>...and a bunch of private functions they use.</summary>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_result_or_cancel</span><span class="p">(</span><span class="n">fut</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="c1"># concurrent.futures._base._result_or_cancel</span>
     <span class="k">try</span><span class="p">:</span>
@@ -367,16 +401,35 @@ and pass the chunks to the superclass method with <a class="external" href="http
 </code></pre></div>
 
 </details>
-<blockquote>
-<p>We could have used composition over inheritance (our executor having a process executor instead of being one), but this comes with a downside: the executor only has one essential/&quot;primitive&quot; method, submit(), and all the other ones (in this case, just map()) are implemented in terms of it.</p>
-<p>Since we're implementing the full executor interface, we'd need to explicitly define each method, which may be tricky – for example, for map(), we'd need to trick it to use our executor's submit() somehow (instead of the ProcessPoolExecutor's), or implement it from scratch altogether). Also, if new high level methods get added on PPE, by using inheritance we get them for free (we don't need to change our code in any way).</p>
-</blockquote>
-<p>We could have used [composition] instead,
-  but then we'd have to implement the full <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> interface,
-  defining each method explicitly to delegate to the inner process pool executor,
-  and keep things up to date when the interface gets new methods
-  (and we'd have no way to trick the inner executor's <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> to use our <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a>,
-  so we'd have to implement it from scratch).</p>
+<p><em>And</em>, when new high level methods get added to the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> interface,
+we'll need to at least <a class="external" href="https://en.wikipedia.org/wiki/Forwarding_(object-oriented_programming)">forward</a> them to the inner Process​Pool​Executor,
+although we may need to copy them anyway
+if they're implemented in terms of other methods
+for which we have a custom implementation –
+for example, we can't forward <code>map()</code> to the inner executor,
+because we want it to use <em>our</em> <code>submit()</code>.</p>
+<p>One small benefit of not subclassing anything
+is that we don't need to avoid name clashes
+and we can name our attributes whatever we want.</p>
+<hr />
+<p>But this is Python, and in Python methods are just functions,
+so we can <em>almost</em> get away with doing this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ProcessThreadPoolExecutor</span><span class="p">:</span>
+    <span class="o">...</span> <span class="c1"># __init__, submit(), and shutdown() just as before</span>
+    <span class="fm">__enter__</span> <span class="o">=</span> <span class="n">ProcessPoolExecutor</span><span class="o">.</span><span class="fm">__enter__</span>
+    <span class="fm">__exit__</span> <span class="o">=</span> <span class="n">ProcessPoolExecutor</span><span class="o">.</span><span class="fm">__exit__</span>
+    <span class="nb">map</span> <span class="o">=</span> <span class="n">ProcessPoolExecutor</span><span class="o">.</span><span class="n">map</span>
+</code></pre></div>
+<p>Alas, this won't work –
+Process​Pool​Executor <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L808">map()</a>
+calls <code>super().​map(...)</code>,
+and <a class="external" href="https://docs.python.org/3/library/functions.html#object">object</a>, the superclass of Process​Thread​Pool​Executor,
+has no such method;
+we had to change
+<code>super().​map(...)</code> to <code>self.​_map(...)</code>
+in our copy above because of this.</p>
+<hr />
+<p>Since we're getting <a class="external" href="https://twitter.com/s_k_hanselmann/status/1370607580620353536">weird</a>, let's ...</p>
 <h2 id="functions">functions<span class="headerlink">&nbsp;<a href="#functions" title="permalink">#</a></span></h2>
 <blockquote>
 <p>With functions only, no, since we have the executor interface we need to implement (our executor can be used as any other executor, without the code using it having to know about the different implementation).</p>
@@ -461,15 +514,18 @@ and pass the chunks to the superclass method with <a class="external" href="http
   But, the only difference from the current code would be
   that it'd say <code>self._inner</code> instead of <code>super()</code> in a few places,
   so it's not really worth it, in my opinion.</p>
+<h2 id="comparison">comparison<span class="headerlink">&nbsp;<a href="#comparison" title="permalink">#</a></span></h2>
+<p>TODO</p>
 <h2 id="try-it-out">try it out<span class="headerlink">&nbsp;<a href="#try-it-out" title="permalink">#</a></span></h2>
 <p>as I said before, <a class="internal" href="/same-functions#try-it-out">try it out</a></p>
 <p>took me less than 10 minutes
 to change <a class="anchor" href="#inheritance">inheritance</a> to <a class="anchor" href="#composition">composition</a></p>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> is this in the literal sense, and only by convention:
+<li id="fn-1"><p><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> is an <em>abstract base class</em> in the literal sense,
+and only by convention:
 it is a <em>base class</em> (other classes are supposed to subclass it),
-and it is <em>abstract</em> (other classes are supposed to provide 
+and it is <em>abstract</em> (other classes are supposed to provide
 concrete implementations for some methods).</p>
 <p>Python also allows formalizing <a class="external" href="https://docs.python.org/3/glossary.html#term-abstract-base-class">abstract base classes</a> using the <a class="external" href="https://docs.python.org/3/library/abc.html#module-abc">abc</a> module;
 see <a class="internal" href="/same-functions#formalizing-this">When to use classes in Python? When you repeat similar sets of functions</a>
