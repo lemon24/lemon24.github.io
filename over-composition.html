@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-05-12">May 2025</span>
-∙ eight minute read
+∙ 11 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -122,12 +122,23 @@ window.addEventListener('resize', set_vh);
 <section class="toc">
 <ul>
 <li><a href="#requirements">Requirements</a></li>
-<li><a href="#concurrent-futures">concurrent.futures</a></li>
+<li><a href="#existing-code">Existing code</a></li>
+<li><a href="#three-approaches">Three approaches</a>
+<ul>
 <li><a href="#inheritance">Inheritance</a></li>
 <li><a href="#composition">Composition</a></li>
 <li><a href="#functions">Functions</a></li>
-<li><a href="#comparison">Comparison</a></li>
-<li><a href="#try-it-out">try it out</a></li>
+</ul>
+</li>
+<li><a href="#comparison">Comparison</a>
+<ul>
+<li><a href="#complexity">Complexity</a></li>
+<li><a href="#composition-over-inheritance">Composition over inheritance</a></li>
+<li><a href="#global-state">Global state</a></li>
+<li><a href="#debugging">Debugging</a></li>
+</ul>
+</li>
+<li><a href="#try-it-out">Try it out</a></li>
 </ul>
 </section>
 <blockquote>
@@ -140,13 +151,13 @@ Intuitively I felt classes would be hell to debug.</p>
 <p>The orginal article <a class="internal" href="/ptpe#why-not-both">sets out</a>
 the following functional requirements:</p>
 <ol>
+<li>Spread the work to one worker process per CPU,
+and then further to multiple threads inside each worker,
+to work around CPU becoming a bottleneck for I‍/‍O.</li>
 <li>Implement the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> interface;
 we want a drop-in replacement
 for existing <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> executors,
 so that user code doesn't have to change.</li>
-<li>Spread the work to one worker process per CPU,
-and then further to multiple threads inside each worker,
-to work around CPU becoming a bottleneck for I‍/‍O.</li>
 </ol>
 <p>Additionally, we have two implicit non-functional requirements:</p>
 <ol start="3">
@@ -156,7 +167,7 @@ to work around CPU becoming a bottleneck for I‍/‍O.</li>
 we don't want our code to break
 when <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> internals change.</li>
 </ol>
-<h2 id="concurrent-futures">concurrent.futures<span class="headerlink">&nbsp;<a href="#concurrent-futures" title="permalink">#</a></span></h2>
+<h2 id="existing-code">Existing code<span class="headerlink">&nbsp;<a href="#existing-code" title="permalink">#</a></span></h2>
 <p>Before we delve into (writing) our own code,
 it's probably a good idea to look at
 how the existing <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> code is structured.</p>
@@ -182,7 +193,8 @@ Like its thread counterpart,
 it implements <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>.
 However, it <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L808">overrides map()</a> to chop the input iterables
 and pass the chunks to the superclass method with <a class="external" href="https://docs.python.org/3/library/functions.html#super">super()</a>.</p>
-<h2 id="inheritance">Inheritance<span class="headerlink">&nbsp;<a href="#inheritance" title="permalink">#</a></span></h2>
+<h2 id="three-approaches">Three approaches<span class="headerlink">&nbsp;<a href="#three-approaches" title="permalink">#</a></span></h2>
+<h3 id="inheritance">Inheritance<span class="headerlink">&nbsp;<a href="#inheritance" title="permalink">#</a></span></h3>
 <p>First, let's look at the original code, where I use inheritance.
 For brevity, we'll use the version
 right before <a class="internal" href="/ptpe#death-becomes-a-problem">dealing with dead workers</a>
@@ -281,7 +293,7 @@ have to start with double underscores
 (i.e. rely on the <a class="external" href="https://docs.python.org/3/tutorial/classes.html#tut-private">name mangling</a> mechanism)
 to avoid clashes with superclass ones
 (such as <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L736">_result_queue</a>).</p>
-<h2 id="composition">Composition<span class="headerlink">&nbsp;<a href="#composition" title="permalink">#</a></span></h2>
+<h3 id="composition">Composition<span class="headerlink">&nbsp;<a href="#composition" title="permalink">#</a></span></h3>
 <p>OK, now let's use <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance">composition</a> –
 instead of <em>being</em> a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>,
 our Process​Thread​Pool​Executor <em>has</em> a Process​Pool​Executor.
@@ -429,7 +441,7 @@ we had to change
 in our copy above because of this.</p>
 <hr />
 <p>Since we're getting <a class="external" href="https://twitter.com/s_k_hanselmann/status/1370607580620353536">weird</a>, let's look at a more exotic alternative.</p>
-<h2 id="functions">Functions<span class="headerlink">&nbsp;<a href="#functions" title="permalink">#</a></span></h2>
+<h3 id="functions">Functions<span class="headerlink">&nbsp;<a href="#functions" title="permalink">#</a></span></h3>
 <p>So, could we do this using functions only, no classes?</p>
 <p>Well, theoretically no,
 since we need to implement the executor interface.
@@ -526,10 +538,10 @@ Like before, we copy <code>map()</code> with minor tweaks.
 Defining <code>__enter__</code> and <code>__exit__</code> functions
 won't allow us to use the module in a <code>with</code> statement,
 since they have to be methods –
-the interpreter <a class="external" href="https://snarky.ca/unravelling-the-with-statement/">looks them up on the class of object</a>,
-generic <code>&lt;class 'module'&gt;</code>,
-rather than on the object itself,
-<code>&lt;module 'ptpe' from 'ptpe.py'&gt;</code>.</p>
+the interpreter <a class="external" href="https://snarky.ca/unravelling-the-with-statement/">looks them up on the class of object</a>
+(<code>&lt;class 'module'&gt;</code>),
+rather than on the object itself
+(<code>&lt;module 'ptpe' from 'ptpe.py'&gt;</code>).</p>
 <p>For a vanilla work-around,<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
 we can add an alternate &quot;constructor&quot;
 that returns a context manager with the module itself as target:</p>
@@ -548,15 +560,20 @@ that returns a context manager with the module itself as target:</p>
 <span class="gp">...</span>
 <span class="go">2</span>
 </code></pre></div>
-<p>But it gets worse!
-Because we're using global state,
-only one executor can exist at any given time,
-with only one initializer.
-Also, accidentally calling <code>init()</code> a second time
+<p>Also, because we're using global state,
+only one executor can exist at any given time.
+(This is <em>almost</em> true –
+we could &quot;this is Python&quot; our way deeper
+and somehow <a class="external" href="https://docs.python.org/3/library/sys.html#sys.modules">reload the module</a>
+while still keeping a reference to the old one,
+but that sounds just like a round-about way
+of making class instances.)</p>
+<p>But it gets worse – accidentally calling <code>init()</code> a second time
 will clobber the state of the first executor,
 leading to all sorts of bugs;
 if we were serious about this code,
-we'd add some checks to prevent that.</p>
+we'd need some checks to prevent it
+(and tests for that, and so on).</p>
 <!--
 
 # composition *and* inheritance
@@ -574,7 +591,8 @@ so it's not really worth it, in my opinion.
 
 -->
 <h2 id="comparison">Comparison<span class="headerlink">&nbsp;<a href="#comparison" title="permalink">#</a></span></h2>
-<table>
+<p>So, how do the solutions stack up? Here's a summary:</p>
+<table class="table">
   <thead>
     <tr>
       <th scope="col"></th>
@@ -584,22 +602,22 @@ so it's not really worth it, in my opinion.
   </thead>
   <tbody>
     <tr>
-      <th scope="row"><a href="#inheritance">inheritance</a></th>
+      <td scope="row"><a href="#inheritance">inheritance</a></td>
       <td>
         <ul>
           <li>least amount of code
-          <li>inherits new Executor / Process​Pool​Executor methods for free
+          <li>inherits new high level methods for free
         </ul>
       </td>
       <td>
         <ul>
-          <li>assumes inherited high level methods like map() use only the public API (minor)
+          <li>assumes inherited high level methods use only the public API
           <li>attribute names have to start with double underscores (minor)
         </ul>
       </td>
     </tr>
     <tr>
-      <th scope="row"><a href="#composition">composition</a></th>
+      <td scope="row"><a href="#composition">composition</a></td>
       <td>
         <ul>
           <li>attributes can have any name (minor)
@@ -608,29 +626,119 @@ so it's not really worth it, in my opinion.
       <td>
         <ul>
           <li>copies lots of code
-          <li>msut be kept in sync with the Executor interface
+          <li>must be kept in sync with the interface
         </ul>
       </td>
     </tr>
     <tr>
-      <th scope="row"><a href="#functions">functions</a></th>
-      <td></td>
+      <td scope="row"><a href="#functions">functions</a></td>
+      <td>?</td>
       <td>
         <ul>
           <li>copies lots of code
-          <li>must be kept in sync with the Executor interface
-          <li>only one executor at any given time
-          <li>alternate constructor to get a context manager (minor)
+          <li>must be kept in sync with the interface
+          <li>only one global executor at a time
+          <li>alternate "constructor" to use as context manager (minor)
         </ul>
       </td>
     </tr>
 </table>
-<p>https://en.wikipedia.org/wiki/Composition_over_inheritance#Benefits</p>
-<p>https://en.wikipedia.org/wiki/Composition_over_inheritance#Drawbacks</p>
-<h2 id="try-it-out">try it out<span class="headerlink">&nbsp;<a href="#try-it-out" title="permalink">#</a></span></h2>
-<p>as I said before, <a class="internal" href="/same-functions#try-it-out">try it out</a></p>
-<p>took me less than 10 minutes
-to change <a class="anchor" href="#inheritance">inheritance</a> to <a class="anchor" href="#composition">composition</a></p>
+<h3 id="complexity">Complexity<span class="headerlink">&nbsp;<a href="#complexity" title="permalink">#</a></span></h3>
+<p>While the code is somewhat complex,
+that is arguably due to the problem itself,
+rather than because of how we wrote the code,
+the only differences between the three approaches being
+how we refer to <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>
+and how we store state.</p>
+<p>Having to keep track of what code runs 
+in the main process vs. worker processes 
+is definitely intrinsic complexity,
+since it arises from the functional <a class="anchor" href="#requirements">requirements</a>,
+and won't go away regardless of how we structure the code.</p>
+<p>Carefully delegating
+the high level work of spreading tasks across processes
+to <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a> 
+is probably not,
+but might as well be 
+if you consider the alternative of doing it yourself,
+and <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L630">800+ lines</a> of low level stuff that come with that.</p>
+<h3 id="composition-over-inheritance">Composition over inheritance<span class="headerlink">&nbsp;<a href="#composition-over-inheritance" title="permalink">#</a></span></h3>
+<p>Favoring <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance">composition over inheritance</a>
+is usually a good practice,
+but in our specific case
+inheritance has more benefits and fewer <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance#Drawbacks">drawbacks</a>,
+for two main reasons:</p>
+<ol>
+<li>The <a class="anchor" href="#existing-code">existing code</a>
+has been designed with inheritance in mind
+– even if this is mainly to enable internal reuse,
+and not explicitly documented.<!-- in part, this is enabled by [super()] -->
+</li>
+<li>We have a true <em><a class="external" href="https://en.wikipedia.org/wiki/Is-a">is-a</a></em> relationship –
+our Process​Thread​Pool​Executor really is a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>
+with a bunch of extra behavior,
+rather than part of an arbitrary hierarchy 
+created only to enable reuse.</li>
+</ol>
+<p>In addition, the <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance#Benefits">benefits</a> of composition
+are mainly about dealing with unrelated components 
+in response to an evolving business domain,
+neither of which is the case for the problem we're solving.</p>
+<p>As <a class="external" href="https://www.hillelwayne.com/">Hillel Wayne</a> puts it in <a class="external" href="https://buttondown.email/hillelwayne/archive/when-to-prefer-inheritance-to-composition/">When to prefer inheritance to composition</a>:</p>
+<blockquote>
+<p>So here are the benefits of inheritance:</p>
+<ul>
+<li>Unlike composition, you can pass the subclass into functions expecting the parent class.</li>
+<li>Unlike interfaces, you can reuse code from the parent class in the child class.</li>
+</ul>
+<p>So, here's when you want to use inheritance: <strong>when you need to instantiate both the parent and child classes and pass them to the same functions</strong>. That's it. That's the use case.</p>
+</blockquote>
+<h3 id="global-state">Global state<span class="headerlink">&nbsp;<a href="#global-state" title="permalink">#</a></span></h3>
+<p>Of the three solutions, 
+the <a class="anchor" href="#functions">functions</a> one is probably the worst,
+since it has all the downsides of the <a class="anchor" href="#composition">composition</a> one,
+<em>and</em> comes with significant limitations due to its use of global state.</p>
+<p>To avoid using globals,
+we'd have to pass the state 
+(result queue, executor instance, etc.)
+as function arguments,
+which beside breaking the executor interface,
+makes the executor module harder to use;
+you could of course <a class="internal" href="/same-arguments">group common arguments into a single object</a>
+so there's only one argument to pass around;
+call that object <code>self</code>, 
+and you're back to a round-about way of making an instance.</p>
+<p>The downsides of having to keep track of a bunch of related global variables
+are big enough that even if you do have a module-level API,
+it's still worth keeping them together on a class,
+and exposing the methods of a global instance 
+at module-level (<a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/random.py#L917-L948">like so</a>);
+Brandon Rhodes discusses this at length in <a class="external" href="https://python-patterns.guide/python/prebound-methods/">The Prebound Method Pattern</a>.</p>
+<h3 id="debugging">Debugging<span class="headerlink">&nbsp;<a href="#debugging" title="permalink">#</a></span></h3>
+<ul>
+<li><p>confession: print()</p>
+<ul>
+<li>you can do this regardless of soultion</li>
+<li>debugger too</li>
+</ul>
+</li>
+<li><p><a class="internal" href="/ptpe#minimal-test">minimal test</a> at the end of the file</p>
+</li>
+<li><p>the <a class="internal" href="/ptpe#establishing-a-baseline">benchmark code</a> also served as a sort of tests</p>
+</li>
+<li><p><a class="internal" href="/ptpe#death-becomes-a-problem">terminate_child</a> for the shutdown() behavior,
+but only done that after i got tired of doing <code>pkill -fn '[Pp]ython'</code>;
+worth automating, can be trivially transformed into a test</p>
+</li>
+</ul>
+<h2 id="try-it-out">Try it out<span class="headerlink">&nbsp;<a href="#try-it-out" title="permalink">#</a></span></h2>
+<p>As I've said before, <a class="internal" href="/same-functions#try-it-out">try it out</a>!
+It only took around 10 minutes to convert the initial solution to the other two.
+Getting the structure of the code right is partly a matter of <strong>gut feeling</strong> and <strong>taste</strong>,
+and both are educated by <a class="internal" href="/stdlib">reading</a> and <em>writing</em> a lot of code.
+If you're doing something and think there's a better way,
+do it and see how it looks; 
+it's a sort of deliberate practice.</p>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> is an <em>abstract base class</em> in the literal sense,
@@ -642,14 +750,13 @@ concrete implementations for some methods).</p>
 see <a class="internal" href="/same-functions#formalizing-this">When to use classes in Python? When you repeat similar sets of functions</a>
 for an example of this and other ways of achieving the same goal. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-2"><p>There is another option,
-but it's too much <a class="external" href="http://www.catb.org/jargon/html/M/magic.html">magic</a>,
-and definitely overkill here –
+but it's definitely overkill here –
 we could subclass <code>type(module)</code>,
 add the appropriate <code>__enter__</code> and <code>__exit__</code> methods,
 and then replace our module in <a class="external" href="https://docs.python.org/3/library/sys.html#sys.modules">sys.modules</a>
 with an instance of that subclass;
 needless to say,
-at that point it's easier to just use <a class="anchor" href="#inheritance">inheritance</a>. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+it's easier to just use a class for the executor itself. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
