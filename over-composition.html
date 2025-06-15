@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-05-12">May 2025</span>
-∙ 11 minute read
+∙ 12 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -119,6 +119,13 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
+<p>TODO: rewrite this into an introduction</p>
+<blockquote>
+<p>Currently the code is complex due to subclassing and many layers of delegation like &quot;def submit&quot; doing
+&quot;inner = super().submit(_submit&quot;</p>
+<p>Could this whole solution be coded using functions only, no classes?
+Intuitively I felt classes would be hell to debug.</p>
+</blockquote>
 <section class="toc">
 <ul>
 <li><a href="#requirements">Requirements</a></li>
@@ -141,12 +148,6 @@ window.addEventListener('resize', set_vh);
 <li><a href="#try-it-out">Try it out</a></li>
 </ul>
 </section>
-<blockquote>
-<p>Currently the code is complex due to subclassing and many layers of delegation like &quot;def submit&quot; doing
-&quot;inner = super().submit(_submit&quot;</p>
-<p>Could this whole solution be coded using functions only, no classes?
-Intuitively I felt classes would be hell to debug.</p>
-</blockquote>
 <h2 id="requirements">Requirements<span class="headerlink">&nbsp;<a href="#requirements" title="permalink">#</a></span></h2>
 <p>The orginal article <a class="internal" href="/ptpe#why-not-both">sets out</a>
 the following functional requirements:</p>
@@ -650,16 +651,16 @@ rather than because of how we wrote the code,
 the only differences between the three approaches being
 how we refer to <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>
 and how we store state.</p>
-<p>Having to keep track of what code runs 
-in the main process vs. worker processes 
+<p>Having to keep track of what code runs
+in the main process vs. worker processes
 is definitely intrinsic complexity,
 since it arises from the functional <a class="anchor" href="#requirements">requirements</a>,
 and won't go away regardless of how we structure the code.</p>
 <p>Carefully delegating
 the high level work of spreading tasks across processes
-to <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a> 
+to <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>
 is probably not,
-but might as well be 
+but might as well be
 if you consider the alternative of doing it yourself,
 and <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L630">800+ lines</a> of low level stuff that come with that.</p>
 <h3 id="composition-over-inheritance">Composition over inheritance<span class="headerlink">&nbsp;<a href="#composition-over-inheritance" title="permalink">#</a></span></h3>
@@ -677,11 +678,11 @@ and not explicitly documented.<!-- in part, this is enabled by [super()] -->
 <li>We have a true <em><a class="external" href="https://en.wikipedia.org/wiki/Is-a">is-a</a></em> relationship –
 our Process​Thread​Pool​Executor really is a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>
 with a bunch of extra behavior,
-rather than part of an arbitrary hierarchy 
+rather than part of an arbitrary hierarchy
 created only to enable reuse.</li>
 </ol>
 <p>In addition, the <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance#Benefits">benefits</a> of composition
-are mainly about dealing with unrelated components 
+are mainly about dealing with unrelated components
 in response to an evolving business domain,
 neither of which is the case for the problem we're solving.</p>
 <p>As <a class="external" href="https://www.hillelwayne.com/">Hillel Wayne</a> puts it in <a class="external" href="https://buttondown.email/hillelwayne/archive/when-to-prefer-inheritance-to-composition/">When to prefer inheritance to composition</a>:</p>
@@ -694,50 +695,112 @@ neither of which is the case for the problem we're solving.</p>
 <p>So, here's when you want to use inheritance: <strong>when you need to instantiate both the parent and child classes and pass them to the same functions</strong>. That's it. That's the use case.</p>
 </blockquote>
 <h3 id="global-state">Global state<span class="headerlink">&nbsp;<a href="#global-state" title="permalink">#</a></span></h3>
-<p>Of the three solutions, 
+<p>Of the three solutions,
 the <a class="anchor" href="#functions">functions</a> one is probably the worst,
 since it has all the downsides of the <a class="anchor" href="#composition">composition</a> one,
 <em>and</em> comes with significant limitations due to its use of global state.</p>
 <p>To avoid using globals,
-we'd have to pass the state 
+we'd have to pass the state
 (result queue, executor instance, etc.)
 as function arguments,
 which beside breaking the executor interface,
 makes the executor module harder to use;
 you could of course <a class="internal" href="/same-arguments">group common arguments into a single object</a>
 so there's only one argument to pass around;
-call that object <code>self</code>, 
+call that object <code>self</code>,
 and you're back to a round-about way of making an instance.</p>
 <p>The downsides of having to keep track of a bunch of related global variables
 are big enough that even if you do have a module-level API,
 it's still worth keeping them together on a class,
-and exposing the methods of a global instance 
+and exposing the methods of a global instance
 at module-level (<a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/random.py#L917-L948">like so</a>);
 Brandon Rhodes discusses this at length in <a class="external" href="https://python-patterns.guide/python/prebound-methods/">The Prebound Method Pattern</a>.</p>
 <h3 id="debugging">Debugging<span class="headerlink">&nbsp;<a href="#debugging" title="permalink">#</a></span></h3>
-<ul>
-<li><p>confession: print()</p>
-<ul>
-<li>you can do this regardless of soultion</li>
-<li>debugger too</li>
-</ul>
-</li>
-<li><p><a class="internal" href="/ptpe#minimal-test">minimal test</a> at the end of the file</p>
-</li>
-<li><p>the <a class="internal" href="/ptpe#establishing-a-baseline">benchmark code</a> also served as a sort of tests</p>
-</li>
-<li><p><a class="internal" href="/ptpe#death-becomes-a-problem">terminate_child</a> for the shutdown() behavior,
-but only done that after i got tired of doing <code>pkill -fn '[Pp]ython'</code>;
-worth automating, can be trivially transformed into a test</p>
-</li>
-</ul>
+<p>I have to come clean –
+I use <a class="external" href="https://docs.python.org/3/library/functions.html#print">print()</a> debugging <em>a lot</em> 🙀
+(there's a lot of discussion on whether that's good or not;
+check out <a class="external" href="https://blog.startifact.com/posts/print-debugging/">Don't Look Down on Print Debugging</a>
+for a nuanced take).
+When that doesn't cut it,
+I use <a class="external" href="https://ipython.readthedocs.io/en/stable/api/generated/IPython.terminal.embed.html#IPython.terminal.embed.embed">IPython.embed()</a> to get an interactive session anywhere anywhere in code,
+a sort of supercharged <a class="external" href="https://docs.python.org/3/library/pdb.html#pdb.set_trace">pdb.set_trace()</a>.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
+<p>When writing the original code,
+I relied on the minimal test at the end of the file:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_do_stuff</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;doing: </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">n</span> <span class="o">**</span> <span class="mi">2</span>
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">ProcessThreadPoolExecutor</span><span class="p">()</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">_do_stuff</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">])))</span>
+</code></pre></div>
+
+<p>This allowed me to use <a class="external" href="https://docs.python.org/3/library/functions.html#print">print()</a> in various places
+like <code>_submit()</code>, <code>_put_result()</code>, and the <code>__handle_results()</code> loop
+to check data is making its way through properly;
+<a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Future.add_done_callback">​add_done_callback()</a> was also quite useful early on,
+before <a class="internal" href="/ptpe#handle-inner">all futures had callbacks</a>.</p>
+<p>There was some debugging code
+in the <a class="attachment" href="/_file/ptpe/bench.py">benchmark</a> file
+that I didn't show in the article.
+Once I got tired of killing workers by hand at the right time with <code>pkill -fn</code>,
+I wrote <a class="internal" href="/ptpe#death-becomes-a-problem">terminate_child</a>,
+and because I needed to see how the executor state changed
+while that was happening,
+I ended up with this end-to-end script:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">debug_kill</span><span class="p">(</span><span class="n">kill_interval</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">print_interval</span><span class="o">=</span><span class="mf">.5</span><span class="p">,</span> <span class="bp">cls</span><span class="o">=</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; python -c &#39;from bench import *; debug_kill(1) &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;starting&#39;</span><span class="p">)</span>
+    <span class="n">executor</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">print_debug</span><span class="p">():</span>
+        <span class="nb">print</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;len(tasks)=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">executor</span><span class="o">.</span><span class="n">_ProcessThreadPoolExecutor__tasks</span><span class="p">)</span><span class="si">}</span><span class="s2"> &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;PPE.broken=</span><span class="si">{</span><span class="n">executor</span><span class="o">.</span><span class="n">_broken</span><span class="si">}</span><span class="s2"> &quot;</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">executor</span><span class="o">.</span><span class="n">_broken</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">threading</span><span class="o">.</span><span class="n">Timer</span><span class="p">(</span><span class="n">print_interval</span><span class="p">,</span> <span class="n">print_debug</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+    <span class="n">print_debug</span><span class="p">()</span>
+    <span class="n">benchmark</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">terminate_child</span><span class="p">(</span><span class="n">kill_interval</span><span class="p">))</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;done&#39;</span><span class="p">)</span>
+</code></pre></div>
+
+<p>Similarly, I wrote this script to make sure <code>shutdown()</code> waits any pending tasks:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">debug_shutdown</span><span class="p">(</span><span class="bp">cls</span><span class="o">=</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; python -c &#39;from bench import *; debug_shutdown()&#39; &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="bp">cls</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
+        <span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">_sleep</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;before shut down&#39;</span><span class="p">)</span>
+        <span class="n">executor</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;after shut down&#39;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;after with&#39;</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_sleep</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;sleeping&#39;</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;slept&#39;</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+</code></pre></div>
+
+<p>Of note, all three can (and should) be adapted into automated tests.</p>
+<p>So, does the how we wrote the code change any of this?
+Not significantly, no; most debugging techniques are pretty flexible.
+I guess one could make an argument
+that not using classes
+makes interactive debugging more difficult,
+since it makes state less discoverable
+–
+instead of looking at attributes on the current instance,
+you have to go chase globals by reading the source.</p>
 <h2 id="try-it-out">Try it out<span class="headerlink">&nbsp;<a href="#try-it-out" title="permalink">#</a></span></h2>
 <p>As I've said before, <a class="internal" href="/same-functions#try-it-out">try it out</a>!
 It only took around 10 minutes to convert the initial solution to the other two.
 Getting the structure of the code right is partly a matter of <strong>gut feeling</strong> and <strong>taste</strong>,
 and both are educated by <a class="internal" href="/stdlib">reading</a> and <em>writing</em> a lot of code.
 If you're doing something and think there's a better way,
-do it and see how it looks; 
+do it and see how it looks;
 it's a sort of deliberate practice.</p>
 <section class="footnotes">
 <ol>
@@ -757,6 +820,8 @@ and then replace our module in <a class="external" href="https://docs.python.org
 with an instance of that subclass;
 needless to say,
 it's easier to just use a class for the executor itself. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>Pro tip: you can use <a class="external" href="https://ipython.readthedocs.io/en/stable/api/generated/IPython.terminal.embed.html#IPython.terminal.embed.embed">IPython.embed()</a> as a <a class="external" href="https://docs.python.org/3/library/functions.html#breakpoint">breakpoint()</a> hook:
+<code>PYTHONBREAKPOINT=IPython.embed python myscript.py</code>. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
