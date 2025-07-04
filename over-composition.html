@@ -125,8 +125,8 @@ that runs tasks in multiple threads on all available CPUs,
 bypassing the limitations imposed by Python's global interpreter lock.</p>
 <p>Here's some interesting reader feedback I got:</p>
 <blockquote>
-<p>Currently, the code is complex due to subclassing 
-and many layers of delegation like 
+<p>Currently, the code is complex due to subclassing
+and many layers of delegation like
 <code>submit()</code> doing <code>super().submit(_submit, ...)</code>.</p>
 <p>Could this solution be implemented using only functions, no classes?
 Intuitively I feel classes would be hell to debug.</p>
@@ -203,20 +203,21 @@ It provides dummy <a class="external" href="https://docs.python.org/3/library/co
 a concrete <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> method implemented in terms of <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a>,
 and <a class="external" href="https://docs.python.org/3/glossary.html#term-context-management-protocol">context manager methods</a> that <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a> the executor on exit.
 Notably, the documentation does not mention the concrete methods,
-instead saying that the class 
+instead saying that the class
 &quot;should not be used directly, but through its concrete subclasses&quot;.</p>
-<p>The first subclass, <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">Thread​Pool​Executor</a>, is defined in <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/thread.py#L122">concurrent.​futures.​thread</a>.
-It implements <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>,
+<p>The first subclass, <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">Thread​Pool​Executor</a>, is defined in <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/thread.py#L122">concurrent.​futures.​thread</a>;
+it implements <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>,
 inheriting <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> unchanged.</p>
-<p>The second one, <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>, is defined in <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L630">concurrent.​futures.​process</a>.
-As an optimization,
+<p>The second one, <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>, is defined in <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L630">concurrent.​futures.​process</a>;
+as an optimization,
 it <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L808">overrides map()</a> to chop the input iterables
 and pass the chunks to the superclass method with <a class="external" href="https://docs.python.org/3/library/functions.html#super">super()</a>.</p>
 <h2 id="three-solutions">Three solutions<span class="headerlink">&nbsp;<a href="#three-solutions" title="permalink">#</a></span></h2>
+<p>Now we're ready to look at the code.</p>
 <h3 id="inheritance">Inheritance<span class="headerlink">&nbsp;<a href="#inheritance" title="permalink">#</a></span></h3>
-<p>First, let's look at the original code.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
-<p>I's say this is an almost textbook example of inheritance.
-We override <code>__init__</code>, <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a>, and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>,
+<p>First, the original code,<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
+arguably a textbook example of inheritance.</p>
+<p>We override <code>__init__</code>, <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a>, and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>,
 and do some extra stuff on top of the inherited behavior,
 which we access through <a class="external" href="https://docs.python.org/3/library/functions.html#super">super()</a>.
 We inherit <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> as-is,
@@ -267,10 +268,10 @@ like our overriden <a class="external" href="https://docs.python.org/3/library/c
 have to start with <a class="external" href="https://docs.python.org/3/tutorial/classes.html#tut-private">double underscores</a>
 to avoid clashes with superclass ones
 (such as <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L736">_result_queue</a>).</p>
-<p>In addition,
+<p>In addition to the main class,
 there are some global functions used in the worker processes
-that remain unchanged 
-regardless of the style we use for the main class:</p>
+which remain unchanged
+regardless of the solution:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="c1"># this code runs in each worker process</span>
 
 <span class="n">_executor</span> <span class="o">=</span> <span class="kc">None</span>
@@ -299,8 +300,8 @@ regardless of the style we use for the main class:</p>
 
 <h3 id="composition">Composition<span class="headerlink">&nbsp;<a href="#composition" title="permalink">#</a></span></h3>
 <p>OK, now let's use <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance">composition</a> –
-instead of <em>being</em> a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>,
-our Process​Thread​Pool​Executor <em>has</em> a Process​Pool​Executor.
+instead of <a class="external" href="https://en.wikipedia.org/wiki/Is-a"><em>being</em></a> a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>,
+our Process​Thread​Pool​Executor <a class="external" href="https://en.wikipedia.org/wiki/Has-a"><em>has</em></a> one.
 At a first glance,
 the result is mostly identical to the previous code,
 with <code>super()</code> changed to <code>self._inner</code>:</p>
@@ -308,8 +309,8 @@ with <code>super()</code> changed to <code>self._inner</code>:</p>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initargs</span><span class="o">=</span><span class="p">()):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_result_queue</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span> <span class="o">=</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span>
-            <span class="n">initializer</span><span class="o">=</span><span class="n">_init_process</span><span class="p">,</span>
+<span class="hll">        <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span> <span class="o">=</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ProcessPoolExecutor</span><span class="p">(</span>
+</span>            <span class="n">initializer</span><span class="o">=</span><span class="n">_init_process</span><span class="p">,</span>
             <span class="n">initargs</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_result_queue</span><span class="p">,</span> <span class="n">max_threads</span><span class="p">,</span> <span class="n">initializer</span><span class="p">,</span> <span class="n">initargs</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_tasks</span> <span class="o">=</span> <span class="p">{}</span>
@@ -322,8 +323,8 @@ with <code>super()</code> changed to <code>self._inner</code>:</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">_tasks</span><span class="p">[</span><span class="n">task_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">outer</span>
 
         <span class="n">outer</span><span class="o">.</span><span class="n">set_running_or_notify_cancel</span><span class="p">()</span>
-        <span class="n">inner</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">_submit</span><span class="p">,</span> <span class="n">task_id</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-
+<span class="hll">        <span class="n">inner</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">_submit</span><span class="p">,</span> <span class="n">task_id</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span>
         <span class="k">return</span> <span class="n">outer</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_handle_results</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -335,8 +336,8 @@ with <code>super()</code> changed to <code>self._inner</code>:</p>
                 <span class="n">outer</span><span class="o">.</span><span class="n">set_exception</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="n">wait</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_result_queue</span><span class="p">:</span>
+<span class="hll">        <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="n">wait</span><span class="p">)</span>
+</span>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_result_queue</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_result_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">wait</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_result_handler</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
@@ -355,15 +356,16 @@ with <code>super()</code> changed to <code>self._inner</code>:</p>
         <span class="k">return</span> <span class="kc">False</span>
 </code></pre></div>
 
-<p>...and we need to copy <code>map()</code> from <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a>:</p>
+<p>...and we need to copy <code>map()</code> from <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a>,
+since we need it to use <em>our</em> <code>submit()</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">iterables</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">chunksize</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="c1"># concurrent.futures._base.Executor.map</span>
 
         <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">end_time</span> <span class="o">=</span> <span class="n">timeout</span> <span class="o">+</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
 
-        <span class="n">fs</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span> <span class="k">for</span> <span class="n">args</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">iterables</span><span class="p">)]</span>
-
+<span class="hll">        <span class="n">fs</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span> <span class="k">for</span> <span class="n">args</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">iterables</span><span class="p">)]</span>
+</span>
         <span class="k">def</span><span class="w"> </span><span class="nf">result_iterator</span><span class="p">():</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">fs</span><span class="o">.</span><span class="n">reverse</span><span class="p">()</span>
@@ -378,15 +380,15 @@ with <code>super()</code> changed to <code>self._inner</code>:</p>
         <span class="k">return</span> <span class="n">result_iterator</span><span class="p">()</span>
 </code></pre></div>
 
-<p>...and the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a> <code>chunksize</code> optimization:</p>
+<p>...and the <code>chunksize</code> optimization from its <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a> version:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">iterables</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">chunksize</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="c1"># concurrent.futures.process.ProcessPoolExecutor.map</span>
 
         <span class="k">if</span> <span class="n">chunksize</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;chunksize must be &gt;= 1.&quot;</span><span class="p">)</span>
 
-        <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_map</span><span class="p">(</span><span class="n">partial</span><span class="p">(</span><span class="n">_process_chunk</span><span class="p">,</span> <span class="n">fn</span><span class="p">),</span>
-                            <span class="n">itertools</span><span class="o">.</span><span class="n">batched</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">iterables</span><span class="p">),</span> <span class="n">chunksize</span><span class="p">),</span>
+<span class="hll">        <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_map</span><span class="p">(</span><span class="n">partial</span><span class="p">(</span><span class="n">_process_chunk</span><span class="p">,</span> <span class="n">fn</span><span class="p">),</span>
+</span>                            <span class="n">itertools</span><span class="o">.</span><span class="n">batched</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">iterables</span><span class="p">),</span> <span class="n">chunksize</span><span class="p">),</span>
                             <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">_chain_from_iterable_of_lists</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
 </code></pre></div>
@@ -416,44 +418,43 @@ with <code>super()</code> changed to <code>self._inner</code>:</p>
 </code></pre></div>
 
 </details>
-<p><em>And</em>, when new high level methods get added to the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> interface,
-we'll need to at least <a class="external" href="https://en.wikipedia.org/wiki/Forwarding_(object-oriented_programming)">forward</a> them to the inner Process​Pool​Executor,
-although we may need to copy them anyway
-if they're implemented in terms of other methods
-for which we have a custom implementation –
-for example, we can't forward <code>map()</code> to the inner executor,
-because we want it to use <em>our</em> <code>submit()</code>.</p>
-<p>One small benefit of not subclassing anything
-is that we don't need to avoid name clashes
-and we can name our attributes whatever we want.</p>
+<p><em>And</em>, when the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> interface gets new methods,
+we'll need to at least <a class="external" href="https://en.wikipedia.org/wiki/Forwarding_(object-oriented_programming)">forward</a> them to the inner executor,
+although we may have to copy them like with <code>map()</code>.</p>
+<p>On the upside,
+no base class means
+we can name attributes however we want.</p>
 <hr />
-<p>But this is Python, and in Python methods are just functions,
-so we can <em>almost</em> get away with doing this:</p>
+<p>But this is Python,
+why do we need to copy stuff?
+In Python,
+methods are just functions,
+so we could <em>almost</em> get away with this:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ProcessThreadPoolExecutor</span><span class="p">:</span>
     <span class="o">...</span> <span class="c1"># __init__, submit(), and shutdown() just as before</span>
     <span class="fm">__enter__</span> <span class="o">=</span> <span class="n">ProcessPoolExecutor</span><span class="o">.</span><span class="fm">__enter__</span>
     <span class="fm">__exit__</span> <span class="o">=</span> <span class="n">ProcessPoolExecutor</span><span class="o">.</span><span class="fm">__exit__</span>
     <span class="nb">map</span> <span class="o">=</span> <span class="n">ProcessPoolExecutor</span><span class="o">.</span><span class="n">map</span>
 </code></pre></div>
-<p>Alas, this won't work –
+<p>Alas, it won't work –
 Process​Pool​Executor <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L808">map()</a>
-calls <code>super().​map(...)</code>,
-and <a class="external" href="https://docs.python.org/3/library/functions.html#object">object</a>, the superclass of Process​Thread​Pool​Executor,
-has no such method;
-we had to change
-<code>super().​map(...)</code> to <code>self.​_map(...)</code>
-in our copy above because of this.</p>
-<hr />
-<p>Since we're getting <a class="external" href="https://twitter.com/s_k_hanselmann/status/1370607580620353536">weird</a>, let's look at a more exotic alternative.</p>
+calls <code>super().​map()</code>,
+and <a class="external" href="https://docs.python.org/3/library/functions.html#object">object</a>,
+the superclass of our executor,
+has no such method,
+which is why we had to change <code>super().​map()</code> to <code>self.​_map()</code>
+in our copy in the first place.</p>
 <h3 id="functions">Functions<span class="headerlink">&nbsp;<a href="#functions" title="permalink">#</a></span></h3>
-<p>So, could we do this using functions only, no classes?</p>
-<p>Well, theoretically no,
+<p>Can it be done using only functions, though?</p>
+<p>Theoretically no,
 since we need to implement the executor interface.
-But practically yes,
+Practically yes,
 since this is Python,
-and in Python an &quot;interface&quot; is just
-something that has a set of functions with specific signatures,
-so we could <a class="internal" href="/same-functions#counter-example-modules">use a module instead</a>.</p>
+where
+an &quot;interface&quot; just means
+having <a class="external" href="https://docs.python.org/3/glossary.html#term-duck-typing">specific attributes</a>,
+usually functions with specific signatures.
+For example, a <a class="internal" href="/same-functions#counter-example-modules">module</a> like this:</p>
 <!-- TODO: link back from same-functions#counter-example-module -->
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">init</span><span class="p">(</span><span class="n">max_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initargs</span><span class="o">=</span><span class="p">()):</span>
     <span class="k">global</span> <span class="n">_result_queue</span><span class="p">,</span> <span class="n">_inner</span><span class="p">,</span> <span class="n">_tasks</span><span class="p">,</span> <span class="n">_result_handler</span>
@@ -497,7 +498,7 @@ so we could <a class="internal" href="/same-functions#counter-example-modules">u
 
 <details>
 <summary>
-Like before, we copy <code>map()</code> with minor tweaks.
+Like before, we need to copy <code>map()</code> with minor tweaks.
 </summary>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_map</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">iterables</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">chunksize</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
     <span class="c1"># concurrent.futures._base.Executor.map</span>
@@ -533,22 +534,30 @@ Like before, we copy <code>map()</code> with minor tweaks.
 </code></pre></div>
 
 </details>
-<p>We can then use the module itself as an executor:</p>
+<p>Behold, we can use the module itself as an executor:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">ptpe</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">ptpe</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="s1">&#39;1&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
 <span class="go">1</span>
 </code></pre></div>
-<p>Except, some interfaces are a bit more complicated than that.
-Defining <code>__enter__</code> and <code>__exit__</code> functions
-won't allow us to use the module in a <code>with</code> statement,
-since they have to be methods –
-the interpreter <a class="external" href="https://snarky.ca/unravelling-the-with-statement/">looks them up on the class of object</a>
-(<code>&lt;class 'module'&gt;</code>),
-rather than on the object itself
-(<code>&lt;module 'ptpe' from 'ptpe.py'&gt;</code>).</p>
-<p>For a vanilla work-around,<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>
-we can add an alternate &quot;constructor&quot;
-that returns a context manager with the module itself as target:</p>
+<p>Of note,
+everything that was an instance variable before
+is now a global variable;
+as a consequence,
+only one executor can exist at any given time,
+since there's only the one module.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>
+But it gets worse – calling <code>init()</code> a second time
+will clobber the state of the first executor,
+leading to all sorts of bugs;
+if we were serious,
+we'd prevent it somehow.</p>
+<p>Also, some interfaces are more complicated than having the right functions;
+defining <code>__enter__</code> and <code>__exit__</code>
+is not enough to use a module in a <code>with</code> statement, since
+the interpreter <a class="external" href="https://snarky.ca/unravelling-the-with-statement/">looks them up on the class of the object</a>,
+not on the object itself.
+We can work around this with
+an alternate &quot;constructor&quot;
+that returns a context manager:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@contextmanager</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">init_cm</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="n">init</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -564,20 +573,6 @@ that returns a context manager with the module itself as target:</p>
 <span class="gp">...</span>
 <span class="go">2</span>
 </code></pre></div>
-<p>Also, because we're using global state,
-only one executor can exist at any given time.
-(This is <em>almost</em> true –
-we could &quot;this is Python&quot; our way deeper
-and somehow <a class="external" href="https://docs.python.org/3/library/sys.html#sys.modules">reload the module</a>
-while still keeping a reference to the old one,
-but that sounds just like a round-about way
-of making class instances.)</p>
-<p>But it gets worse – accidentally calling <code>init()</code> a second time
-will clobber the state of the first executor,
-leading to all sorts of bugs;
-if we were serious about this code,
-we'd need some checks to prevent it
-(and tests for that, and so on).</p>
 <!--
 
 # composition *and* inheritance
@@ -818,14 +813,12 @@ for an example of this and other ways of achieving the same goal. <a href="#fnre
 before <a class="internal" href="/ptpe#death-becomes-a-problem">dealing with dead workers</a>;
 the final code is similar,
 but with a more involved <code>__handle_results</code>. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-3"><p>There is another option,
-but it's definitely overkill here –
-we could subclass <code>type(module)</code>,
-add the appropriate <code>__enter__</code> and <code>__exit__</code> methods,
-and then replace our module in <a class="external" href="https://docs.python.org/3/library/sys.html#sys.modules">sys.modules</a>
-with an instance of that subclass;
-needless to say,
-it's easier to just use a class for the executor itself. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>This is <em>almost</em> true –
+we could &quot;this is Python&quot; our way deeper
+and <a class="external" href="https://docs.python.org/3/library/sys.html#sys.modules">reload the module</a>
+while still keeping a reference to the old one,
+but that's just a round-about way
+of emulating class instances. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-4"><p>Pro tip: you can use <a class="external" href="https://ipython.readthedocs.io/en/stable/api/generated/IPython.terminal.embed.html#IPython.terminal.embed.embed">IPython.embed()</a> as a <a class="external" href="https://docs.python.org/3/library/functions.html#breakpoint">breakpoint()</a> hook:
 <code>PYTHONBREAKPOINT=IPython.embed python myscript.py</code>. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
