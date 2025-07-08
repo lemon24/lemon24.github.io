@@ -138,7 +138,7 @@ and reach some interesting conclusions.
 Consider this a worked example.</p>
 <section class="admonition note">
 <p class="admonition-title">Note</p>
-<p>Today we're focusing only on structure.
+<p>Today we're focusing on structure.
  While not required to understand this article,
  reading the <a class="internal" href="/ptpe">original one</a> will give you a better idea
  of <em>why</em> the code does what it does.</p>
@@ -156,9 +156,9 @@ Consider this a worked example.</p>
 </li>
 <li><a href="#comparison">Comparison</a>
 <ul>
-<li><a href="#complexity">Complexity</a></li>
 <li><a href="#composition-over-inheritance">Composition over inheritance</a></li>
 <li><a href="#global-state">Global state</a></li>
+<li><a href="#complexity">Complexity</a></li>
 <li><a href="#debugging">Debugging</a></li>
 </ul>
 </li>
@@ -167,7 +167,7 @@ Consider this a worked example.</p>
 </section>
 <h2 id="requirements">Requirements<span class="headerlink">&nbsp;<a href="#requirements" title="permalink">#</a></span></h2>
 <p>Before we delve into the code,
-we should have a clear understanding of what and how we're building.
+we should have some understanding of what we're building.
 The orginal article <a class="internal" href="/ptpe#why-not-both">sets out</a>
 the following functional requirements:</p>
 <ol>
@@ -181,22 +181,25 @@ to work around CPU becoming a bottleneck for I‍/‍O.</li>
 </ol>
 <p>Additionally, we have two implicit non-functional requirements:</p>
 <ol start="3">
-<li>Use the existing executor classes where possible
+<li>Use the existing executors where possible
 (less code means fewer bugs).</li>
 <li>Only depend on stable, documented features;
 we don't want our code to break
 when <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> internals change.</li>
 </ol>
 <h2 id="concurrent-futures">concurrent.futures<span class="headerlink">&nbsp;<a href="#concurrent-futures" title="permalink">#</a></span></h2>
-<p>Also, since we're building on top of <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a>,
-we should probably get familiar with it first;
-I encourage you to follow the links below and skim the code.</p>
-<section class="admonition tip">
-<p class="admonition-title">Tip</p>
-<p>You can read the code of Python standard library modules
- by following the <strong>Source code:</strong> links
- at the top of each documentation page.</p>
-</section>
+<p>Since we're building on top of <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a>,
+we should also get familiar with it;
+the docs already provide a great introduction:</p>
+<blockquote>
+<p>The <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> module provides 
+a high-level interface for asynchronously executing callables.
+[...this] can be performed with threads, using <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">Thread​Pool​Executor</a>,
+or separate processes, using <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>.
+Both implement the same interface, 
+which is defined by the abstract <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> class.</p>
+</blockquote>
+<p>Let's look at the classes in more detail.</p>
 <!-- FIXME: all links should be to code! -->
 <p><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> is an abstract base class<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup> defined in <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/_base.py#L569">concurrent.​futures.​_base</a>.
 It provides dummy <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a> and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a> methods,
@@ -213,9 +216,9 @@ as an optimization,
 it <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L808">overrides map()</a> to chop the input iterables
 and pass the chunks to the superclass method with <a class="external" href="https://docs.python.org/3/library/functions.html#super">super()</a>.</p>
 <h2 id="three-solutions">Three solutions<span class="headerlink">&nbsp;<a href="#three-solutions" title="permalink">#</a></span></h2>
-<p>Now we're ready to look at the code.</p>
+<p>Now we're ready for code.</p>
 <h3 id="inheritance">Inheritance<span class="headerlink">&nbsp;<a href="#inheritance" title="permalink">#</a></span></h3>
-<p>First, the original code,<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
+<p>First, the original implementation,<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
 arguably a textbook example of inheritance.</p>
 <p>We override <code>__init__</code>, <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a>, and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>,
 and do some extra stuff on top of the inherited behavior,
@@ -303,7 +306,7 @@ regardless of the solution:</p>
 instead of <a class="external" href="https://en.wikipedia.org/wiki/Is-a"><em>being</em></a> a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>,
 our Process​Thread​Pool​Executor <a class="external" href="https://en.wikipedia.org/wiki/Has-a"><em>has</em></a> one.
 At a first glance,
-the result is mostly identical to the previous code,
+the result is the same as before,
 with <code>super()</code> changed to <code>self._inner</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ProcessThreadPoolExecutor</span><span class="p">:</span>
 
@@ -345,7 +348,7 @@ with <code>super()</code> changed to <code>self._inner</code>:</p>
             <span class="bp">self</span><span class="o">.</span><span class="n">_result_queue</span> <span class="o">=</span> <span class="kc">None</span>
 </code></pre></div>
 
-<p>Except, we need to implement the context manager protocol:</p>
+<p>Except, we need to implement the context manager protocol ourselves:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># concurrent.futures._base.Executor.__enter__</span>
         <span class="k">return</span> <span class="bp">self</span>
@@ -357,7 +360,7 @@ with <code>super()</code> changed to <code>self._inner</code>:</p>
 </code></pre></div>
 
 <p>...and we need to copy <code>map()</code> from <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a>,
-since we need it to use <em>our</em> <code>submit()</code>:</p>
+since it should use <em>our</em> <code>submit()</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code>    <span class="k">def</span><span class="w"> </span><span class="nf">_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">iterables</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">chunksize</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="c1"># concurrent.futures._base.Executor.map</span>
 
@@ -420,7 +423,7 @@ since we need it to use <em>our</em> <code>submit()</code>:</p>
 </details>
 <p><em>And</em>, when the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> interface gets new methods,
 we'll need to at least <a class="external" href="https://en.wikipedia.org/wiki/Forwarding_(object-oriented_programming)">forward</a> them to the inner executor,
-although we may have to copy them like with <code>map()</code>.</p>
+although we may have to copy those too.</p>
 <p>On the upside,
 no base class means
 we can name attributes however we want.</p>
@@ -442,10 +445,10 @@ calls <code>super().​map()</code>,
 and <a class="external" href="https://docs.python.org/3/library/functions.html#object">object</a>,
 the superclass of our executor,
 has no such method,
-which is why we had to change <code>super().​map()</code> to <code>self.​_map()</code>
+which is why we had to change it to <code>self.​_map()</code>
 in our copy in the first place.</p>
 <h3 id="functions">Functions<span class="headerlink">&nbsp;<a href="#functions" title="permalink">#</a></span></h3>
-<p>Can it be done using only functions, though?</p>
+<p>Can this be done using only functions, though?</p>
 <p>Theoretically no,
 since we need to implement the executor interface.
 Practically yes,
@@ -637,23 +640,77 @@ so it's not really worth it, in my opinion.
           <li>copies lots of code
           <li>must be kept in sync with the interface
           <li>only one global executor at a time
+          <li>state is harder to discover
           <li>alternate "constructor" to use as context manager (minor)
         </ul>
       </td>
     </tr>
 </table>
+<p>I may be a bit biased, but inheritance looks like a clear winner.</p>
+<h3 id="composition-over-inheritance">Composition over inheritance<span class="headerlink">&nbsp;<a href="#composition-over-inheritance" title="permalink">#</a></span></h3>
+<p>Given that favoring <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance">composition over inheritance</a>
+is usually a good practice,
+it's worth discussing why inheritance won this time.
+I see three reasons:</p>
+<ol>
+<li>Composition helps most when 
+you have unrelated components
+that need to be flexible
+in response to an evolving business domain;
+that's not the case here,
+so we get all the <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance#Drawbacks">drawbacks</a>
+with none of the <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance#Benefits">benefits</a>.</li>
+<li>The <a class="anchor" href="#concurrent-futures">existing code</a>
+has been designed for inheritance,
+even if mainly to enable internal reuse,
+and not explicitly documented.<!-- in part, this is enabled by [super()] -->
+</li>
+<li>We have a true <em><a class="external" href="https://en.wikipedia.org/wiki/Is-a">is-a</a></em> relationship –
+Process​Thread​Pool​Executor really is a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>
+with extra behavior,
+and not just part of an arbitrary hierarchy.</li>
+</ol>
+<p>For a different line of reasoning involving subtyping,
+check out <a class="external" href="https://www.hillelwayne.com/">Hillel Wayne</a>'s <a class="external" href="https://buttondown.email/hillelwayne/archive/when-to-prefer-inheritance-to-composition/">When to prefer inheritance to composition</a>;
+he offers this rule of thumb:</p>
+<blockquote>
+<p>So, here's when you want to use inheritance:
+<strong>when you need to instantiate both the parent and child classes
+and pass them to the same functions</strong>.</p>
+</blockquote>
+<h3 id="global-state">Global state<span class="headerlink">&nbsp;<a href="#global-state" title="permalink">#</a></span></h3>
+<p>The <a class="anchor" href="#functions">function-only</a> solution is probably the worst of the three,
+since it has all the downsides of <a class="anchor" href="#composition">composition</a>,
+<em>and</em> significant limitations due to its use of global state.</p>
+<p>We could avoid using globals 
+by passing the state
+(result queue, process pool executor instance, etc.)
+as function arguments,
+but this breaks the executor interface,
+and makes for an awful user experience.
+We could group common arguments into a single object 
+so there's only one argument to pass around;
+if you call that argument <code>self</code>,
+<a class="internal" href="/same-arguments">it becomes obvious</a> that's just regular a class with extra steps.</p>
+<p>Having to keep track of a bunch of related globals has enough downsides
+that even if you do want a module-level API,
+it's still worth using a class to group them,
+and exposing the methods of a global instance
+at module-level (<a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/random.py#L917-L948">like so</a>);
+Brandon Rhodes discusses this at length in <a class="external" href="https://python-patterns.guide/python/prebound-methods/">The Prebound Method Pattern</a>.</p>
 <h3 id="complexity">Complexity<span class="headerlink">&nbsp;<a href="#complexity" title="permalink">#</a></span></h3>
 <p>While the code is somewhat complex,
-that is arguably due to the problem itself,
-rather than because of how we wrote the code,
-the only differences between the three approaches being
-how we refer to <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>
+that is intrinsic to the problem itself
+– what code runs in the main vs. worker processes,
+passing results around, error handling, and so on,
+rather than due of how / if we use classes, 
+which only affects
+how we refer to <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a> methods
 and how we store state.</p>
-<p>Having to keep track of what code runs
-in the main process vs. worker processes
-is definitely intrinsic complexity,
-since it arises from the functional <a class="anchor" href="#requirements">requirements</a>,
-and won't go away regardless of how we structure the code.</p>
+<p>One could argue that copying a bunch of code doesn't increase complexity,
+but if you factor in keeping that copy up to date and tested,
+it's clear it's not exactly free either.</p>
+<p>FIXME: of note, we are increasing total complexity</p>
 <p>Carefully delegating
 the high level work of spreading tasks across processes
 to <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>
@@ -661,58 +718,6 @@ is probably not,
 but might as well be
 if you consider the alternative of doing it yourself,
 and <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L630">800+ lines</a> of low level stuff that come with that.</p>
-<h3 id="composition-over-inheritance">Composition over inheritance<span class="headerlink">&nbsp;<a href="#composition-over-inheritance" title="permalink">#</a></span></h3>
-<p>Favoring <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance">composition over inheritance</a>
-is usually a good practice,
-but in our specific case
-inheritance has more benefits and fewer <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance#Drawbacks">drawbacks</a>,
-for two main reasons:</p>
-<ol>
-<li>The <a class="anchor" href="#concurrent-futures">existing code</a>
-has been designed with inheritance in mind
-– even if this is mainly to enable internal reuse,
-and not explicitly documented.<!-- in part, this is enabled by [super()] -->
-</li>
-<li>We have a true <em><a class="external" href="https://en.wikipedia.org/wiki/Is-a">is-a</a></em> relationship –
-our Process​Thread​Pool​Executor really is a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>
-with a bunch of extra behavior,
-rather than part of an arbitrary hierarchy
-created only to enable reuse.</li>
-</ol>
-<p>In addition, the <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance#Benefits">benefits</a> of composition
-are mainly about dealing with unrelated components
-in response to an evolving business domain,
-neither of which is the case for the problem we're solving.</p>
-<p>As <a class="external" href="https://www.hillelwayne.com/">Hillel Wayne</a> puts it in <a class="external" href="https://buttondown.email/hillelwayne/archive/when-to-prefer-inheritance-to-composition/">When to prefer inheritance to composition</a>:</p>
-<blockquote>
-<p>So here are the benefits of inheritance:</p>
-<ul>
-<li>Unlike composition, you can pass the subclass into functions expecting the parent class.</li>
-<li>Unlike interfaces, you can reuse code from the parent class in the child class.</li>
-</ul>
-<p>So, here's when you want to use inheritance: <strong>when you need to instantiate both the parent and child classes and pass them to the same functions</strong>. That's it. That's the use case.</p>
-</blockquote>
-<h3 id="global-state">Global state<span class="headerlink">&nbsp;<a href="#global-state" title="permalink">#</a></span></h3>
-<p>Of the three solutions,
-the <a class="anchor" href="#functions">functions</a> one is probably the worst,
-since it has all the downsides of the <a class="anchor" href="#composition">composition</a> one,
-<em>and</em> comes with significant limitations due to its use of global state.</p>
-<p>To avoid using globals,
-we'd have to pass the state
-(result queue, executor instance, etc.)
-as function arguments,
-which beside breaking the executor interface,
-makes the executor module harder to use;
-you could of course <a class="internal" href="/same-arguments">group common arguments into a single object</a>
-so there's only one argument to pass around;
-call that object <code>self</code>,
-and you're back to a round-about way of making an instance.</p>
-<p>The downsides of having to keep track of a bunch of related global variables
-are big enough that even if you do have a module-level API,
-it's still worth keeping them together on a class,
-and exposing the methods of a global instance
-at module-level (<a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/random.py#L917-L948">like so</a>);
-Brandon Rhodes discusses this at length in <a class="external" href="https://python-patterns.guide/python/prebound-methods/">The Prebound Method Pattern</a>.</p>
 <h3 id="debugging">Debugging<span class="headerlink">&nbsp;<a href="#debugging" title="permalink">#</a></span></h3>
 <p>I have to come clean –
 I use <a class="external" href="https://docs.python.org/3/library/functions.html#print">print()</a> debugging <em>a lot</em> 🙀
@@ -746,7 +751,7 @@ I wrote <a class="internal" href="/ptpe#death-becomes-a-problem">terminate_child
 and because I needed to see how the executor state changed
 while that was happening,
 I ended up with this end-to-end script:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">debug_kill</span><span class="p">(</span><span class="n">kill_interval</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">print_interval</span><span class="o">=</span><span class="mf">.5</span><span class="p">,</span> <span class="bp">cls</span><span class="o">=</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">):</span>
+<div class="highlight code-container"><pre class="code" data-lang="IPython"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">debug_kill</span><span class="p">(</span><span class="n">kill_interval</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">print_interval</span><span class="o">=</span><span class="mf">.5</span><span class="p">,</span> <span class="bp">cls</span><span class="o">=</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot; python -c &#39;from bench import *; debug_kill(1) &quot;&quot;&quot;</span>
     <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;starting&#39;</span><span class="p">)</span>
     <span class="n">executor</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">)</span>
@@ -766,7 +771,7 @@ I ended up with this end-to-end script:</p>
 </code></pre></div>
 
 <p>Similarly, I wrote this script to make sure <code>shutdown()</code> waits any pending tasks:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">debug_shutdown</span><span class="p">(</span><span class="bp">cls</span><span class="o">=</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">):</span>
+<div class="highlight code-container"><pre class="code" data-lang="IPython"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">debug_shutdown</span><span class="p">(</span><span class="bp">cls</span><span class="o">=</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot; python -c &#39;from bench import *; debug_shutdown()&#39; &quot;&quot;&quot;</span>
     <span class="k">with</span> <span class="bp">cls</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
         <span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">_sleep</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
