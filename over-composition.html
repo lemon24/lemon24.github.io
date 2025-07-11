@@ -120,7 +120,7 @@ window.addEventListener('resize', set_vh);
 <div class="column col-sm-12 col-md-10 col-8">
 
 <p>In <a class="internal" href="/ptpe">Process​Thread​Pool​Executor: when I‍/‍O becomes CPU-bound</a>,
-we built a hybrid <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> executor
+we built a hybrid <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.​futures</a> executor
 that runs tasks in multiple threads on all available CPUs,
 bypassing the limitations imposed by Python's global interpreter lock.</p>
 <p>Here's some interesting reader feedback I got:</p>
@@ -156,6 +156,7 @@ Consider this a worked example.</p>
 </li>
 <li><a href="#comparison">Comparison</a>
 <ul>
+<li><a href="#forward-compatibility">Forward compatibility</a></li>
 <li><a href="#composition-over-inheritance">Composition over inheritance</a></li>
 <li><a href="#global-state">Global state</a></li>
 <li><a href="#complexity">Complexity</a></li>
@@ -173,7 +174,7 @@ the following functional requirements:</p>
 <ol>
 <li>Implement the <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> interface;
 we want a drop-in replacement
-for existing <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> executors,
+for existing <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.​futures</a> executors,
 so that user code doesn't have to change.</li>
 <li>Spread the work to one worker process per CPU,
 and then further to multiple threads inside each worker,
@@ -185,18 +186,18 @@ to work around CPU becoming a bottleneck for I‍/‍O.</li>
 (less code means fewer bugs).</li>
 <li>Only depend on stable, documented features;
 we don't want our code to break
-when <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> internals change.</li>
+when <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.​futures</a> internals change.</li>
 </ol>
 <h2 id="concurrent-futures">concurrent.futures<span class="headerlink">&nbsp;<a href="#concurrent-futures" title="permalink">#</a></span></h2>
-<p>Since we're building on top of <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a>,
+<p>Since we're building on top of <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.​futures</a>,
 we should also get familiar with it;
 the docs already provide a great introduction:</p>
 <blockquote>
-<p>The <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.futures</a> module provides 
+<p>The <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.​futures</a> module provides
 a high-level interface for asynchronously executing callables.
 [...this] can be performed with threads, using <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor">Thread​Pool​Executor</a>,
 or separate processes, using <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>.
-Both implement the same interface, 
+Both implement the same interface,
 which is defined by the abstract <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor">Executor</a> class.</p>
 </blockquote>
 <p>Let's look at the classes in more detail.</p>
@@ -223,9 +224,12 @@ arguably a textbook example of inheritance.</p>
 <p>We override <code>__init__</code>, <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a>, and <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.shutdown">shutdown()</a>,
 and do some extra stuff on top of the inherited behavior,
 which we access through <a class="external" href="https://docs.python.org/3/library/functions.html#super">super()</a>.
-We inherit <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> as-is,
-assuming it uses only other public methods
-like our overriden <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.submit">submit()</a>.</p>
+We inherit
+the context manager methods,
+<a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a>,
+and any public methods <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a> may get in the future,
+assuming they use only other public methods
+(more on this <a class="anchor" href="#forward-compatibility">below</a>).</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ProcessThreadPoolExecutor</span><span class="p">(</span><span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ProcessPoolExecutor</span><span class="p">):</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initargs</span><span class="o">=</span><span class="p">()):</span>
@@ -647,24 +651,43 @@ so it's not really worth it, in my opinion.
     </tr>
 </table>
 <p>I may be a bit biased, but inheritance looks like a clear winner.</p>
+<h3 id="forward-compatibility">Forward compatibility<span class="headerlink">&nbsp;<a href="#forward-compatibility" title="permalink">#</a></span></h3>
+<p>The <a class="anchor" href="#inheritance">inheritance</a> solution
+assumes <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map">map()</a> and
+any future public <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a> methods
+are implemented only in terms of other public methods.
+This assumption introduces a risk that updates may break our executor;
+this is lowered by two things:</p>
+<ol>
+<li><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.​futures</a> is in the standard library,
+which rarely does major rewrites of existing code,
+and never within a minor (X.Y) version;
+concurrent.​futures exists in its current form
+<a class="external" href="https://github.com/python/cpython/tree/v3.2/Lib/concurrent/futures">since Python 3.2</a>, released in 2011.<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup></li>
+<li><a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.​futures</a> is clearly <a class="anchor" href="#concurrent-futures">designed for inheritance</a>,
+even if mainly to enable internal reuse,
+and not explicitly documented.</li>
+</ol>
+<p>As active mitigations,
+we can add a basic test suite
+(which we should do anyway),
+and <a class="external" href="https://packaging.python.org/en/latest/specifications/core-metadata/#core-metadata-classifier">document</a> the <a class="external" href="https://pypi.org/classifiers/#:~:text=Programming%20Language%20::%20Python%20::%203">supported Python versions</a> explicitly
+(which we should do anyway if we were to release this on PyPI).</p>
 <h3 id="composition-over-inheritance">Composition over inheritance<span class="headerlink">&nbsp;<a href="#composition-over-inheritance" title="permalink">#</a></span></h3>
 <p>Given that favoring <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance">composition over inheritance</a>
 is usually a good practice,
 it's worth discussing why inheritance won this time.
 I see three reasons:</p>
 <ol>
-<li>Composition helps most when 
+<li>Composition helps most when
 you have unrelated components
 that need to be flexible
 in response to an evolving business domain;
 that's not the case here,
 so we get all the <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance#Drawbacks">drawbacks</a>
 with none of the <a class="external" href="https://en.wikipedia.org/wiki/Composition_over_inheritance#Benefits">benefits</a>.</li>
-<li>The <a class="anchor" href="#concurrent-futures">existing code</a>
-has been designed for inheritance,
-even if mainly to enable internal reuse,
-and not explicitly documented.<!-- in part, this is enabled by [super()] -->
-</li>
+<li>The existing code
+is <a class="anchor" href="#concurrent-futures">designed for inheritance</a>.</li>
 <li>We have a true <em><a class="external" href="https://en.wikipedia.org/wiki/Is-a">is-a</a></em> relationship –
 Process​Thread​Pool​Executor really is a <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>
 with extra behavior,
@@ -679,19 +702,19 @@ he offers this rule of thumb:</p>
 and pass them to the same functions</strong>.</p>
 </blockquote>
 <h3 id="global-state">Global state<span class="headerlink">&nbsp;<a href="#global-state" title="permalink">#</a></span></h3>
-<p>The <a class="anchor" href="#functions">function-only</a> solution is probably the worst of the three,
+<p>The <a class="anchor" href="#functions">functions-only</a> solution is probably the worst of the three,
 since it has all the downsides of <a class="anchor" href="#composition">composition</a>,
 <em>and</em> significant limitations due to its use of global state.</p>
-<p>We could avoid using globals 
+<p>We could avoid using globals
 by passing the state
-(result queue, process pool executor instance, etc.)
+(process pool executor instance, result queue, etc.)
 as function arguments,
 but this breaks the executor interface,
 and makes for an awful user experience.
-We could group common arguments into a single object 
+We could group common arguments into a single object
 so there's only one argument to pass around;
 if you call that argument <code>self</code>,
-<a class="internal" href="/same-arguments">it becomes obvious</a> that's just regular a class with extra steps.</p>
+<a class="internal" href="/same-arguments">it becomes obvious</a> that's just a class instance with extra steps.</p>
 <p>Having to keep track of a bunch of related globals has enough downsides
 that even if you do want a module-level API,
 it's still worth using a class to group them,
@@ -700,35 +723,38 @@ at module-level (<a class="external" href="https://github.com/python/cpython/blo
 Brandon Rhodes discusses this at length in <a class="external" href="https://python-patterns.guide/python/prebound-methods/">The Prebound Method Pattern</a>.</p>
 <h3 id="complexity">Complexity<span class="headerlink">&nbsp;<a href="#complexity" title="permalink">#</a></span></h3>
 <p>While the code is somewhat complex,
-that is intrinsic to the problem itself
-– what code runs in the main vs. worker processes,
-passing results around, error handling, and so on,
-rather than due of how / if we use classes, 
+that's mostly intrinsic to the problem itself
+(what runs in the main vs. worker processes,
+passing results around, error handling, and so on),
+rather than due to our of use classes,
 which only affects
 how we refer to <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a> methods
 and how we store state.</p>
 <p>One could argue that copying a bunch of code doesn't increase complexity,
-but if you factor in keeping that copy up to date and tested,
-it's clear it's not exactly free either.</p>
-<p>FIXME: of note, we are increasing total complexity</p>
-<p>Carefully delegating
-the high level work of spreading tasks across processes
-to <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>
-is probably not,
-but might as well be
-if you consider the alternative of doing it yourself,
-and <a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L630">800+ lines</a> of low level stuff that come with that.</p>
+but if you factor in keeping it up to date and tested,
+it's not exactly free either.</p>
+<p>One could also argue that building our executor on top of <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#processpoolexecutor">Process​Pool​Executor</a>
+is increasing complexity,
+and in a way that's true –
+for example, we have
+<a class="internal" href="/ptpe#getting-results">two result queues</a>
+and had to
+<a class="internal" href="/ptpe#death-becomes-a-problem">deal with dead workers</a> too,
+which wouldn't be the case if we wrote it from scratch;
+but in turn, that would come with having to
+understand, maintain, and test
+<a class="external" href="https://github.com/python/cpython/blob/ebe54d7ab7ccafbd0a8a6036fd12de971dd2f55b/Lib/concurrent/futures/process.py#L630">800+ lines of code</a>
+of low level process management code.
+Sometimes,
+<em>complexity I have to care about</em>
+is more important that <em>total complexity</em>.</p>
 <h3 id="debugging">Debugging<span class="headerlink">&nbsp;<a href="#debugging" title="permalink">#</a></span></h3>
-<p>I have to come clean –
-I use <a class="external" href="https://docs.python.org/3/library/functions.html#print">print()</a> debugging <em>a lot</em> 🙀
-(there's a lot of discussion on whether that's good or not;
-check out <a class="external" href="https://blog.startifact.com/posts/print-debugging/">Don't Look Down on Print Debugging</a>
-for a nuanced take).
-When that doesn't cut it,
-I use <a class="external" href="https://ipython.readthedocs.io/en/stable/api/generated/IPython.terminal.embed.html#IPython.terminal.embed.embed">IPython.embed()</a> to get an interactive session anywhere anywhere in code,
-a sort of supercharged <a class="external" href="https://docs.python.org/3/library/pdb.html#pdb.set_trace">pdb.set_trace()</a>.<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup></p>
-<p>When writing the original code,
-I relied on the minimal test at the end of the file:</p>
+<p>TODO: rewrite</p>
+<p>I have to come clean at this point –
+I use <a class="external" href="https://blog.startifact.com/posts/print-debugging/">print debugging</a> <em>a lot</em> 🙀
+(especially if there are no tests yet,
+and sometimes from tests too).
+With the test script at the end of the file driving the executor...</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_do_stuff</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;doing: </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">n</span> <span class="o">**</span> <span class="mi">2</span>
@@ -738,11 +764,19 @@ I relied on the minimal test at the end of the file:</p>
         <span class="nb">print</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">_do_stuff</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">])))</span>
 </code></pre></div>
 
-<p>This allowed me to use <a class="external" href="https://docs.python.org/3/library/functions.html#print">print()</a> in various places
-like <code>_submit()</code>, <code>_put_result()</code>, and the <code>__handle_results()</code> loop
-to check data is making its way through properly;
-<a class="external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Future.add_done_callback">​add_done_callback()</a> was also quite useful early on,
-before <a class="internal" href="/ptpe#handle-inner">all futures had callbacks</a>.</p>
+<p>...I used <a class="external" href="https://docs.python.org/3/library/functions.html#print">print()</a>
+in <code>_submit()</code>, <code>_put_result()</code>, and <code>__handle_results()</code>
+to check if data is making its way through properly;
+if I expected the code to change more often,
+I guess I'd leave them in as logging calls.</p>
+<!--
+when that doesn't cut it,
+IPython's [embed()] usually provides enough interactivity
+to figure out what's going on.[^embed-breakpoint]
+
+[^embed-breakpoint]: Pro tip: you can use [IPython.embed()] as a [breakpoint()] hook:
+  `PYTHONBREAKPOINT=IPython.embed python myscript.py`.
+-->
 <p>There was some debugging code
 in the <a class="attachment" href="/_file/ptpe/bench.py">benchmark</a> file
 that I didn't show in the article.
@@ -751,7 +785,7 @@ I wrote <a class="internal" href="/ptpe#death-becomes-a-problem">terminate_child
 and because I needed to see how the executor state changed
 while that was happening,
 I ended up with this end-to-end script:</p>
-<div class="highlight code-container"><pre class="code" data-lang="IPython"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">debug_kill</span><span class="p">(</span><span class="n">kill_interval</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">print_interval</span><span class="o">=</span><span class="mf">.5</span><span class="p">,</span> <span class="bp">cls</span><span class="o">=</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">):</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">debug_kill</span><span class="p">(</span><span class="n">kill_interval</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">print_interval</span><span class="o">=</span><span class="mf">.5</span><span class="p">,</span> <span class="bp">cls</span><span class="o">=</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot; python -c &#39;from bench import *; debug_kill(1) &quot;&quot;&quot;</span>
     <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;starting&#39;</span><span class="p">)</span>
     <span class="n">executor</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="n">init_client</span><span class="p">)</span>
@@ -771,7 +805,7 @@ I ended up with this end-to-end script:</p>
 </code></pre></div>
 
 <p>Similarly, I wrote this script to make sure <code>shutdown()</code> waits any pending tasks:</p>
-<div class="highlight code-container"><pre class="code" data-lang="IPython"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">debug_shutdown</span><span class="p">(</span><span class="bp">cls</span><span class="o">=</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">):</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">debug_shutdown</span><span class="p">(</span><span class="bp">cls</span><span class="o">=</span><span class="n">ProcessThreadPoolExecutor</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot; python -c &#39;from bench import *; debug_shutdown()&#39; &quot;&quot;&quot;</span>
     <span class="k">with</span> <span class="bp">cls</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
         <span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">_sleep</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
@@ -798,6 +832,7 @@ since it makes state less discoverable
 instead of looking at attributes on the current instance,
 you have to go chase globals by reading the source.</p>
 <h2 id="try-it-out">Try it out<span class="headerlink">&nbsp;<a href="#try-it-out" title="permalink">#</a></span></h2>
+<p>TODO: rewrite</p>
 <p>As I've said before, <a class="internal" href="/same-functions#try-it-out">try it out</a>!
 It only took around 10 minutes to convert the initial solution to the other two.
 Getting the structure of the code right is partly a matter of <strong>gut feeling</strong> and <strong>taste</strong>,
@@ -822,10 +857,12 @@ but with a more involved <code>__handle_results</code>. <a href="#fnref-2" class
 we could &quot;this is Python&quot; our way deeper
 and <a class="external" href="https://docs.python.org/3/library/sys.html#sys.modules">reload the module</a>
 while still keeping a reference to the old one,
-but that's just a round-about way
+but that's just a round-about, unholy way
 of emulating class instances. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-4"><p>Pro tip: you can use <a class="external" href="https://ipython.readthedocs.io/en/stable/api/generated/IPython.terminal.embed.html#IPython.terminal.embed.embed">IPython.embed()</a> as a <a class="external" href="https://docs.python.org/3/library/functions.html#breakpoint">breakpoint()</a> hook:
-<code>PYTHONBREAKPOINT=IPython.embed python myscript.py</code>. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-4"><p>If <a class="external" href="https://docs.python.org/3/library/concurrent.futures.html">concurrent.​futures</a> were not in the standard library,
+I'd probably go with the <a class="anchor" href="#composition">composition</a> version instead,
+or try to upstream Process​Thread​Pool​Executor
+(perhaps I should do that anyway). <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
