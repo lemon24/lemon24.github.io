@@ -78,7 +78,7 @@ class ThreadRunner:
         it = aiter(it)
         while True:
             try:
-                yield runner.run(anext(it))
+                yield self.run(anext(it))
             except StopAsyncIteration:
                 break
 
