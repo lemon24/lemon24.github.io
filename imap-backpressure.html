@@ -141,6 +141,7 @@ threes = pool.imap(do_three, twos)
 outputs = list(threes)
 ```
 -->
+
 <p>What happens if you <strong>consume results slower than things are processed</strong>?
 Maybe the database is slow today,
 or the second processing step is much slower than the first.</p>
@@ -151,14 +152,15 @@ Likewise, you may expect that
 <strong>workers get items from the input iterable as needed</strong>
 – after all, that's how vanilla non-parallel <a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a> works.</p>
 <p>Right? <strong>Wrong!</strong></p>
-<section class="toc">
+<details class="toc" open>
+<summary>Contents</summary>
 <ul>
 <li><a href="#an-example">An example</a></li>
 <li><a href="#what-is-going-on">What is going on?</a></li>
 <li><a href="#queue">Queue</a></li>
 <li><a href="#concurrent-futures">concurrent.futures</a></li>
 </ul>
-</section>
+</details>
 <h2 id="an-example">An example<span class="headerlink">&nbsp;<a href="#an-example" title="permalink">#</a></span></h2>
 <p>Here's a simple version of the problem:
 <code>range(3)</code> is the stream,
@@ -286,7 +288,9 @@ for result in pool.imap_unordered(do_thing, range(3)):
 for result in pool.imap_unordered(do_thing, get_inputs(3)):
     print(' out:', result)
 -->
+
 <!-- TODO separate performance section for double and chunk size -->
+
 <h2 id="what-is-going-on">What is going on?<span class="headerlink">&nbsp;<a href="#what-is-going-on" title="permalink">#</a></span></h2>
 <p>tl;dr: <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a> lacks backpressure.</p>
 <p>Not satisfied with just that? Let's go!</p>
@@ -295,6 +299,7 @@ for result in pool.imap_unordered(do_thing, get_inputs(3)):
 which in turn calls <a class="external" href="https://docs.python.org/3.12/library/stdtypes.html#iterator.__next__">__next__()</a> on the input
 before doing the work and returning the result.</p>
 <figure class="figure">
+
 <svg xmlns='http://www.w3.org/2000/svg' class="pikchr" viewBox="0 0 582.588 37.188">
 <path d="M2.16,35.028L87.1994,35.028L87.1994,4.788L2.16,4.788Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
 <text x="44.6797" y="19.908" text-anchor="middle" fill="rgb(0,0,0)" dominant-baseline="central">input</text>
@@ -315,8 +320,10 @@ before doing the work and returning the result.</p>
 how regular map() works
 </figcaption>
 </figure>
+
 <p>Applying the same model to <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a> would look like this:</p>
 <figure class="figure">
+
 <svg xmlns='http://www.w3.org/2000/svg' class="pikchr" viewBox="0 0 582.588 42.1968">
 <path d="M252.593,32.4L337.632,32.4L337.632,2.16L252.593,2.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
 <path d="M248.774,36.2184L333.814,36.2184L333.814,5.97838L248.774,5.97838Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
@@ -339,6 +346,7 @@ how regular map() works
 how we thought Pool.imap_unordered() should work
 </figcaption>
 </figure>
+
 <p>That's fine as a mental model,
 but things <em>cannot</em> work like that in practice.
 First,
@@ -348,6 +356,7 @@ Second, a &quot;collection of workers&quot; has no <a class="external" href="htt
 you have to gather their outputs somewhere.</p>
 <p>That somewhere is a <em><a class="external" href="https://docs.python.org/3.12/library/multiprocessing.html#pipes-and-queues">queue</a></em>.</p>
 <figure class="figure">
+
 <svg xmlns='http://www.w3.org/2000/svg' class="pikchr" viewBox="0 0 582.588 42.1968">
 <path d="M252.593,32.4L337.632,32.4L337.632,2.16L252.593,2.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
 <path d="M248.774,36.2184L333.814,36.2184L333.814,5.97838L248.774,5.97838Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
@@ -380,6 +389,7 @@ you have to gather their outputs somewhere.</p>
 how Pool.imap_unordered() actually works
 </figcaption>
 </figure>
+
 <p>???</p>
 <p>https://bugs.python.org/issue40110
 https://github.com/python/cpython/issues/84291

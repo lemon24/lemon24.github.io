@@ -159,13 +159,14 @@ and find out which one is best.</p>
 <section class="admonition tip">
 <p class="admonition-title">Tip</p>
 <p>No, it's not <a class="anchor" href="#asyncio-semaphore">Semaphore</a>,
- despite what Stack Overflow may tell you.</p>
+despite what Stack Overflow may tell you.</p>
 </section>
 <section class="admonition tip">
 <p class="admonition-title">Tip</p>
 <p>If you're in a hurry – it's <a class="anchor" href="#asyncio-wait">wait()</a>.</p>
 </section>
-<section class="toc">
+<details class="toc" open>
+<summary>Contents</summary>
 <ul>
 <li><a href="#getting-started">Getting started</a></li>
 <li><a href="#asyncio-gather">asyncio.gather()</a></li>
@@ -178,7 +179,7 @@ and find out which one is best.</p>
 <li><a href="#bonus-exceptions">Bonus: exceptions</a></li>
 <li><a href="#bonus-better-decorators">Bonus: better decorators?</a></li>
 </ul>
-</section>
+</details>
 <h2 id="getting-started">Getting started<span class="headerlink">&nbsp;<a href="#getting-started" title="permalink">#</a></span></h2>
 <p>In order to try things out more easily,
 we'll start with a test harness of sorts.</p>
@@ -191,6 +192,7 @@ we'll start with a test harness of sorts.</p>
 
 </details>
 -->
+
 <p>Our <code>async map_unordered()</code> behaves pretty much like <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>
 – it takes a coroutine function and an iterable of arguments,
 and runs the resulting awaitables <code>limit</code> at a time:</p>
@@ -279,8 +281,8 @@ printing timings as we get each result:</p>
 <section class="admonition tip">
 <p class="admonition-title">Tip</p>
 <p>If you need a refresher on lower level <a class="external" href="https://docs.python.org/3/library/asyncio.html">asyncio</a> stuff related to waiting,
- check out Hynek Schlawack's excellent
- <a class="external" href="https://hynek.me/articles/waiting-in-asyncio/">Waiting in asyncio</a>.</p>
+check out Hynek Schlawack's excellent
+<a class="external" href="https://hynek.me/articles/waiting-in-asyncio/">Waiting in asyncio</a>.</p>
 </section>
 <h2 id="asyncio-gather">asyncio.gather()<span class="headerlink">&nbsp;<a href="#asyncio-gather" title="permalink">#</a></span></h2>
 <p>In the <a class="external" href="https://docs.python.org/3/library/asyncio-task.html#running-tasks-concurrently">Running Tasks Concurrently</a> section of the asyncio docs,
@@ -345,6 +347,7 @@ async with sem:
 
 Sounds about what we're looking for:
 -->
+
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
@@ -449,6 +452,7 @@ iter end
 ```
 
 -->
+
 <h2 id="asyncio-queue">asyncio.Queue<span class="headerlink">&nbsp;<a href="#asyncio-queue" title="permalink">#</a></span></h2>
 <p>Speaking of threading counterparts,
 how would you implement <a class="external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.imap_unordered">imap_unordered()</a>
@@ -539,6 +543,7 @@ but this makes <code>await queue.get()</code> hang forever for empty iterables,
 since workers never get to run by the time we get to it;
 because there's no other await, it's not even a race condition.
 </summary>
+
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
@@ -589,6 +594,7 @@ because there's no other await, it's not even a race condition.
 <span class="go">asyncio.exceptions.TimeoutError</span>
 </code></pre></div>
 </details>
+
 <p>The solution is to signal the worker is done in-band,
 by putting a <a class="internal" href="/sentinels#what-s-a-sentinel-and-why-do-i-need-one">sentinel</a> on the queue.
 I guess a good rule of thumb
@@ -600,6 +606,7 @@ iter end
 0.0: done
 ```
 -->
+
 <details>
 <summary>
 Second,
@@ -608,6 +615,7 @@ otherwise,
 the worker gets killed,
 and <code>get()</code> waits forever for a sentinel that will never come.
 </summary>
+
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
@@ -675,6 +683,7 @@ and <code>get()</code> waits forever for a sentinel that will never come.
 <span class="go">ZeroDivisionError: float division by zero</span>
 </code></pre></div>
 </details>
+
 <!--
 ```console
 $ python map_unordered.py 2 .1 .2 0 .2 .1
@@ -684,6 +693,7 @@ Traceback (most recent call last):
 ZeroDivisionError: float division by zero
 ```
 -->
+
 <p>Finally, our input iterator is synchronous (for now),
 so no other task can run during <code>next(aws)</code>.
 But if it were async,
@@ -822,6 +832,7 @@ iter end
 ```
 
 -->
+
 <h2 id="asyncio-wait">asyncio.wait()<span class="headerlink">&nbsp;<a href="#asyncio-wait" title="permalink">#</a></span></h2>
 <p>Pretending we're using threads works,
 but it's not all that idiomatic.</p>
@@ -948,6 +959,7 @@ without making things much worse.</p>
 we can just feed the current code an async iterable from <code>main()</code>,
 and punch our way through the exceptions:</p>
 <!-- as_async_iter -->
+
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">57</span>
 <span class="normal">58</span>
 <span class="normal">59</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">as_async_iter</span><span class="p">(</span><span class="n">it</span><span class="p">):</span>
@@ -956,6 +968,7 @@ and punch our way through the exceptions:</p>
 </code></pre></div></td></tr></table></div>
 
 <!-- args = as_async_iter... -->
+
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">66</span>
 <span class="normal">67</span>
 <span class="normal">68</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code>    <span class="n">args</span> <span class="o">=</span> <span class="n">on_iter_end</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;iter end&quot;</span><span class="p">))</span>
@@ -974,6 +987,7 @@ and punch our way through the exceptions:</p>
 <p><a class="external" href="https://docs.python.org/3/library/functions.html#map">map()</a> doesn't work with async iterables,
 so we use a <a class="external" href="https://docs.python.org/3/glossary.html#term-generator-expression">generator expression</a> instead.</p>
 <!-- map_unordered -->
+
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
 <span class="normal"> 9</span>
 <span class="normal">10</span>
@@ -1007,6 +1021,7 @@ so it's better to support both.</p>
 </code></pre></div>
 <p>For async iterables, we need to use <a class="external" href="https://docs.python.org/3/library/functions.html#aiter">aiter()</a>:</p>
 <!-- aiter(aws) -->
+
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span>
 <span class="normal">19</span>
 <span class="normal">20</span>
@@ -1032,6 +1047,7 @@ so it's better to support both.</p>
 </code></pre></div>
 <p>... and <a class="external" href="https://docs.python.org/3/library/functions.html#anext">anext()</a>:</p>
 <!-- anext(aws) -->
+
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">30</span>
 <span class="normal">31</span>
 <span class="normal">32</span>
@@ -1051,6 +1067,7 @@ so it's better to support both.</p>
 <hr />
 <details>
 <summary>Here's <code>limit_concurrency()</code> in its entire glory:</summary>
+
 <div class="highlight code-container"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">18</span>
 <span class="normal">19</span>
 <span class="normal">20</span>
@@ -1109,6 +1126,7 @@ so it's better to support both.</p>
 </code></pre></div></td></tr></table></div>
 
 </details>
+
 <p>Not as clean as before, but it gets the job done:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>python<span class="w"> </span>map_unordered.py<span class="w"> </span><span class="m">2</span><span class="w"> </span>.1<span class="w"> </span>.2<span class="w"> </span>.2<span class="w"> </span>.1
 <span class="go">0.1: 0.1</span>

@@ -1,0 +1,334 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!doctype html>
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+<link rel="icon" href="/_static/xo-system-icon.svg">
+<link rel="apple-touch-icon" href="/_static/xo-system-icon.svg">
+
+
+
+
+
+
+
+<title>DynamoDB crash course, part 1 – data model - death and gravity</title>
+
+
+
+<meta property="og:title" content="DynamoDB crash course, part 1 – data model">
+<meta property="og:site_name" content="death and gravity">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://death.andgravity.com/dynamodb">
+
+
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1 class="heading-noindex">DynamoDB crash course, part 1 – data model</h1>
+
+<p class="text-gray text-nowrap">
+
+
+
+<small>
+<span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
+∙ four minute read
+∙
+</small><span class="share-icons">
+<a
+    class="share-icon pycoders"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+>PyCoder's Weekly</a>
+<a
+    class="share-icon hacker-news"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/dynamodb&t=DynamoDB%20crash%20course%2C%20part%201%20%E2%80%93%20data%20model"
+>HN</a>
+<a
+    class="share-icon bluesky"
+    href="https://bsky.%61%70%70/intent/compose?text=DynamoDB%20crash%20course%2C%20part%201%20%E2%80%93%20data%20model%20https%3A//death.andgravity.com/dynamodb"
+>Bluesky</a>
+<!--
+<a
+    class="share-icon reddit"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/dynamodb&title=DynamoDB%20crash%20course%2C%20part%201%20%E2%80%93%20data%20model"
+>Reddit</a>
+-->
+<a
+    class="share-icon linkedin"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/dynamodb"
+>linkedin</a>
+<a
+    class="share-icon twitter"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=DynamoDB%20crash%20course%2C%20part%201%20%E2%80%93%20data%20model&url=https%3A//death.andgravity.com/dynamodb&via=_andgravity"
+>Twitter</a>
+</span>
+
+
+</p>
+
+
+
+
+
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<p>This is the first article in a series
+providing an overview
+of the main concepts of <strong>Amazon DynamoDB</strong> and associated patterns,
+most importantly <strong>single-table design</strong>.</p>
+<p>The goal is to allow someone who hasn't read the entire developer guide
+to understand what idiomatic usage looks like
+and what the trade-offs are,
+and provide entry points to detailed documentation.</p>
+<!-- TODO: AWS docs are complex, and DDB being an old product with lots of features are particularly bad -->
+
+<!-- TODO: data model intro -->
+
+<h2 id="basic-concepts">Basic concepts<span class="headerlink">&nbsp;<a href="#basic-concepts" title="permalink">#</a></span></h2>
+<p>(This section is meant to be only a refresher,
+see the links at the end for a more in-depth overview of basic concepts).</p>
+<p>Quoting <a class="external" href="https://en.wikipedia.org/wiki/Amazon_DynamoDB">Wikipedia</a>:</p>
+<!-- mistune: enabling the abbr plugin would be nice -->
+
+<blockquote>
+<p><strong>Amazon DynamoDB</strong> is a managed NoSQL database service provided by
+<abbr title="Amazon Web Services">AWS</abbr>.
+It supports key-value and document data structures and is designed to handle
+a wide range of applications requiring scalability and performance.</p>
+</blockquote>
+<p>These are the basic DynamoDB components:</p>
+<!-- mistune: multi-line definition list requires >= 3 -->
+
+<dl>
+<dt>Tables</dt>
+<dd>A table is a group of <strong>items</strong>. Since DynamoDB is a NoSQL database, the items in a table are not required to have a specific schema (with the exception of the attributes composing the <strong>primary key</strong>). A DynamoDB table can correspond to either a single table or a whole database in a relational database system.</dd>
+<dt>Items</dt>
+<dd>An item is a group of key-value <strong>attributes</strong>. An item is uniquely identified in a table by a subset of its attributes called a <strong>primary key</strong>. A DynamoDB item usually corresponds to a row in a relational database system.</dd>
+<dt>Attributes</dt>
+<dd>An attribute is a key-value pair, where the key is a string, and the value can be of any type. A DynamoDB attribute corresponds to a field in a relational database system.</dd>
+</dl>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html">What is Amazon DynamoDB?</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html">Core components of Amazon DynamoDB</a></li>
+</ul>
+</section>
+<h2 id="tables">Tables<span class="headerlink">&nbsp;<a href="#tables" title="permalink">#</a></span></h2>
+<p>Conceptually, a DynamoDB table is a <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table</a> of <a class="external" href="https://en.wikipedia.org/wiki/B-tree">B-trees</a>
+(or any other kind of sorted data structure that allows
+fast searches, sequential access, insertions, and deletions).</p>
+<p>An item has two <em>hierarchical</em> keys that make up a composite <strong>primary key</strong>:</p>
+<ul>
+<li><strong>partition key</strong> (aka <strong>hash key</strong>);
+this is the hash table key, and allows efficient
+<em>get all items in partition</em> operations</li>
+<li><strong>sort key</strong> (aka <strong>range key</strong>);
+this is the B-tree key, and allows efficient
+<em>get items in partition in a sort key range</em> operations,
+including <em>get item by partition + sort key</em>;
+the sort key is optional, but in most cases you will have one</li>
+</ul>
+<p>In Python, the operations this enables would look something like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Table</span><span class="p">:</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pk_name</span><span class="p">,</span> <span class="n">sk_name</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pk_name</span> <span class="o">=</span> <span class="n">pk_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sk_name</span> <span class="o">=</span> <span class="n">sk_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="n">SortedDict</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">put_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="n">pk</span><span class="p">,</span> <span class="n">sk</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_pk_name</span><span class="p">],</span> <span class="n">item</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_sk_name</span><span class="p">]</span>
+        <span class="n">old_item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">old_item</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="n">old_item</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pk</span><span class="p">,</span> <span class="n">sk</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">][</span><span class="n">sk</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pk</span><span class="p">,</span> <span class="n">minimum</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">maximum</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">inclusive</span><span class="o">=</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="c1"># in the real DynamoDB, this operation is paginated</span>
+        <span class="n">partition</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">sk</span> <span class="ow">in</span> <span class="n">partition</span><span class="o">.</span><span class="n">irange</span><span class="p">(</span><span class="n">minimum</span><span class="p">,</span> <span class="n">maximum</span><span class="p">,</span> <span class="n">inclusive</span><span class="p">,</span> <span class="n">reverse</span><span class="p">):</span>
+            <span class="k">yield</span> <span class="nb">dict</span><span class="p">(</span><span class="n">partition</span><span class="p">[</span><span class="n">sk</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">scan</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># in the real DynamoDB, this operation is paginated</span>
+        <span class="k">for</span> <span class="n">partition</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">partition</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="k">yield</span> <span class="nb">dict</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="n">pk</span><span class="p">,</span> <span class="n">sk</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_pk_name</span><span class="p">],</span> <span class="n">item</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_sk_name</span><span class="p">]</span>
+        <span class="n">old_item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">old_item</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">delete_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pk</span><span class="p">,</span> <span class="n">sk</span><span class="p">):</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">][</span><span class="n">sk</span><span class="p">]</span>
+</code></pre></div>
+
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">(</span><span class="s1">&#39;pk&#39;</span><span class="p">,</span> <span class="s1">&#39;sk&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span><span class="o">.</span><span class="n">put_item</span><span class="p">({</span><span class="s1">&#39;pk&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;sk&#39;</span><span class="p">:</span> <span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;one&#39;</span><span class="p">:</span> <span class="s1">&#39;i&#39;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span><span class="o">.</span><span class="n">put_item</span><span class="p">({</span><span class="s1">&#39;pk&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;sk&#39;</span><span class="p">:</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;two&#39;</span><span class="p">:</span> <span class="s1">&#39;ii&#39;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span><span class="o">.</span><span class="n">put_item</span><span class="p">({</span><span class="s1">&#39;pk&#39;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;sk&#39;</span><span class="p">:</span> <span class="s1">&#39;1&#39;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;a&#39;</span><span class="p">)</span>
+<span class="go">{&#39;pk&#39;: 1, &#39;sk&#39;: &#39;a&#39;, &#39;one&#39;: &#39;i&#39;}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+<span class="go">[{&#39;pk&#39;: 1, &#39;sk&#39;: &#39;a&#39;, &#39;one&#39;: &#39;i&#39;}, {&#39;pk&#39;: 1, &#39;sk&#39;: &#39;b&#39;, &#39;two&#39;: &#39;ii&#39;}]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">minimum</span><span class="o">=</span><span class="s1">&#39;b&#39;</span><span class="p">))</span>
+<span class="go">[{&#39;pk&#39;: 1, &#39;sk&#39;: &#39;b&#39;, &#39;two&#39;: &#39;ii&#39;}]</span>
+</code></pre></div>
+<p>Importantly, <strong>any operation that does not fit this model is expensive</strong>
+(ignoring indexes for now);
+for example, you always have to know the partition key,
+otherwise you need to do a full table scan
+(and at the scales you'd use DynamoDB at,
+this can mean billions of items).</p>
+<p>A consequence of DynamoDB being lower level than a relational database system
+is that
+<strong>query planning</strong> and <strong>index management</strong>
+happen at the <strong>application level</strong>,
+i.e. you have to do them yourself.
+In turn, this means you need to have a very clear upfront understanding
+of your application's <strong>access patterns</strong>,
+and accept that changes may require <strong>manual migrations</strong>
+(usually this involves updating the attributes used in an index
+for all the items in the database,
+possibly while temporarily supporting both variants in your application).</p>
+<p>The upside is that <strong>for supported dimensions,
+DynamoDB scales infinitely</strong><sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup> –
+there are no limits on table size,
+the number of items or partition keys in a table, or
+the number of sort keys in a partition.</p>
+<!-- TODO: links to “service quotas” sections -->
+
+<p>There are two important limits, though.
+Note these are hard, immutable limits, not quotas,
+and as such you must design your application around them.</p>
+<p>First, the maximum size of an item is 400 KB.
+This can be worked around by either splitting an item into multiple ones
+on the same partition,
+or by storing only the metadata in DynamoDB,
+with data somewhere else, like S3
+(this is a pretty common pattern). <!-- TODO link --></p>
+<p>Second, there is a per-partition throughput limit:</p>
+<!-- TODO
+https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html
+https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html#read-operation-consumption
+-->
+
+<ul>
+<li>for reads, there's a limit of 3,000 read capacity units per second;
+this means 3,000 RCU / s * 4 KB / RCU = 12 MB/s
+(eventually consistent reads are twice this)</li>
+<li>for writes, there's a limit of 1,000 read capacity units per second;
+this means 1,000 WCU / s * 1 KB / WCU = 1 MB/s</li>
+</ul>
+<p>Because of this, you have to be careful to distribute requests evenly acrosss partitions;
+if there's no good natural partition key,
+you can use techniques such as sharding. <!-- TODO link --></p>
+<p>TODO (not necessarily here):</p>
+<ul>
+<li>payment model (you can filter server side, but you still pay for the read)</li>
+<li>eventually consistent vs consistent</li>
+<li>features: conditional updates, transactions, atomic increment, streams, etc.</li>
+</ul>
+<hr />
+<ul>
+<li>background and best practices links<ul>
+<li>“best practices for designing and using partition keys…”</li>
+<li>best-practices</li>
+<li>“partitions and data distribution”</li>
+<li>“partition key design”</li>
+<li>“sort key design”</li>
+<li>“choosing the right dynamodb partition key”</li>
+</ul>
+</li>
+</ul>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>TODO: &quot;inifinitely&quot;: cloud is someone else's computer;
+specifically, it scales horizontally and transparently as long as
+you configure the capacity correctly and you have the money <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
+
+
+
+
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+
+
+
+</footer>
+
+
+</div>
