@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ four minute read
+∙ five minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -127,7 +127,7 @@ window.addEventListener('resize', set_vh);
 
 <p>This is the first article in a series
 providing an overview
-of the main concepts of <strong>Amazon DynamoDB</strong> and associated patterns,
+of the main concepts of <strong>DynamoDB</strong> and associated patterns,
 most importantly <strong>single-table design</strong>.</p>
 <p>The goal is to allow someone who hasn't read the entire developer guide
 to understand what idiomatic usage looks like
@@ -137,15 +137,31 @@ and provide entry points to detailed documentation.</p>
 
 <!-- TODO: data model intro -->
 
-<h2 id="basic-concepts">Basic concepts<span class="headerlink">&nbsp;<a href="#basic-concepts" title="permalink">#</a></span></h2>
+<!-- TODO: won't cover syntax -->
+
+<details class="toc" open>
+<summary>Table of Contents</summary>
+<ul>
+<li><a href="#introduction">Introduction</a></li>
+<li><a href="#tables">Tables</a></li>
+<li><a href="#limits">Limits</a>
+<ul>
+<li><a href="#partition-throughput">Partition throughput</a></li>
+<li><a href="#item-size">Item size</a></li>
+<li><a href="#page-size">Page size</a></li>
+</ul>
+</li>
+<li><a href="#features">Features</a></li>
+</ul>
+</details>
+<h2 id="introduction">Introduction<span class="headerlink">&nbsp;<a href="#introduction" title="permalink">#</a></span></h2>
 <p>(This section is meant to be only a refresher,
 see the links at the end for a more in-depth overview of basic concepts).</p>
 <p>Quoting <a class="external" href="https://en.wikipedia.org/wiki/Amazon_DynamoDB">Wikipedia</a>:</p>
 <!-- mistune: enabling the abbr plugin would be nice -->
 
 <blockquote>
-<p><strong>Amazon DynamoDB</strong> is a managed NoSQL database service provided by
-<abbr title="Amazon Web Services">AWS</abbr>.
+<p><strong>Amazon DynamoDB</strong> is a managed NoSQL database service provided by <abbr title="Amazon Web Services">AWS</abbr>.
 It supports key-value and document data structures and is designed to handle
 a wide range of applications requiring scalability and performance.</p>
 </blockquote>
@@ -154,17 +170,27 @@ a wide range of applications requiring scalability and performance.</p>
 
 <dl>
 <dt>Tables</dt>
-<dd>A table is a group of <strong>items</strong>. Since DynamoDB is a NoSQL database, the items in a table are not required to have a specific schema (with the exception of the attributes composing the <strong>primary key</strong>). A DynamoDB table can correspond to either a single table or a whole database in a relational database system.</dd>
+<dd>A table is a group of <strong>items</strong>.
+Since DynamoDB is a NoSQL database,
+the items in a table are not required to have a specific schema
+(with the exception of the attributes composing the <strong>primary key</strong>).
+A DynamoDB table can correspond to either a single table or a whole database
+in a relational database system.</dd>
 <dt>Items</dt>
-<dd>An item is a group of key-value <strong>attributes</strong>. An item is uniquely identified in a table by a subset of its attributes called a <strong>primary key</strong>. A DynamoDB item usually corresponds to a row in a relational database system.</dd>
+<dd>An item is a group of key-value <strong>attributes</strong>.
+An item is uniquely identified in a table by a subset of its attributes
+called a <strong>primary key</strong>.
+A DynamoDB item usually corresponds to a row in a relational database system.</dd>
 <dt>Attributes</dt>
-<dd>An attribute is a key-value pair, where the key is a string, and the value can be of any type. A DynamoDB attribute corresponds to a field in a relational database system.</dd>
+<dd>An attribute is a key-value pair,
+where the key is a string, and the value can be of any type.
+A DynamoDB attribute corresponds to a field in a relational database system.</dd>
 </dl>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html">What is Amazon DynamoDB?</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html">Core components of Amazon DynamoDB</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html">Core components</a></li>
 </ul>
 </section>
 <h2 id="tables">Tables<span class="headerlink">&nbsp;<a href="#tables" title="permalink">#</a></span></h2>
@@ -249,28 +275,29 @@ and accept that changes may require <strong>manual migrations</strong>
 (usually this involves updating the attributes used in an index
 for all the items in the database,
 possibly while temporarily supporting both variants in your application).</p>
+<h2 id="limits">Limits<span class="headerlink">&nbsp;<a href="#limits" title="permalink">#</a></span></h2>
 <p>The upside is that <strong>for supported dimensions,
 DynamoDB scales infinitely</strong><sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup> –
 there are no limits on table size,
 the number of items or partition keys in a table, or
 the number of sort keys in a partition.</p>
-<!-- TODO: links to “service quotas” sections -->
-
-<p>There are two important limits, though.
-Note these are hard, immutable limits, not quotas,
+<p>There are some important limits, though;
+note these are hard, immutable limits, not adjustable quotas,
 and as such you must design your application around them.</p>
-<p>First, the maximum size of an item is 400 KB.
-This can be worked around by either splitting an item into multiple ones
-on the same partition,
-or by storing only the metadata in DynamoDB,
-with data somewhere else, like S3
-(this is a pretty common pattern). <!-- TODO link --></p>
-<p>Second, there is a per-partition throughput limit:</p>
-<!-- TODO
-https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html
-https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html#read-operation-consumption
--->
-
+<p>These limits are not necessarily a bad thing, though;
+they allow for predictable performance,
+even if you are forced to thing upfront about it.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/CheatSheet.html#CheatSheet.ServiceBasics">Cheat sheet # Service quota basics</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ServiceQuotas.html">Quotas</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html">Constraints</a></li>
+<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-limits/">The Three DynamoDB Limits You Need to Know</a></li>
+</ul>
+</section>
+<h3 id="partition-throughput">Partition throughput<span class="headerlink">&nbsp;<a href="#partition-throughput" title="permalink">#</a></span></h3>
+<p>Most importantly, there is a per-partition throughput limit:</p>
 <ul>
 <li>for reads, there's a limit of 3,000 read capacity units per second;
 this means 3,000 RCU / s * 4 KB / RCU = 12 MB/s
@@ -278,32 +305,79 @@ this means 3,000 RCU / s * 4 KB / RCU = 12 MB/s
 <li>for writes, there's a limit of 1,000 read capacity units per second;
 this means 1,000 WCU / s * 1 KB / WCU = 1 MB/s</li>
 </ul>
-<p>Because of this, you have to be careful to distribute requests evenly acrosss partitions;
+<p>Because of this, you have to be careful
+to distribute requests evenly acrosss partitions;
 if there's no good natural partition key,
-you can use techniques such as sharding. <!-- TODO link --></p>
-<p>TODO (not necessarily here):</p>
+you can use techniques such as sharding (discussed below). <!-- TODO link --></p>
+<p>TODO: partition and sort keys are not real, you can use them for whatever you want</p>
+<p>The amount of consumed capacity units is what you are billed for.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
+While DynamoDB offers some server-side filtering capabilities
+that are not shown in my Python mock-up above
+(you can filter items based on expressions,
+and you can &quot;select&quot; only specific attributes),
+this only saves on network traffic and latency –
+data read to evaluate expressions still counts as read,
+and you will pay for it.
+Because of this, optimizing your data access is not just a performance matter,
+but a cost matter too.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
 <ul>
-<li>payment model (you can filter server side, but you still pay for the read)</li>
-<li>eventually consistent vs consistent</li>
-<li>features: conditional updates, transactions, atomic increment, streams, etc.</li>
-</ul>
-<hr />
-<ul>
-<li>background and best practices links<ul>
-<li>“best practices for designing and using partition keys…”</li>
-<li>best-practices</li>
-<li>“partitions and data distribution”</li>
-<li>“partition key design”</li>
-<li>“sort key design”</li>
-<li>“choosing the right dynamodb partition key”</li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html">Partitions and data distribution</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html">Read and write operations</a> (capacity unit consumption)</li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html">Partition key design</a><ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-uniform-load.html">Distributing workloads</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-sharding.html">Write sharding</a></li>
 </ul>
 </li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-sort-keys.html">Sort key design</a></li>
+<li><small>(blog)</small> <a class="external" href="https://aws.amazon.com/blogs/database/choosing-the-right-dynamodb-partition-key/">Choosing the Right DynamoDB Partition Key</a></li>
+</ul>
+</section>
+<h3 id="item-size">Item size<span class="headerlink">&nbsp;<a href="#item-size" title="permalink">#</a></span></h3>
+<p>Second, the maximum size of an item is 400 KB.
+This can be worked around by either splitting an item into multiple ones
+on the same partition,
+or by storing only the metadata in DynamoDB,
+with data somewhere else, like S3
+(this is a pretty common pattern).</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html#limits-items">Constraints # Items</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-use-s3-too.html">Large items</a></li>
+</ul>
+</section>
+<h3 id="page-size">Page size<span class="headerlink">&nbsp;<a href="#page-size" title="permalink">#</a></span></h3>
+<p>Finally, the result set of the query and scan operations
+is limited to 1 MB per page,
+but it is possible to stitch together multiple pages
+by using a form of <a class="internal" href="/query-builder-why#intermission-scrolling-window-queries">keyset pagination</a>
+(specifically, there's a <code>LastEvaluatedKey</code> that allows you to query/scan from the end of the previous page).</p>
+<p>However, this has implications on consistency,
+especially for secondary indexes –
+if an attribute used in a GSI primary or sort key changes,
+an item can appear zero or multiple times in the entire (multi-page) result set.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html#limits-api">Constraints # API-specific constraints</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.Pagination.html">Paginating query results</a></li>
+</ul>
+</section>
+<h2 id="features">Features<span class="headerlink">&nbsp;<a href="#features" title="permalink">#</a></span></h2>
+<p>TODO:</p>
+<ul>
+<li>eventually consistent vs consistent</li>
+<li>features: conditional updates, transactions, atomic increment, streams, etc.</li>
 </ul>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>TODO: &quot;inifinitely&quot;: cloud is someone else's computer;
 specifically, it scales horizontally and transparently as long as
-you configure the capacity correctly and you have the money <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+you configure the capacity correctly and you have the money;
+also, infinitely doesn't mean instantly <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>TODO: unless you use reserved capacity <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
