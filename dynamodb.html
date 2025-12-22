@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ five minute read
+∙ seven minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -133,6 +133,8 @@ most importantly <strong>single-table design</strong>.</p>
 to understand what idiomatic usage looks like
 and what the trade-offs are,
 and provide entry points to detailed documentation.</p>
+<!-- if you read one dynamodb thing, this should be it -->
+
 <!-- TODO: AWS docs are complex, and DDB being an old product with lots of features are particularly bad -->
 
 <!-- TODO: data model intro -->
@@ -151,7 +153,18 @@ and provide entry points to detailed documentation.</p>
 <li><a href="#page-size">Page size</a></li>
 </ul>
 </li>
+<li><a href="#indexes">Indexes</a>
+<ul>
+<li><a href="#global-secondary-indexes">Global secondary indexes</a></li>
+<li><a href="#local-secondary-indexes">Local secondary indexes</a></li>
+</ul>
+</li>
 <li><a href="#features">Features</a></li>
+<li><a href="#usage-patterns">Usage patterns</a>
+<ul>
+<li><a href="#synthetic-primary-keys">Synthetic primary keys</a></li>
+</ul>
+</li>
 </ul>
 </details>
 <h2 id="introduction">Introduction<span class="headerlink">&nbsp;<a href="#introduction" title="permalink">#</a></span></h2>
@@ -258,14 +271,27 @@ the sort key is optional, but in most cases you will have one</li>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">minimum</span><span class="o">=</span><span class="s1">&#39;b&#39;</span><span class="p">))</span>
 <span class="go">[{&#39;pk&#39;: 1, &#39;sk&#39;: &#39;b&#39;, &#39;two&#39;: &#39;ii&#39;}]</span>
 </code></pre></div>
-<p>Importantly, <strong>any operation that does not fit this model is expensive</strong>
-(ignoring indexes for now);
-for example, you always have to know the partition key,
-otherwise you need to do a full table scan
-(and at the scales you'd use DynamoDB at,
-this can mean billions of items).</p>
-<p>A consequence of DynamoDB being lower level than a relational database system
-is that
+<p>Importantly,
+<strong>any access not based on partition/sort key is expensive</strong>,
+since it forces you to do a full table scan
+(ignoring <a class="anchor" href="#indexes">indexes</a> for now),
+and at the scales you'd use DynamoDB at,
+this can mean going through billions of items.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p><small>(from <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=another%20example%20table%20named%20Music">here</a>)</small>
+Given a <em>Music</em> table where items correspond to songs,
+with the <em>Artist</em> attribute as primary key
+and <em>SongTitle</em> as sort key,
+you can efficiently:</p>
+<ul>
+<li>query songs by artist (sorted by song title)</li>
+<li>get the song by artist and song title</li>
+</ul>
+<p>... and that's it, anything else requires a full table scan.</p>
+</section>
+<p>A consequence of DynamoDB being this low level is that,
+unlike with a relational database system,
 <strong>query planning</strong> and <strong>index management</strong>
 happen at the <strong>application level</strong>,
 i.e. you have to do them yourself.
@@ -275,6 +301,12 @@ and accept that changes may require <strong>manual migrations</strong>
 (usually this involves updating the attributes used in an index
 for all the items in the database,
 possibly while temporarily supporting both variants in your application).</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.PrimaryKey">Core components # Primary key</a></li>
+</ul>
+</section>
 <h2 id="limits">Limits<span class="headerlink">&nbsp;<a href="#limits" title="permalink">#</a></span></h2>
 <p>The upside is that <strong>for supported dimensions,
 DynamoDB scales infinitely</strong><sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup> –
@@ -306,7 +338,7 @@ this means 3,000 RCU / s * 4 KB / RCU = 12 MB/s
 this means 1,000 WCU / s * 1 KB / WCU = 1 MB/s</li>
 </ul>
 <p>Because of this, you have to be careful
-to distribute requests evenly acrosss partitions;
+to distribute requests evenly across partitions;
 if there's no good natural partition key,
 you can use techniques such as sharding (discussed below). <!-- TODO link --></p>
 <p>TODO: partition and sort keys are not real, you can use them for whatever you want</p>
@@ -356,7 +388,7 @@ by using a form of <a class="internal" href="/query-builder-why#intermission-scr
 (specifically, there's a <code>LastEvaluatedKey</code> that allows you to query/scan from the end of the previous page).</p>
 <p>However, this has implications on consistency,
 especially for secondary indexes –
-if an attribute used in a GSI primary or sort key changes,
+if an attribute used in a <abbr title="Global Secondary Index">GSI</abbr> primary or sort key changes,
 an item can appear zero or multiple times in the entire (multi-page) result set.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
@@ -365,12 +397,111 @@ an item can appear zero or multiple times in the entire (multi-page) result set.
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.Pagination.html">Paginating query results</a></li>
 </ul>
 </section>
+<h2 id="indexes">Indexes<span class="headerlink">&nbsp;<a href="#indexes" title="permalink">#</a></span></h2>
+<p>When discussing tables,
+I said that access not based on partition/sort key is expensive.
+Secondary indexes allow other access patterns
+by using an <strong>alternate primary key</strong>
+composed of different attributes than that of the table.
+You can query or scan an index just like you would a table.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.SecondaryIndexes">Core components # Secondary indexes</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/SecondaryIndexes.html">Working with indexes</a></li>
+</ul>
+</section>
+<h3 id="global-secondary-indexes">Global secondary indexes<span class="headerlink">&nbsp;<a href="#global-secondary-indexes" title="permalink">#</a></span></h3>
+<p>Conceptually, a global secondary index is a separate table
+that's automatically kept in sync with the base table,
+and allows having different attributes as primary key.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p><small>(from <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=query%20the%20data%20by%20Genre%20and%20AlbumTitle">here</a>)</small>
+Continuing with the music example,
+a <abbr title="Global Secondary Index">GSI</abbr> with <em>Genre</em> and <em>AlbumTitle</em> as primary key
+would allow you to <em>also</em> efficiently:</p>
+<ul>
+<li>query songs by genre
+(and, if you collapse results in application code,
+query albums by genre <em>somewhat</em> efficiently)</li>
+<li>query songs by genre and album title
+(but, two albums can have the same genre and title,
+so you might want to group by artist in application code)</li>
+</ul>
+</section>
+<p>Aside from item partition and sort keys,
+the index can include additional attributes,
+so you can query the index alone;
+this is called <strong><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.Projections">attribute projection</a></strong>,
+and is analogous to a <a class="external" href="https://en.wikipedia.org/wiki/Database_index#Covering_index">covering index</a> in relational databases;
+however,
+if you need an attribute that's not in the index,
+you'll have to get it yourself from the base table
+(batch operations can make this faster). <!-- TODO link --></p>
+<p>Unlike real tables,
+<abbr title="Global Secondary Index">GSI</abbr>s support only eventually consistent reads,
+and their primary keys do not need to be unique.
+In all other respects,
+<strong><abbr title="Global Secondary Index">GSI</abbr>s behave like real tables</strong>:</p>
+<ul>
+<li>they have their own <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.ThroughputConsiderations">separate capacity</a></li>
+<li>they have no limits on size or the number of primary keys</li>
+<li>they have the same <a class="anchor" href="#partition-throughput">partition throughput</a> limits,
+and the same workarounds <!-- TODO link to sharding --></li>
+</ul>
+<p>You can have up to 20 <abbr title="Global Secondary Index">GSI</abbr>s per table,
+although in practice you can reuse them.</p>
+<!-- TODO link to overloading -->
+
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html">Global secondary indexes</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes.html">Best practices for secondary indexes</a></li>
+</ul>
+</section>
+<h3 id="local-secondary-indexes">Local secondary indexes<span class="headerlink">&nbsp;<a href="#local-secondary-indexes" title="permalink">#</a></span></h3>
+<p>A local secondary index allows you to have an <strong>alternate sort key</strong> for a partition
+(it is <em>local</em> to the partition).</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>For the same <em>Music</em> with <em>Artist</em> as partition key,
+a <abbr title="Local Secondary Index">LSI</abbr> with <em>Year</em> as sort key
+would allow you to <em>also</em> efficiently:</p>
+<ul>
+<li>query songs by artist in chronological order</li>
+<li>query songs by artist and year</li>
+</ul>
+</section>
+<p>Unlike <abbr title="Global Secondary Index">GSI</abbr>s, local secondary indexes support
+retrieving attributes <em>not</em> projected into the index
+(with higher latency and cost),
+and strongly consistent reads.</p>
+<p>However, <abbr title="Local Secondary Index">LSI</abbr>s have their downsides:
+they can only be created/deleted with the table,
+and <strong>using <abbr title="Local Secondary Index">LSI</abbr>s limits partition size to 10 GB</strong>
+(the size of the items in the table plus the items in <abbr title="Local Secondary Index">LSI</abbr>s);
+because of this, people usually prefer using <abbr title="Global Secondary Index">GSI</abbr>s.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LSI.html">Local secondary indexes</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes.html">Best practices for secondary indexes</a></li>
+</ul>
+</section>
 <h2 id="features">Features<span class="headerlink">&nbsp;<a href="#features" title="permalink">#</a></span></h2>
 <p>TODO:</p>
 <ul>
 <li>eventually consistent vs consistent</li>
 <li>features: conditional updates, transactions, atomic increment, streams, etc.</li>
 </ul>
+<h2 id="usage-patterns">Usage patterns<span class="headerlink">&nbsp;<a href="#usage-patterns" title="permalink">#</a></span></h2>
+<h3 id="synthetic-primary-keys">Synthetic primary keys<span class="headerlink">&nbsp;<a href="#synthetic-primary-keys" title="permalink">#</a></span></h3>
+<p>aka composite</p>
+<!-- TODO https://aws.amazon.com/about-aws/whats-new/2025/11/amazon-dynamodb-multi-attribute-composite-keys-global-secondary-indexes/ -->
+
+<p>...</p>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>TODO: &quot;inifinitely&quot;: cloud is someone else's computer;
