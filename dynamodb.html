@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ seven minute read
+∙ 11 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -128,7 +128,7 @@ window.addEventListener('resize', set_vh);
 <p>This is the first article in a series
 providing an overview
 of the main concepts of <strong>DynamoDB</strong> and associated patterns,
-most importantly <strong>single-table design</strong>.</p>
+most importantly <strong>single table design</strong>.</p>
 <p>The goal is to allow someone who hasn't read the entire developer guide
 to understand what idiomatic usage looks like
 and what the trade-offs are,
@@ -160,9 +160,14 @@ and provide entry points to detailed documentation.</p>
 </ul>
 </li>
 <li><a href="#features">Features</a></li>
-<li><a href="#usage-patterns">Usage patterns</a>
+<li><a href="#design-patterns">Design patterns</a>
 <ul>
-<li><a href="#synthetic-primary-keys">Synthetic primary keys</a></li>
+<li><a href="#composite-keys">Composite keys</a></li>
+<li><a href="#single-table-design">Single table design</a></li>
+<li><a href="#partition-key-sharding">Partition key sharding</a></li>
+<li><a href="#gsi-overloading">GSI overloading</a></li>
+<li><a href="#sparse-indexes">Sparse indexes</a></li>
+<li><a href="#many-to-one-indexes">many to one indexes</a></li>
 </ul>
 </li>
 </ul>
@@ -301,6 +306,8 @@ and accept that changes may require <strong>manual migrations</strong>
 (usually this involves updating the attributes used in an index
 for all the items in the database,
 possibly while temporarily supporting both variants in your application).</p>
+<!-- TODO philosophy https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html#bp-general-nosql-design-concepts -->
+
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -341,7 +348,6 @@ this means 1,000 WCU / s * 1 KB / WCU = 1 MB/s</li>
 to distribute requests evenly across partitions;
 if there's no good natural partition key,
 you can use techniques such as sharding (discussed below). <!-- TODO link --></p>
-<p>TODO: partition and sort keys are not real, you can use them for whatever you want</p>
 <p>The amount of consumed capacity units is what you are billed for.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
 While DynamoDB offers some server-side filtering capabilities
 that are not shown in my Python mock-up above
@@ -378,6 +384,7 @@ with data somewhere else, like S3
 <ul>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html#limits-items">Constraints # Items</a></li>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-use-s3-too.html">Large items</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-vertical-partitioning">Data modeling building blocks # Vertical partitioning building block</a></li>
 </ul>
 </section>
 <h3 id="page-size">Page size<span class="headerlink">&nbsp;<a href="#page-size" title="permalink">#</a></span></h3>
@@ -495,13 +502,130 @@ because of this, people usually prefer using <abbr title="Global Secondary Index
 <ul>
 <li>eventually consistent vs consistent</li>
 <li>features: conditional updates, transactions, atomic increment, streams, etc.</li>
+<li>batch operations</li>
 </ul>
-<h2 id="usage-patterns">Usage patterns<span class="headerlink">&nbsp;<a href="#usage-patterns" title="permalink">#</a></span></h2>
-<h3 id="synthetic-primary-keys">Synthetic primary keys<span class="headerlink">&nbsp;<a href="#synthetic-primary-keys" title="permalink">#</a></span></h3>
-<p>aka composite</p>
-<!-- TODO https://aws.amazon.com/about-aws/whats-new/2025/11/amazon-dynamodb-multi-attribute-composite-keys-global-secondary-indexes/ -->
-
-<p>...</p>
+<h2 id="design-patterns">Design patterns<span class="headerlink">&nbsp;<a href="#design-patterns" title="permalink">#</a></span></h2>
+<p>To help deal with DynamoDB being as low level as it is
+(i.e. to work around its <a class="anchor" href="#limits">limits</a>,
+and perhpas make best use of its <a class="anchor" href="#features">features</a>),
+a number of design patterns have arisen,
+documented pretty extensively in the official documentation.</p>
+<p>(Why these patterns are so slow to make their way into SDKs,
+or even better, in the actual product,
+might make this more opinionated than I want it to be.)</p>
+<p>TODO: philosophy section (pull stuff from the other paragraps, maybe);
+mention Amazon's dislike/trauma with SQL, and their special needs;
+quote from what why when – “well optimized table looks like machine code”; cool, but why would i want that?</p>
+<p>TODO: in this section, I'll go through some of the most important patterns (nonexhaustive)</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling.html">Data modeling</a><ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-schemas.html">Data modeling schemas</a> (worked examples)</li>
+</ul>
+</li>
+</ul>
+</section>
+<h3 id="composite-keys">Composite keys<span class="headerlink">&nbsp;<a href="#composite-keys" title="permalink">#</a></span></h3>
+<p>The most basic pattern that underpins many of the other patterns
+is that
+your partition and sort keys are not natural attributes of your data,
+but composites of multiple other attributes,
+to enable specific access patterns;
+this works equally well with both table and index keys.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>In <a class="anchor" href="#single-table-design">single table design</a>,
+you have multiple types of items in the same table / partition
+by prefixing the key with the type,
+e.g. <code>song#{SongTitle}</code>.</p>
+<p>Or, you can sort lexicographically by more than one attribute
+by having a sort key composed of multiple attributes,
+e.g. <code>{AlbumTitle}#{SongTitle}</code>.</p>
+<p>Or, in <a class="anchor" href="#partition-key-sharding">partition key sharding</a>,
+you spread the load on a <abbr title="Global Secondary Index">GSI</abbr> partition by splitting one partition key
+into multiple ones, e.g. <code>{year}#{shard}</code>.</p>
+</section>
+<p>This is so pervasive that in November 2025,
+they finally added support for <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.DesignPattern.MultiAttributeKeys.html">multi-attribute keys</a>,
+no string manipulation needed
+(alas, only for <abbr title="Global Secondary Index">GSI</abbr>s, not tables).</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-composite">Data modeling building blocks # Composite sort key</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-adjacency-graphs.html">Many-to-many relationships</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.MultiAttributeKeys">Global secondary indexes # Multi-attribute key schema</a></li>
+</ul>
+</section>
+<h3 id="single-table-design">Single table design<span class="headerlink">&nbsp;<a href="#single-table-design" title="permalink">#</a></span></h3>
+<p>In most cases, <abbr title="Amazon Web Services">AWS</abbr> <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html#bp-general-nosql-design-approach">recommends</a> using as few tables as possible:</p>
+<blockquote>
+<p>As a general rule,
+you should maintain as few tables as possible in a DynamoDB application.
+[...]
+A single table with inverted indexes can usually enable simple queries
+to create and retrieve the complex hierarchical data structures
+required by your application.</p>
+</blockquote>
+<p>The culmination of this is <strong>single table design</strong>,
+where a DynamoDB table corresponds to a whole database
+in a relational database system.</p>
+<p>You do this by storing multiple entities in the same table,
+and distinguish between them by prefixing the key with the type.</p>
+<p>One way of doing it is to have all items related to a &quot;top-level&quot; entity
+on the same partition,
+and prefix the sort key with the item type;
+this has the advantage of data locality,
+which reduces the number of queries needed to get related items,
+and may also make them faster too
+(since DynamoDB ends up talking with fewer nodes).</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>You could use <code>Artist</code> as partition key,
+and the sort key to tell entities apart,
+e.g. <code>artist#{Artist}</code>, <code>album#{AlbumTitle}</code>, and <code>song#{SongTitle}</code>.</p>
+</section>
+<p>If some of the entities have very different access patterns,
+you can put them in dedicated partitions instead using the same trick.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>If an artist has so many songs that you reach
+<a class="anchor" href="#partition-throughput">partition thoughput</a> limits,
+perhaps it's better to put each album on its own partition:</p>
+<ul>
+<li>partition key <code>artist#{Artist}</code>, sort key <code>details</code></li>
+<li>partition key <code>album#{Artist}#{AlbumTitle}</code>, sort key <code>song#{SongTitle}</code></li>
+</ul>
+</section>
+<p>A consequence of this is that
+if you want to list all items of specific type,
+you have to use a <abbr title="Global Secondary Index">GSI</abbr>
+(otherwise, you end up doing full table scan);
+this can come with hitting <em><abbr title="Global Secondary Index">GSI</abbr></em> partition throughput limits,
+but <a class="anchor" href="#partition-key-sharding">partition key sharding</a>
+and <a class="anchor" href="#sparse-indexes">sparse indexes</a> can help.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html">NoSQL design</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-foundations.html#data-modeling-foundations-single">Data modeling foundations # Single table design foundation</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-relational-modeling.html">Relational modeling</a></li>
+<li><small>(blog)</small> <a class="external" href="https://aws.amazon.com/blogs/database/single-table-vs-multi-table-design-in-amazon-dynamodb/">Single-table vs. multi-table design in Amazon DynamoDB</a></li>
+<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-single-table/">The What, Why, and When of Single-Table Design with DynamoDB</a></li>
+</ul>
+</section>
+<h3 id="partition-key-sharding">Partition key sharding<span class="headerlink">&nbsp;<a href="#partition-key-sharding" title="permalink">#</a></span></h3>
+<p>TODO</p>
+<p>some items don’t have natural partition key granular enough (resulting in too many writes on pk); bp-partition-key-sharding.html by adding a number from known range to the pk (example); can also be done for the gsi pk attributes (called bp-indexes-gsi-sharding.html)</p>
+<p>allows scatter reads on the sk (? means on multiple pks? find source)</p>
+<p>number of shards is tradeoff (mode shards more queries; too few, might overload partitions; also, if you expect to increase number of partitions, need to handle it (either move from old to new pk prefix / index entirely; or add new shards (but careful to keep old items on existing shard; or add new shards and move old item in-place on their new shards; either way, careful about uptime)</p>
+<h3 id="gsi-overloading"><abbr title="Global Secondary Index">GSI</abbr> overloading<span class="headerlink">&nbsp;<a href="#gsi-overloading" title="permalink">#</a></span></h3>
+<p>item attributes that are custom-made to be used as gsi pk/sk; just like table has multiple entities, gsi can have indexes for multiple entities – gsi overloading (bp-gsi-overloading.html)</p>
+<h3 id="sparse-indexes">Sparse indexes<span class="headerlink">&nbsp;<a href="#sparse-indexes" title="permalink">#</a></span></h3>
+<p>if item doesn’t have gsi pk/sk attribute, it won’t appear in index (bp-indexes-general-sparse-indexes.html); only paying <abbr title="Global Secondary Index">GSI</abbr> for items in index</p>
+<h3 id="many-to-one-indexes">many to one indexes<span class="headerlink">&nbsp;<a href="#many-to-one-indexes" title="permalink">#</a></span></h3>
+<p>use multiple items in main table, the real one plus additional ones that are only meant as an index; can</p>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>TODO: &quot;inifinitely&quot;: cloud is someone else's computer;
