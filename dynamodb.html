@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ 11 minute read
+∙ 12 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -544,7 +544,7 @@ by having a sort key composed of multiple attributes,
 e.g. <code>{AlbumTitle}#{SongTitle}</code>.</p>
 <p>Or, in <a class="anchor" href="#partition-key-sharding">partition key sharding</a>,
 you spread the load on a <abbr title="Global Secondary Index">GSI</abbr> partition by splitting one partition key
-into multiple ones, e.g. <code>{year}#{shard}</code>.</p>
+into multiple ones, e.g. <code>{Genre}#{shard}</code>.</p>
 </section>
 <p>This is so pervasive that in November 2025,
 they finally added support for <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.DesignPattern.MultiAttributeKeys.html">multi-attribute keys</a>,
@@ -570,15 +570,15 @@ required by your application.</p>
 </blockquote>
 <p>The culmination of this is <strong>single table design</strong>,
 where a DynamoDB table corresponds to a whole database
-in a relational database system.</p>
-<p>You do this by storing multiple entities in the same table,
-and distinguish between them by prefixing the key with the type.</p>
+in a relational database system.
+You do this by storing multiple entities in the same table,
+and distinguishing between them by prefixing the key with the type.</p>
 <p>One way of doing it is to have all items related to a &quot;top-level&quot; entity
 on the same partition,
 and prefix the sort key with the item type;
 this has the advantage of data locality,
 which reduces the number of queries needed to get related items,
-and may also make them faster too
+and may also make them faster
 (since DynamoDB ends up talking with fewer nodes).</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
@@ -587,7 +587,8 @@ and the sort key to tell entities apart,
 e.g. <code>artist#{Artist}</code>, <code>album#{AlbumTitle}</code>, and <code>song#{SongTitle}</code>.</p>
 </section>
 <p>If some of the entities have very different access patterns,
-you can put them in dedicated partitions instead using the same trick.</p>
+you can put them in dedicated partitions instead
+using the same prefix trick.</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
 <p>If an artist has so many songs that you reach
@@ -602,9 +603,8 @@ perhaps it's better to put each album on its own partition:</p>
 if you want to list all items of specific type,
 you have to use a <abbr title="Global Secondary Index">GSI</abbr>
 (otherwise, you end up doing full table scan);
-this can come with hitting <em><abbr title="Global Secondary Index">GSI</abbr></em> partition throughput limits,
-but <a class="anchor" href="#partition-key-sharding">partition key sharding</a>
-and <a class="anchor" href="#sparse-indexes">sparse indexes</a> can help.</p>
+this can, in turn, lead to hitting <em><abbr title="Global Secondary Index">GSI</abbr></em> partition throughput limits,
+but <a class="anchor" href="#partition-key-sharding">partition key sharding</a> can help.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -616,10 +616,83 @@ and <a class="anchor" href="#sparse-indexes">sparse indexes</a> can help.</p>
 </ul>
 </section>
 <h3 id="partition-key-sharding">Partition key sharding<span class="headerlink">&nbsp;<a href="#partition-key-sharding" title="permalink">#</a></span></h3>
-<p>TODO</p>
-<p>some items don’t have natural partition key granular enough (resulting in too many writes on pk); bp-partition-key-sharding.html by adding a number from known range to the pk (example); can also be done for the gsi pk attributes (called bp-indexes-gsi-sharding.html)</p>
-<p>allows scatter reads on the sk (? means on multiple pks? find source)</p>
-<p>number of shards is tradeoff (mode shards more queries; too few, might overload partitions; also, if you expect to increase number of partitions, need to handle it (either move from old to new pk prefix / index entirely; or add new shards (but careful to keep old items on existing shard; or add new shards and move old item in-place on their new shards; either way, careful about uptime)</p>
+<p>Sometimes, not even a partition key composed of multiple natural attributes
+is enough to spread the load evenly across partition;
+one way of dealing with this is to put items corresponding
+to a natural attribute on multiple partitions.</p>
+<p>The question is then, what should the partition key for an item be?
+One possibility is to use a <strong>random suffix</strong> from a known range;
+this still allows you to list items for a natural attribute
+by doing multipe queries, one for each suffix.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>For our table of songs,
+using the album as part of the partition key may not work,
+since not all songs are part of an album these days.
+Instead, we could use <code>{Artist}#{randrange(10)}</code> as partition key.
+Then, to list all the songs for an artist, we'd do:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">for</span> <span class="n">shard</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">dynamodb</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">artist</span><span class="si">}</span><span class="s2">#</span><span class="si">{</span><span class="n">shard</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">):</span>
+        <span class="k">yield</span> <span class="n">item</span>
+</code></pre></div>
+<p>Now we can have 10 times as many items
+before reaching throughput limits.</p>
+</section>
+<p>A downside of random suffixes is that you can't get a specific item,
+since you don't know what suffix you used for any given item.
+An alternative is to <strong>calculate the suffix</strong>
+from something that you do know,
+like the hash of an attribute modulo N.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>Instead of a random number,
+we could use <code>{Artist}#{hash(SongTitle) % 10)}</code>.
+Then, to get a song by artist and song title:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">shard</span> <span class="o">=</span> <span class="nb">int</span><span class="o">.</span><span class="n">from_bytes</span><span class="p">(</span><span class="n">sha256</span><span class="p">(</span><span class="n">song_title</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">digest</span><span class="p">())</span> <span class="o">%</span> <span class="mi">10</span>
+<span class="n">dynamodb</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">artist</span><span class="si">}</span><span class="s2">#</span><span class="si">{</span><span class="n">shard</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">song_title</span><span class="p">)</span>
+</code></pre></div>
+</section>
+<p>Sharding may be even more important for <abbr title="Global Secondary Index">GSI</abbr>s,
+where a lot of times you want to list items by a low-cardinality attribute.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>Assuming you have dedicated album items,
+to list all the albums by genre you might use a <abbr title="Global Secondary Index">GSI</abbr>
+with <code>{Genre}#{hash(AlbumTitle} % 100}</code> as primary key.</p>
+</section>
+<p>One other benefit of sharding
+is that you can query them in parallel,
+which can speed up getting the entire result set.</p>
+<hr />
+<p>The number of shards is a trade-off –
+too many shards means more queries,
+too few shards means you might still overload the partitions.</p>
+<p>Importantly, <strong>increasing the number of shards is non-trivial</strong>,
+so ideally you should avoid it if possible.</p>
+<p>One way to do it is
+to move to a new index (or just partition key prefix) entirely,
+which means you need to backfill existing items in the new index,
+and then switch to it.
+Alternatively, you could add new shards,
+and either keep old items on existing shards
+(e.g. by assigning them an &quot;epoch&quot; based on when they were created),
+or re-balance them
+(although this may not be possible
+without downtime / inconsistencies).</p>
+<p>Regardless of what you do,
+it requires support in application code,
+and careful orchestration when making the switch
+(for example,
+if you expose a <code>LastEvaluatedKey</code>-derived pagination token to users,
+you have either temporarily support both,
+or accept some downtime).</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-sharding.html">Write sharding</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes-gsi-sharding.html"><abbr title="Global Secondary Index">GSI</abbr> sharding</a></li>
+</ul>
+</section>
 <h3 id="gsi-overloading"><abbr title="Global Secondary Index">GSI</abbr> overloading<span class="headerlink">&nbsp;<a href="#gsi-overloading" title="permalink">#</a></span></h3>
 <p>item attributes that are custom-made to be used as gsi pk/sk; just like table has multiple entities, gsi can have indexes for multiple entities – gsi overloading (bp-gsi-overloading.html)</p>
 <h3 id="sparse-indexes">Sparse indexes<span class="headerlink">&nbsp;<a href="#sparse-indexes" title="permalink">#</a></span></h3>
