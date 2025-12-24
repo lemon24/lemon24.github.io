@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ 12 minute read
+∙ 13 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -165,8 +165,8 @@ and provide entry points to detailed documentation.</p>
 <li><a href="#composite-keys">Composite keys</a></li>
 <li><a href="#single-table-design">Single table design</a></li>
 <li><a href="#partition-key-sharding">Partition key sharding</a></li>
-<li><a href="#gsi-overloading">GSI overloading</a></li>
 <li><a href="#sparse-indexes">Sparse indexes</a></li>
+<li><a href="#gsi-overloading">GSI overloading</a></li>
 <li><a href="#many-to-one-indexes">many to one indexes</a></li>
 </ul>
 </li>
@@ -583,8 +583,8 @@ and may also make them faster
 <section class="admonition note">
 <p class="admonition-title">Example</p>
 <p>You could use <code>Artist</code> as partition key,
-and the sort key to tell entities apart,
-e.g. <code>artist#{Artist}</code>, <code>album#{AlbumTitle}</code>, and <code>song#{SongTitle}</code>.</p>
+and the sort key to tell sub-entities apart,
+e.g. <code>artist</code>, <code>album#{AlbumTitle}</code>, and <code>song#{AlbumTitle}#{SongTitle}</code>.</p>
 </section>
 <p>If some of the entities have very different access patterns,
 you can put them in dedicated partitions instead
@@ -593,10 +593,14 @@ using the same prefix trick.</p>
 <p class="admonition-title">Example</p>
 <p>If an artist has so many songs that you reach
 <a class="anchor" href="#partition-throughput">partition thoughput</a> limits,
-perhaps it's better to put each album on its own partition:</p>
+perhaps it's better to put the songs in an album on their own partitions:</p>
 <ul>
-<li>partition key <code>artist#{Artist}</code>, sort key <code>details</code></li>
-<li>partition key <code>album#{Artist}#{AlbumTitle}</code>, sort key <code>song#{SongTitle}</code></li>
+<li>partition key <code>artist#{Artist}</code><ul>
+<li>sort key <code>artist</code></li>
+<li>sort key <code>album#{AlbumTitle}</code></li>
+</ul>
+</li>
+<li>partition key <code>song#{Artist}#{AlbumTitle}</code>, sort key <code>{SongTitle}</code></li>
 </ul>
 </section>
 <p>A consequence of this is that
@@ -657,8 +661,20 @@ where a lot of times you want to list items by a low-cardinality attribute.</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
 <p>Assuming you have dedicated album items,
-to list all the albums by genre you might use a <abbr title="Global Secondary Index">GSI</abbr>
-with <code>{Genre}#{hash(AlbumTitle} % 100}</code> as primary key.</p>
+to list all the albums
+you could use a single <abbr title="Global Secondary Index">GSI</abbr> partition
+with partition key <code>albums</code> (literal string)
+and sort key <code>{AlbumTitle}</code>,
+but this may overload the partition.</p>
+<p>To spread the load,
+you could use <code>album#{hash(AlbumTitle} % 100}</code>
+as partition key
+if you don't care about them being sorted,
+or something like <code>album#{AlbumTitle[0].lower()}</code>
+if you want them sorted alphabetically
+(but, careful about
+some first letters <a class="external" href="https://en.wikipedia.org/wiki/Letter_frequency#Relative_frequencies_of_the_first_letters_of_a_word_in_English_language">being more popular than others</a>,
+and some albums <a class="external" href="https://www.discogs.com/release/10506005--">not starting with a letter at all</a>).</p>
 </section>
 <p>One other benefit of sharding
 is that you can query them in parallel,
@@ -693,10 +709,64 @@ or accept some downtime).</p>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes-gsi-sharding.html"><abbr title="Global Secondary Index">GSI</abbr> sharding</a></li>
 </ul>
 </section>
-<h3 id="gsi-overloading"><abbr title="Global Secondary Index">GSI</abbr> overloading<span class="headerlink">&nbsp;<a href="#gsi-overloading" title="permalink">#</a></span></h3>
-<p>item attributes that are custom-made to be used as gsi pk/sk; just like table has multiple entities, gsi can have indexes for multiple entities – gsi overloading (bp-gsi-overloading.html)</p>
 <h3 id="sparse-indexes">Sparse indexes<span class="headerlink">&nbsp;<a href="#sparse-indexes" title="permalink">#</a></span></h3>
-<p>if item doesn’t have gsi pk/sk attribute, it won’t appear in index (bp-indexes-general-sparse-indexes.html); only paying <abbr title="Global Secondary Index">GSI</abbr> for items in index</p>
+<p>If an item doesn't have one of the attributes
+used as index partition/sort key,
+it won't appear in the index
+(and, you won't pay for it).
+This can be used deliberately to query
+only a subset of the items in the table,
+like those of a specific type,
+or that are in a specific state.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>Assuming you have dedicated album items,
+an alternative way to list all the albums
+is to have a <abbr title="Global Secondary Index">GSI</abbr>
+with <code>{AlbumTitle}</code> as partition key,
+and just scan the entire index
+(the primary key should be a dedicated attribute,
+say <em>Albums<abbr title="Global Secondary Index">GSI</abbr>PK</em>,
+so that only album items appear in the index;
+the sort key can be any other attribute).</p>
+<p>Or, to list only cover songs,
+you could have dedicated <abbr title="Global Secondary Index">GSI</abbr>
+with <em>CoverOfArtist</em> as primary key
+and <em>SongTitle</em> as sort key.</p>
+</section>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes-general-sparse-indexes.html">Sparse indexes</a></li>
+</ul>
+</section>
+<h3 id="gsi-overloading"><abbr title="Global Secondary Index">GSI</abbr> overloading<span class="headerlink">&nbsp;<a href="#gsi-overloading" title="permalink">#</a></span></h3>
+<p>Just like tables
+can have more than one type of item,
+so can <abbr title="Global Secondary Index">GSI</abbr>s –
+that is,
+you can put different things in the <abbr title="Global Secondary Index">GSI</abbr> partition/sort key attributes,
+depending on item type.
+This allows indexing more fields than the 20 <abbr title="Global Secondary Index">GSI</abbr>s per table quota,
+and may be cheaper too,
+since fewer <abbr title="Global Secondary Index">GSI</abbr>s can make better use of spare provisioned capacity.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>For a table that contains both artist and album items,
+a single <abbr title="Global Secondary Index">GSI</abbr> could be used for entirely different purposes:</p>
+<ul>
+<li>artist: partition key <code>artist#{Country}</code>, sort key <code>details</code>
+– list artists by country</li>
+<li>album: partition key <code>album#{Genre}</code>, sort key <code>{Artist}</code>
+– list albums by genre</li>
+</ul>
+</section>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-gsi-overloading.html"><abbr title="Global Secondary Index">GSI</abbr> overloading</a></li>
+</ul>
+</section>
 <h3 id="many-to-one-indexes">many to one indexes<span class="headerlink">&nbsp;<a href="#many-to-one-indexes" title="permalink">#</a></span></h3>
 <p>use multiple items in main table, the real one plus additional ones that are only meant as an index; can</p>
 <section class="footnotes">
