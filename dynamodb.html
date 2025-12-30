@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ 16 minute read
+∙ 17 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -178,7 +178,6 @@ and provide entry points to detailed documentation.</p>
 <li><a href="#sparse-indexes">Sparse indexes</a></li>
 <li><a href="#base-table-indexes">Base-table indexes</a></li>
 <li><a href="#optimistic-locking">Optimistic locking</a></li>
-<li><a href="#atomic-counters">Atomic counters</a></li>
 </ul>
 </li>
 </ul>
@@ -508,7 +507,7 @@ because of this, people usually prefer using <abbr title="Global Secondary Index
 </ul>
 </section>
 <h2 id="features">Features<span class="headerlink">&nbsp;<a href="#features" title="permalink">#</a></span></h2>
-<p>Before we go into how to structure data for efficient use with DynamoB,
+<p>Before we go into how to structure data for efficient use with DynamoDB,
 let's look at some of the things you can do with tables
 besides simple <abbr title="create, read, update, and delete">CRUD</abbr> operations.</p>
 <h3 id="eventual-consistency">Eventual consistency<span class="headerlink">&nbsp;<a href="#eventual-consistency" title="permalink">#</a></span></h3>
@@ -587,7 +586,7 @@ in a single request up to 16 MB in size;
 this allows reading / writing / deleting large amounts of data efficiently.</p>
 <p>The operations within a batch are entirely independent from one another –
 some of the operations may fail / a partial result may be returned
-(e.g. if <a class="anchor" href="#partition-throughput">partition throughput limits</a> are reached).
+(e.g. if <a class="anchor" href="#partition-throughput">throughput limits</a> are reached).
 Also, batch writes don't support condition expressions.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
@@ -597,9 +596,25 @@ Also, batch writes don't support condition expressions.</p>
 </ul>
 </section>
 <h3 id="streams">Streams<span class="headerlink">&nbsp;<a href="#streams" title="permalink">#</a></span></h3>
-<p>TODO</p>
-<p>among others, good for getting data out into some other form
-(e.g. athena)</p>
+<p>Streams are DynamoDB's <a class="external" href="https://en.wikipedia.org/wiki/Change_data_capture">change data capture</a> mechanism,
+and allow you to get notified in &quot;near-real time&quot;
+when an item is created, updated, or deleted.
+There are two flavors of streams,
+<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html">DynamoDB Streams</a> (the original one)
+and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/kds.html">Kinesis Data Streams</a> (integration with Amazon Kinesis).</p>
+<p>Two notable applications of streams are:</p>
+<ul>
+<li>Lambda triggers (similar to triggers in relational databases)</li>
+<li>replication to other places like S3 or Redshift (via Firehose)</li>
+</ul>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.Streams">Core components # DynamoDB Streams</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/streamsmain.html">Working with streams</a></li>
+<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/bites/dynamodb-streams/">What you should know about DynamoDB Streams</a></li>
+</ul>
+</section>
 <h2 id="design-patterns">Design patterns<span class="headerlink">&nbsp;<a href="#design-patterns" title="permalink">#</a></span></h2>
 <p>To help deal with DynamoDB being as low level as it is
 (i.e. to work around its <a class="anchor" href="#limits">limits</a>,
@@ -914,19 +929,43 @@ of <a class="anchor" href="#single-table-design">single table design</a>.</p>
 </ul>
 </section>
 <h3 id="optimistic-locking">Optimistic locking<span class="headerlink">&nbsp;<a href="#optimistic-locking" title="permalink">#</a></span></h3>
+<p><a class="external" href="https://en.wikipedia.org/wiki/Optimistic_concurrency_control">Optimistic locking</a> is a concurrency control method
+where you're assuming conflicts are rare,
+so instead of acquiring a lock before doing your changes,
+you check if the data has changed right before commiting,
+as an atomic operation.</p>
+<p>In DynamoDB,
+that atomic operation is a <a class="anchor" href="#conditional-updates">conditional update</a>.
+Items have a version attribute,
+and every time you want to update the item, you:</p>
+<ol>
+<li>read the item, including the version</li>
+<li>increment the version and modify the item</li>
+<li>update the item, using a condition expression to ensure the version matches<ol>
+<li>if successful, you're done</li>
+<li>else, start over from the beginning</li>
+</ol>
+</li>
+</ol>
+<p>Notably,
+you can use this with transactions
+to update groups of related items,
+(like in the <a class="anchor" href="#base-table-indexes">base-table index</a> pattern above),
+with only the &quot;main&quot; item requiring a version.</p>
+<p>The upside of this pattern is that most of the time,
+the update will succeed, which should be faster on average
+(also, strongly-consistent reads can lower the chance of conflicts).
+The downside is that your application needs to support this model explicitly
+(it has to be possible to &quot;start over&quot;,
+which can complicate the logic,
+especially if besides updating the item
+you're interacting with an external system,
+e.g. to send a notification).</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/BestPractices_ImplementingVersionControl.html">Implementing version control</a> via optimistic locking (Python example)</li>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBMapper.OptimisticLocking.html">Optimistic locking with version number</a> (Java example)</li>
-</ul>
-</section>
-<h3 id="atomic-counters">Atomic counters<span class="headerlink">&nbsp;<a href="#atomic-counters" title="permalink">#</a></span></h3>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/example_dynamodb_Scenario_AtomicCounterOperations_section.html">Use atomic counter operations</a> (example)</li>
-<li><small>(blog)</small> <a class="external" href="https://aws.amazon.com/blogs/database/implement-resource-counters-with-amazon-dynamodb/">Implement resource counters with Amazon DynamoDB</a></li>
 </ul>
 </section>
 <section class="footnotes">
