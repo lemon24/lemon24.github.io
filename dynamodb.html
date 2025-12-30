@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ 17 minute read
+∙ 18 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -218,8 +218,84 @@ A DynamoDB attribute corresponds to a field in a relational database system.</dd
 </ul>
 </section>
 <h2 id="philosophy">Philosophy<span class="headerlink">&nbsp;<a href="#philosophy" title="permalink">#</a></span></h2>
-<p>TODO</p>
-<p>https://blog.bradfieldcs.com/you-are-not-google-84912cf44afb</p>
+<p>From the user's point of view,
+DynamoDB is just a <strong>fancy cloud <a class="external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></strong>
+(this is only a slight exaggeration,
+as we'll see in the next section).</p>
+<p>A consequence of DynamoDB being this low level is that,
+unlike with a relational database,
+<strong>query planning</strong> and <strong>index management</strong>
+happen at the <strong>application level</strong>,
+i.e. you have to do them yourself.
+In turn, this means
+you need to have a clear and <strong>upfront understanding</strong>
+of your application's <strong>access patterns</strong>,
+and accept that changes to them mean changes to the application.</p>
+<p>In return, you get
+a <strong>managed</strong>,
+<strong>highly-available</strong> database
+that <strong>scales infinitely</strong><sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
+–
+there are no limits on table size or the number of items in a table,
+and most existing limits are clearly documented,
+enabling <strong>predictable performance</strong>.</p>
+<p>Even so, the complexity price can be heavy;
+according to the <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-foundations.html#data-modeling-foundations-single">documentation</a>,
+the first disadvantage of <a class="anchor" href="#single-table-design">single table design</a> is that:</p>
+<blockquote>
+<p>[the] learning curve can be steep due to paradoxical design compared to relational databases</p>
+</blockquote>
+<p>As <a class="external" href="https://www.trek10.com/blog/dynamodb-single-table-relational-modeling/">this article</a> puts it:</p>
+<blockquote>
+<p>a well-optimized single-table DynamoDB layout looks more like machine code than a simple spreadsheet</p>
+</blockquote>
+<p>Which admittedly sounds pretty cool,
+but why would I want that?</p>
+<p>Perhaps it's worth having a look at where DynamoDB comes from.</p>
+<p>In 2017,
+five years after DynamoDB was released as an <abbr title="Amazon Web Services">AWS</abbr> service,
+and twn years after some version of it was already used internally,
+Amazon.com was still using Oracle,
+and <a class="external" href="https://youtu.be/vPF9l9OmiXE?t=449">still had</a>
+75 PB of data
+in nearly 7500 databases
+owned by 100+ teams with thousands of applications
+<em>only for <abbr title="Online transaction processing">OLTP</abbr> workloads</em>.
+That sounds pretty traumatic indeed
+–
+so traumatic that they <a class="external" href="https://news.ycombinator.com/item?id=42677767">allegedly</a>
+banned <abbr title="Online transaction processing">OLTP</abbr> relational databases internally,
+and teams could use one only with VP approval.
+(That is not to say relational databases
+can't have some of the advantages of DynamoDB
+–
+<a class="external" href="https://en.wikipedia.org/wiki/Distributed_SQL">distributed SQL</a> databases like Google's <a class="external" href="https://en.wikipedia.org/wiki/Spanner_(database)">Spanner</a> and <a class="external" href="https://en.wikipedia.org/wiki/CockroachDB">CockroachDB</a>
+have existed for a while now,
+and even <abbr title="Amazon Web Services">AWS</abbr> seems to be <a class="external" href="https://aws.amazon.com/blogs/database/introducing-amazon-aurora-dsql/">warming up</a> to the idea.)</p>
+<p>Yeah, coming from <em>that</em>,
+DynamoDB doesn't necessarily add complexity.</p>
+<p>And you're not entirely on your own
+–
+to help with the complexity,
+a number of design patterns have arisen,
+documented pretty extensively in the official documentation,
+and which we'll discuss below.
+(Why the patterns are so slow to make their way into SDKs,
+or even better, in DynamoDB itself, is an entirely different question;
+perhaps having hundreds of teams makes that less pressing.)</p>
+<p>So, should you use DynamoDB?
+If you know you <a class="external" href="https://blog.bradfieldcs.com/you-are-not-google-84912cf44afb">need the scale</a>, go for it.
+Otherwise, computers are pretty powerful nowadays,
+maybe just use Postgres (or <a class="external" href="https://crawshaw.io/blog/one-process-programming-notes">even</a> <a class="external" href="https://blog.wesleyac.com/posts/consider-sqlite">SQLite</a>).</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html">NoSQL design</a></li>
+<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-limits/#the-dynamodb-philosophy-of-limits">The Three DynamoDB Limits You Need to Know # The DynamoDB philosophy of limits</a></li>
+<li><small>(paper)</small> <a class="external" href="https://assets.amazon.science/ac/1d/eb50c4064c538c8ac440ce6a1d91/dynamo-amazons-highly-available-key-value-store.pdf">Dynamo: Amazon’s Highly Available Key-value Store</a> (2007)</li>
+<li><small>(paper)</small> <a class="external" href="https://www.usenix.org/system/files/atc22-elhemali.pdf">Amazon DynamoDB: A Scalable, Predictably Performant, and Fully Managed NoSQL Database Service</a> (2022)</li>
+</ul>
+</section>
 <h2 id="tables">Tables<span class="headerlink">&nbsp;<a href="#tables" title="permalink">#</a></span></h2>
 <p>Conceptually, a DynamoDB table is a <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table</a> of <a class="external" href="https://en.wikipedia.org/wiki/B-tree">B-trees</a>
 (or any other kind of sorted data structure that allows
@@ -304,27 +380,16 @@ you can efficiently:</p>
 </ul>
 <p>... and that's it, anything else requires a full table scan.</p>
 </section>
-<p>A consequence of DynamoDB being this low level is that,
-unlike with a relational database system,
-<strong>query planning</strong> and <strong>index management</strong>
-happen at the <strong>application level</strong>,
-i.e. you have to do them yourself.
-In turn, this means you need to have a very clear upfront understanding
-of your application's <strong>access patterns</strong>,
-and accept that changes may require <strong>manual migrations</strong>
-(usually this involves updating the attributes used in an index
-for all the items in the database,
-possibly while temporarily supporting both variants in your application).</p>
-<!-- TODO philosophy https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html#bp-general-nosql-design-concepts -->
-
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.PrimaryKey">Core components # Primary key</a></li>
+<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-partitions">Everything you need to know about DynamoDB Partitions</a></li>
 </ul>
 </section>
 <h2 id="limits">Limits<span class="headerlink">&nbsp;<a href="#limits" title="permalink">#</a></span></h2>
-<p>The upside is that <strong>for supported dimensions,
+<p>TODO: rephrase
+The upside is that <strong>for supported dimensions,
 DynamoDB scales infinitely</strong><sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup> –
 there are no limits on table size,
 the number of items or partition keys in a table, or
@@ -332,9 +397,6 @@ the number of sort keys in a partition.</p>
 <p>There are some important limits, though;
 note these are hard, immutable limits, not adjustable quotas,
 and as such you must design your application around them.</p>
-<p>These limits are not necessarily a bad thing, though;
-they allow for predictable performance,
-even if you are forced to thing upfront about it.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -621,12 +683,6 @@ and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/
 and perhpas make best use of its <a class="anchor" href="#features">features</a>),
 a number of design patterns have arisen,
 documented pretty extensively in the official documentation.</p>
-<p>(Why these patterns are so slow to make their way into SDKs,
-or even better, in the actual product,
-might make this more opinionated than I want it to be.)</p>
-<p>TODO: philosophy section (pull stuff from the other paragraps, maybe);
-mention Amazon's dislike/trauma with SQL, and their special needs;
-quote from what why when – “well optimized table looks like machine code”; cool, but why would i want that?</p>
 <p>TODO: in this section, I'll go through some of the most important patterns (nonexhaustive)</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
@@ -970,10 +1026,10 @@ e.g. to send a notification).</p>
 </section>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>TODO: &quot;inifinitely&quot;: cloud is someone else's computer;
-specifically, it scales horizontally and transparently as long as
-you configure the capacity correctly and you have the money;
-also, infinitely doesn't mean instantly <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-1"><p>Obviously a metaphor.
+As the saying goes, the cloud is just someone else's computer.
+Here, &quot;infinitely&quot; means it scales horizontally,
+and you'll run out of money before <abbr title="Amazon Web Services">AWS</abbr> runs out of computers. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-2"><p>TODO: unless you use reserved capacity <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
