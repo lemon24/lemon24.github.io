@@ -30,15 +30,15 @@
 
 
 
-<title>DynamoDB crash course - death and gravity</title>
+<title>DynamoDB crash course: part 1 – philosophy - death and gravity</title>
+<meta name="description" content="This is part one of a series covering core DynamoDB concepts and patterns, all the way up to single-table design; the goal is to get you to understand idiomatic usage and trade-offs in under an hour. Today, we&#39;re looking at what DynamoDB is and why it is that way." />
 
 
-
-<meta property="og:title" content="DynamoDB crash course">
+<meta property="og:title" content="DynamoDB crash course: part 1 – philosophy">
 <meta property="og:site_name" content="death and gravity">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://death.andgravity.com/dynamodb">
-
+<meta property="og:description" content="This is part one of a series covering core DynamoDB concepts and patterns, all the way up to single-table design; the goal is to get you to understand idiomatic usage and trade-offs in under an hour. Today, we&#39;re looking at what DynamoDB is and why it is that way.">
 
 
 
@@ -54,6 +54,15 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
 
 
 
@@ -71,15 +80,15 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">DynamoDB crash course</h1>
+<h1 class="heading-noindex">DynamoDB crash course: part 1 – philosophy</h1>
 
 <p class="text-gray text-nowrap">
 
 
 
 <small>
-<span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ 18 minute read
+<span class="tooltip" data-tooltip="published on 2026-01-23">January 2026</span>
+∙ five minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -89,16 +98,16 @@ window.addEventListener('resize', set_vh);
 >PyCoder's Weekly</a>
 <a
     class="share-icon hacker-news"
-    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/dynamodb&t=DynamoDB%20crash%20course"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/dynamodb&t=DynamoDB%20crash%20course%3A%20part%201%20%E2%80%93%20philosophy"
 >HN</a>
 <a
     class="share-icon bluesky"
-    href="https://bsky.%61%70%70/intent/compose?text=DynamoDB%20crash%20course%20https%3A//death.andgravity.com/dynamodb"
+    href="https://bsky.%61%70%70/intent/compose?text=DynamoDB%20crash%20course%3A%20part%201%20%E2%80%93%20philosophy%20https%3A//death.andgravity.com/dynamodb"
 >Bluesky</a>
 <!--
 <a
     class="share-icon reddit"
-    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/dynamodb&title=DynamoDB%20crash%20course"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/dynamodb&title=DynamoDB%20crash%20course%3A%20part%201%20%E2%80%93%20philosophy"
 >Reddit</a>
 -->
 <a
@@ -107,7 +116,7 @@ window.addEventListener('resize', set_vh);
 >linkedin</a>
 <a
     class="share-icon twitter"
-    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=DynamoDB%20crash%20course&url=https%3A//death.andgravity.com/dynamodb&via=_andgravity"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=DynamoDB%20crash%20course%3A%20part%201%20%E2%80%93%20philosophy&url=https%3A//death.andgravity.com/dynamodb&via=_andgravity"
 >Twitter</a>
 </span>
 
@@ -125,194 +134,58 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<p>This is the first article in a series
-providing an overview
-of the main concepts of <strong>DynamoDB</strong> and associated patterns,
-most importantly <strong>single table design</strong>.</p>
-<p>The goal is to allow someone who hasn't read the entire developer guide
-to understand what idiomatic usage looks like
-and what the trade-offs are,
-and provide entry points to detailed documentation.</p>
-<!-- if you read one dynamodb thing, this should be it -->
-
-<!-- TODO: AWS docs are complex, and DDB being an old product with lots of features are particularly bad -->
-
-<!-- TODO: data model intro -->
-
-<!-- TODO: won't cover syntax -->
-
-<details class="toc" open>
-<summary>Table of Contents</summary>
-<ul>
-<li><a href="#introduction">Introduction</a></li>
-<li><a href="#philosophy">Philosophy</a></li>
-<li><a href="#tables">Tables</a></li>
-<li><a href="#limits">Limits</a>
-<ul>
-<li><a href="#partition-throughput">Partition throughput</a></li>
-<li><a href="#item-size">Item size</a></li>
-<li><a href="#page-size">Page size</a></li>
-</ul>
-</li>
-<li><a href="#indexes">Indexes</a>
-<ul>
-<li><a href="#global-secondary-indexes">Global secondary indexes</a></li>
-<li><a href="#local-secondary-indexes">Local secondary indexes</a></li>
-</ul>
-</li>
-<li><a href="#features">Features</a>
-<ul>
-<li><a href="#eventual-consistency">Eventual consistency</a></li>
-<li><a href="#conditional-updates">Conditional updates</a></li>
-<li><a href="#transactions">Transactions</a></li>
-<li><a href="#batch-operations">Batch operations</a></li>
-<li><a href="#streams">Streams</a></li>
-</ul>
-</li>
-<li><a href="#design-patterns">Design patterns</a>
-<ul>
-<li><a href="#composite-keys">Composite keys</a></li>
-<li><a href="#single-table-design">Single table design</a></li>
-<li><a href="#gsi-overloading">GSI overloading</a></li>
-<li><a href="#partition-key-sharding">Partition key sharding</a></li>
-<li><a href="#sparse-indexes">Sparse indexes</a></li>
-<li><a href="#base-table-indexes">Base-table indexes</a></li>
-<li><a href="#optimistic-locking">Optimistic locking</a></li>
-</ul>
-</li>
-</ul>
-</details>
-<h2 id="introduction">Introduction<span class="headerlink">&nbsp;<a href="#introduction" title="permalink">#</a></span></h2>
-<p>(This section is meant to be only a refresher,
-see the links at the end for a more in-depth overview of basic concepts).</p>
+<p>This is part one of a series
+covering core <strong>DynamoDB</strong> concepts and patterns,
+from the data model and features all the way up to <strong>single-table design</strong>.</p>
+<p>The goal is to get you
+to understand what <strong>idiomatic usage</strong> looks like and
+what the <strong>trade-offs</strong> are
+in under an hour,
+providing entry points to detailed documentation.</p>
+<p>(Don't get me wrong, the <abbr title="Amazon Web Services">AWS</abbr> documentation is comprehensive,
+but can be quite complex,
+and DynamoDB being a relatively low level product
+with lots of features added over the years
+doesn't really help with that.)</p>
+<p>Today, we're looking at
+<strong>what DynamoDB is</strong> and
+<strong>why it is the way it is</strong>.</p>
+<h2 id="what-is-dynamodb">What is DynamoDB?<span class="headerlink">&nbsp;<a href="#what-is-dynamodb" title="permalink">#</a></span></h2>
 <p>Quoting <a class="external" href="https://en.wikipedia.org/wiki/Amazon_DynamoDB">Wikipedia</a>:</p>
 <blockquote>
 <p><strong>Amazon DynamoDB</strong> is a managed NoSQL database service provided by <abbr title="Amazon Web Services">AWS</abbr>.
 It supports key-value and document data structures and is designed to handle
 a wide range of applications requiring scalability and performance.</p>
 </blockquote>
-<p>These are the basic DynamoDB components:</p>
-<dl>
-<dt>Tables</dt>
-<dd>A table is a group of <strong>items</strong>.
-Since DynamoDB is a NoSQL database,
-the items in a table are not required to have a specific schema
-(with the exception of the attributes composing the <strong>primary key</strong>).
-A DynamoDB table can correspond to either a single table or a whole database
-in a relational database system.</dd>
-<dt>Items</dt>
-<dd>An item is a group of key-value <strong>attributes</strong>.
-An item is uniquely identified in a table by a subset of its attributes
-called a <strong>primary key</strong>.
-A DynamoDB item usually corresponds to a row in a relational database system.</dd>
-<dt>Attributes</dt>
-<dd>An attribute is a key-value pair,
-where the key is a string, and the value can be of any type.
-A DynamoDB attribute corresponds to a field in a relational database system.</dd>
-</dl>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
+<p>This definition should suffice for now;
+for a more detailed refresher, see:</p>
 <ul>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html">What is Amazon DynamoDB?</a></li>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html">Core components</a></li>
 </ul>
 </section>
-<h2 id="philosophy">Philosophy<span class="headerlink">&nbsp;<a href="#philosophy" title="permalink">#</a></span></h2>
-<p>From the user's point of view,
-DynamoDB is just a <strong>fancy cloud <a class="external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></strong>
-(this is only a slight exaggeration,
-as we'll see in the next section).</p>
-<p>A consequence of DynamoDB being this low level is that,
-unlike with a relational database,
-<strong>query planning</strong> and <strong>index management</strong>
-happen at the <strong>application level</strong>,
-i.e. you have to do them yourself.
-In turn, this means
-you need to have a clear and <strong>upfront understanding</strong>
-of your application's <strong>access patterns</strong>,
-and accept that changes to them mean changes to the application.</p>
-<p>In return, you get
-a <strong>managed</strong>,
-<strong>highly-available</strong> database
-that <strong>scales infinitely</strong><sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
-–
-there are no limits on table size or the number of items in a table,
-and most existing limits are clearly documented,
-enabling <strong>predictable performance</strong>.</p>
-<p>Even so, the complexity price can be heavy;
-according to the <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-foundations.html#data-modeling-foundations-single">documentation</a>,
-the first disadvantage of <a class="anchor" href="#single-table-design">single table design</a> is that:</p>
-<blockquote>
-<p>[the] learning curve can be steep due to paradoxical design compared to relational databases</p>
-</blockquote>
-<p>As <a class="external" href="https://www.trek10.com/blog/dynamodb-single-table-relational-modeling/">this article</a> puts it:</p>
-<blockquote>
-<p>a well-optimized single-table DynamoDB layout looks more like machine code than a simple spreadsheet</p>
-</blockquote>
-<p>Which admittedly sounds pretty cool,
-but why would I want that?</p>
-<p>Perhaps it's worth having a look at where DynamoDB comes from.</p>
-<p>In 2017,
-five years after DynamoDB was released as an <abbr title="Amazon Web Services">AWS</abbr> service,
-and twn years after some version of it was already used internally,
-Amazon.com was still using Oracle,
-and <a class="external" href="https://youtu.be/vPF9l9OmiXE?t=449">still had</a>
-75 PB of data
-in nearly 7500 databases
-owned by 100+ teams with thousands of applications
-<em>only for <abbr title="Online transaction processing">OLTP</abbr> workloads</em>.
-That sounds pretty traumatic indeed
-–
-so traumatic that they <a class="external" href="https://news.ycombinator.com/item?id=42677767">allegedly</a>
-banned <abbr title="Online transaction processing">OLTP</abbr> relational databases internally,
-and teams could use one only with VP approval.
-(That is not to say relational databases
-can't have some of the advantages of DynamoDB
-–
-<a class="external" href="https://en.wikipedia.org/wiki/Distributed_SQL">distributed SQL</a> databases like Google's <a class="external" href="https://en.wikipedia.org/wiki/Spanner_(database)">Spanner</a> and <a class="external" href="https://en.wikipedia.org/wiki/CockroachDB">CockroachDB</a>
-have existed for a while now,
-and even <abbr title="Amazon Web Services">AWS</abbr> seems to be <a class="external" href="https://aws.amazon.com/blogs/database/introducing-amazon-aurora-dsql/">warming up</a> to the idea.)</p>
-<p>Yeah, coming from <em>that</em>,
-DynamoDB doesn't necessarily add complexity.</p>
-<p>And you're not entirely on your own
-–
-to help with the complexity,
-a number of design patterns have arisen,
-documented pretty extensively in the official documentation,
-and which we'll discuss below.
-(Why the patterns are so slow to make their way into SDKs,
-or even better, in DynamoDB itself, is an entirely different question;
-perhaps having hundreds of teams makes that less pressing.)</p>
-<p>So, should you use DynamoDB?
-If you know you <a class="external" href="https://blog.bradfieldcs.com/you-are-not-google-84912cf44afb">need the scale</a>, go for it.
-Otherwise, computers are pretty powerful nowadays,
-maybe just use Postgres (or <a class="external" href="https://crawshaw.io/blog/one-process-programming-notes">even</a> <a class="external" href="https://blog.wesleyac.com/posts/consider-sqlite">SQLite</a>).</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html">NoSQL design</a></li>
-<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-limits/#the-dynamodb-philosophy-of-limits">The Three DynamoDB Limits You Need to Know # The DynamoDB philosophy of limits</a></li>
-<li><small>(paper)</small> <a class="external" href="https://assets.amazon.science/ac/1d/eb50c4064c538c8ac440ce6a1d91/dynamo-amazons-highly-available-key-value-store.pdf">Dynamo: Amazon’s Highly Available Key-value Store</a> (2007)</li>
-<li><small>(paper)</small> <a class="external" href="https://www.usenix.org/system/files/atc22-elhemali.pdf">Amazon DynamoDB: A Scalable, Predictably Performant, and Fully Managed NoSQL Database Service</a> (2022)</li>
-</ul>
-</section>
-<h2 id="tables">Tables<span class="headerlink">&nbsp;<a href="#tables" title="permalink">#</a></span></h2>
-<p>Conceptually, a DynamoDB table is a <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table</a> of <a class="external" href="https://en.wikipedia.org/wiki/B-tree">B-trees</a>
-(or any other kind of sorted data structure that allows
-fast searches, sequential access, insertions, and deletions).</p>
-<p>An item has two <em>hierarchical</em> keys that make up a composite <strong>primary key</strong>:</p>
-<ul>
-<li><strong>partition key</strong> (aka <strong>hash key</strong>);
-this is the hash table key, and allows efficient
-<em>get all items in partition</em> operations</li>
-<li><strong>sort key</strong> (aka <strong>range key</strong>);
-this is the B-tree key, and allows efficient
-<em>get items in partition in a sort key range</em> operations,
-including <em>get item by partition + sort key</em>;
-the sort key is optional, but in most cases you will have one</li>
-</ul>
-<p>In Python, the operations this enables would look something like this:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
+<p>The DynamoDB data model can be summarized as follows:</p>
+<p><em>A <strong>table</strong> is a collection of <strong>items</strong>,
+and an item is a collection of named <strong>attributes</strong>.
+Items are uniquely identified by a <strong>partition key</strong> attribute
+and an optional <strong>sort key</strong> attribute.
+The partition key determines where (i.e. on what computer) an item is stored.
+The sort key is used to get ordered ranges of items from a specific partition.</em></p>
+<p>That's is, that's the whole data model.
+Sure, there's indexes and transactions and other features,
+but at its core, this is it.
+Put another way:</p>
+<p>A DynamoDB table is <strong>a <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table</a> of <a class="external" href="https://en.wikipedia.org/wiki/B-tree">B-trees</a></strong><sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup> –
+partition keys are hash table keys, and sort keys are B-tree keys.
+Because of this,
+<strong>any access not based on partition and sort key is expensive</strong>,
+since you end up doing a full table scan.</p>
+<!-- TODO simple db footnote -->
+
+<p>If you were to implement this model in Python, it'd look something like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="IPython"><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">sortedcontainers</span><span class="w"> </span><span class="kn">import</span> <span class="n">SortedDict</span>
 
 <span class="k">class</span><span class="w"> </span><span class="nc">Table</span><span class="p">:</span>
@@ -366,676 +239,193 @@ the sort key is optional, but in most cases you will have one</li>
 <span class="go">[&#39;Vidage&#39;]</span>
 </code></pre></div>
 
-<p>Importantly,
-<strong>any access not based on partition/sort key is expensive</strong>,
-since it forces you to do a full table scan
-(ignoring <a class="anchor" href="#indexes">indexes</a> for now),
-and at the scales you'd use DynamoDB at,
-this can mean going through billions of items.</p>
-<section class="admonition note">
-<p class="admonition-title">Example</p>
-<p><small>(from <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=another%20example%20table%20named%20Music">here</a>)</small>
-Given a <em>Music</em> table where items correspond to songs,
-with the <em>Artist</em> attribute as primary key
-and <em>SongTitle</em> as sort key,
-you can efficiently:</p>
-<ul>
-<li>query songs by artist (sorted by song title)</li>
-<li>get the song by artist and song title</li>
-</ul>
-<p>... and that's it, anything else requires a full table scan.</p>
-</section>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.PrimaryKey">Core components # Primary key</a></li>
-<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-partitions">Everything you need to know about DynamoDB Partitions</a></li>
-</ul>
-</section>
-<h2 id="limits">Limits<span class="headerlink">&nbsp;<a href="#limits" title="permalink">#</a></span></h2>
-<p>TODO: rephrase
-The upside is that <strong>for supported dimensions,
-DynamoDB scales infinitely</strong><sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup> –
-there are no limits on table size,
-the number of items or partition keys in a table, or
-the number of sort keys in a partition.</p>
-<p>There are some important limits, though;
-note these are hard, immutable limits, not adjustable quotas,
-and as such you must design your application around them.</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/CheatSheet.html#CheatSheet.ServiceBasics">Cheat sheet # Service quota basics</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ServiceQuotas.html">Quotas</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html">Constraints</a></li>
-<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-limits/">The Three DynamoDB Limits You Need to Know</a></li>
-</ul>
-</section>
-<h3 id="partition-throughput">Partition throughput<span class="headerlink">&nbsp;<a href="#partition-throughput" title="permalink">#</a></span></h3>
-<p>Most importantly, there is a per-partition throughput limit:</p>
-<ul>
-<li>for reads, there's a limit of 3,000 read capacity units per second;
-this means 3,000 RCU / s * 4 KB / RCU = 12 MB/s
-(eventually consistent reads are twice this)</li>
-<li>for writes, there's a limit of 1,000 read capacity units per second;
-this means 1,000 WCU / s * 1 KB / WCU = 1 MB/s</li>
-</ul>
-<p>Because of this, you have to be careful
-to distribute requests evenly across partitions;
-if there's no good natural partition key,
-you can use techniques such as sharding (discussed below). <!-- TODO link --></p>
-<p>The amount of consumed capacity units is what you are billed for.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
-While DynamoDB offers some server-side filtering capabilities
-that are not shown in my Python mock-up above
-(you can filter items based on expressions,
-and you can &quot;select&quot; only specific attributes),
-this only saves on network traffic and latency –
-data read to evaluate expressions still counts as read,
-and you will pay for it.
-Because of this, optimizing your data access is not just a performance matter,
-but a cost matter too.</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html">Partitions and data distribution</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html">Read and write operations</a> (capacity unit consumption)</li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html">Partition key design</a><ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-uniform-load.html">Distributing workloads</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-sharding.html">Write sharding</a></li>
-</ul>
-</li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-sort-keys.html">Sort key design</a></li>
-<li><small>(blog)</small> <a class="external" href="https://aws.amazon.com/blogs/database/choosing-the-right-dynamodb-partition-key/">Choosing the Right DynamoDB Partition Key</a></li>
-</ul>
-</section>
-<h3 id="item-size">Item size<span class="headerlink">&nbsp;<a href="#item-size" title="permalink">#</a></span></h3>
-<p>Second, the maximum size of an item is 400 KB.
-This can be worked around by either splitting an item into multiple ones
-on the same partition,
-or by storing only the metadata in DynamoDB,
-with data somewhere else, like S3
-(this is a pretty common pattern).</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html#limits-items">Constraints # Items</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-use-s3-too.html">Large items</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-vertical-partitioning">Data modeling building blocks # Vertical partitioning building block</a></li>
-</ul>
-</section>
-<h3 id="page-size">Page size<span class="headerlink">&nbsp;<a href="#page-size" title="permalink">#</a></span></h3>
-<p>Finally, the result set of the query and scan operations
-is limited to 1 MB per page,
-but it is possible to stitch together multiple pages
-by using a form of <a class="internal" href="/query-builder-why#intermission-scrolling-window-queries">keyset pagination</a>
-(specifically, there's a <code>LastEvaluatedKey</code> that allows you to query/scan from the end of the previous page).</p>
-<p>However, this has implications on consistency,
-especially for secondary indexes –
-if an attribute used in a <abbr title="Global Secondary Index">GSI</abbr> primary or sort key changes,
-an item can appear zero or multiple times in the entire (multi-page) result set.</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html#limits-api">Constraints # API-specific constraints</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.Pagination.html">Paginating query results</a></li>
-</ul>
-</section>
-<h2 id="indexes">Indexes<span class="headerlink">&nbsp;<a href="#indexes" title="permalink">#</a></span></h2>
-<p>When discussing tables,
-I said that access not based on partition/sort key is expensive.
-Secondary indexes allow other access patterns
-by using an <strong>alternate primary key</strong>
-composed of different attributes than that of the table.
-You can query or scan an index just like you would a table.</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.SecondaryIndexes">Core components # Secondary indexes</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/SecondaryIndexes.html">Working with indexes</a></li>
-</ul>
-</section>
-<h3 id="global-secondary-indexes">Global secondary indexes<span class="headerlink">&nbsp;<a href="#global-secondary-indexes" title="permalink">#</a></span></h3>
-<p>Conceptually, a global secondary index is a separate table
-that's automatically kept in sync with the base table,
-and allows having different attributes as primary key.</p>
-<section class="admonition note">
-<p class="admonition-title">Example</p>
-<p><small>(from <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=query%20the%20data%20by%20Genre%20and%20AlbumTitle">here</a>)</small>
-Continuing with the music example,
-a <abbr title="Global Secondary Index">GSI</abbr> with <em>Genre</em> and <em>AlbumTitle</em> as primary key
-would allow you to <em>also</em> efficiently:</p>
-<ul>
-<li>query songs by genre
-(and, if you collapse results in application code,
-query albums by genre <em>somewhat</em> efficiently)</li>
-<li>query songs by genre and album title
-(but, two albums can have the same genre and title,
-so you might want to group by artist in application code)</li>
-</ul>
-</section>
-<p>Aside from item partition and sort keys,
-the index can include additional attributes,
-so you can query the index alone;
-this is called <strong><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.Projections">attribute projection</a></strong>,
-and is analogous to a <a class="external" href="https://en.wikipedia.org/wiki/Database_index#Covering_index">covering index</a> in relational databases;
-however,
-if you need an attribute that's not in the index,
-you'll have to get it yourself from the base table
-(batch operations can make this faster). <!-- TODO link --></p>
-<p>Unlike real tables,
-<abbr title="Global Secondary Index">GSI</abbr>s support only eventually consistent reads,
-and their primary keys do not need to be unique.
-In all other respects,
-<strong><abbr title="Global Secondary Index">GSI</abbr>s behave like real tables</strong>:</p>
-<ul>
-<li>they have their own <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.ThroughputConsiderations">separate capacity</a></li>
-<li>they have no limits on size or the number of primary keys</li>
-<li>they have the same <a class="anchor" href="#partition-throughput">partition throughput</a> limits,
-and the same workarounds <!-- TODO link to sharding --></li>
-</ul>
-<p>You can have up to 20 <abbr title="Global Secondary Index">GSI</abbr>s per table,
-although in practice you can reuse them.</p>
-<!-- TODO link to overloading -->
-
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html">Global secondary indexes</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes.html">Best practices for secondary indexes</a></li>
-</ul>
-</section>
-<h3 id="local-secondary-indexes">Local secondary indexes<span class="headerlink">&nbsp;<a href="#local-secondary-indexes" title="permalink">#</a></span></h3>
-<p>A local secondary index allows you to have an <strong>alternate sort key</strong> for a partition
-(it is <em>local</em> to the partition).</p>
-<section class="admonition note">
-<p class="admonition-title">Example</p>
-<p>For the same <em>Music</em> with <em>Artist</em> as partition key,
-a <abbr title="Local Secondary Index">LSI</abbr> with <em>Year</em> as sort key
-would allow you to <em>also</em> efficiently:</p>
-<ul>
-<li>query songs by artist in chronological order</li>
-<li>query songs by artist and year</li>
-</ul>
-</section>
-<p>Unlike <abbr title="Global Secondary Index">GSI</abbr>s, local secondary indexes support
-retrieving attributes <em>not</em> projected into the index
-(with higher latency and cost),
-and strongly consistent reads.</p>
-<p>However, <abbr title="Local Secondary Index">LSI</abbr>s have their downsides:
-they can only be created/deleted with the table,
-and <strong>using <abbr title="Local Secondary Index">LSI</abbr>s limits partition size to 10 GB</strong>
-(the size of the items in the table plus the items in <abbr title="Local Secondary Index">LSI</abbr>s);
-because of this, people usually prefer using <abbr title="Global Secondary Index">GSI</abbr>s.</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LSI.html">Local secondary indexes</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes.html">Best practices for secondary indexes</a></li>
-</ul>
-</section>
-<h2 id="features">Features<span class="headerlink">&nbsp;<a href="#features" title="permalink">#</a></span></h2>
-<p>Before we go into how to structure data for efficient use with DynamoDB,
-let's look at some of the things you can do with tables
-besides simple <abbr title="create, read, update, and delete">CRUD</abbr> operations.</p>
-<h3 id="eventual-consistency">Eventual consistency<span class="headerlink">&nbsp;<a href="#eventual-consistency" title="permalink">#</a></span></h3>
-<p>By default, when reading an item,
-the result may be a slightly older version of the data than the most current one;
-if you repeat the read, you will eventually get the most recent item,
-i.e. reads are <strong>eventually consistent</strong>.
-(In part, this is a consequence DynamoDB replicating your data in <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html#ddb-intro-resilience">multiple availability zones</a>
-– the node you're talking to may have not gotten the most recent data yet.)</p>
-<p>For tables and <abbr title="Local Secondary Index">LSI</abbr>s, you can issue strongly-consistent reads,
-which will give you the most up-to-date data;
-these are slower, and twice as expensive.</p>
-<p>To deal with the lack of a point-in time consistent view of the entire database,
-DynamoDB offers <a class="anchor" href="#conditional-updates">conditional updates</a>,
-as well as a limited form of <a class="anchor" href="#transactions">transactions</a>,
-which serve as a sort of synchronization primitives.</p>
-<p>Note that strongly-consistent reads do not remove
-the need for synchronization primitives
-– by the time you get the response,
-the data may have already been updated by another processl
-instead,
-strong consistency is useful
-to lower the rate at which conditional updates or transactions fail.</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html">DynamoDB read consistency</a></li>
-</ul>
-</section>
-<h3 id="conditional-updates">Conditional updates<span class="headerlink">&nbsp;<a href="#conditional-updates" title="permalink">#</a></span></h3>
-<p>For write operations (put/update/delete),
-you can specify a <strong>condition expression</strong>
-(e.g. an attribute exists, or has a specific value)
-that must be true for the operation to happen;
-if the expression evaluates to false,
-the write fails.</p>
-<p>Condition expressions are crucial for ensuring consistency
-(and avoiding <a class="external" href="https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use">time-of-check to time-of-use</a> bugs),
-since they are the only way to run a bit of logic &quot;server-side&quot;,
-on the <em>current</em> version of an item.
-Note that the condition can refer only to the item being modified.</p>
-<p>Higher level things can be built on top of condition expressions,
-including <a class="anchor" href="#optimistic-locking">optimistic locking</a> and <a class="external" href="https://github.com/awslabs/amazon-dynamodb-lock-client">distributed locks</a>.</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ConditionExpressions.html">DynamoDB condition expression CLI example</a></li>
-<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-condition-expressions/">Understanding DynamoDB Condition Expressions</a></li>
-</ul>
-</section>
-<h3 id="transactions">Transactions<span class="headerlink">&nbsp;<a href="#transactions" title="permalink">#</a></span></h3>
-<p>Transactions allow performing write operations (put/update/delete)
-to up to 100 items as a single all-or-nothing operation –
-either all of them succeed, or none do.
-The items can be in the same or <em>different</em> tables
-in the same account and region.</p>
-<p>Transactions also work with <a class="anchor" href="#conditional-updates">condition expressions</a>,
-so if a condition fails for one item,
-none of the items are modified.
-If you want to evaluate a condition for an item that you're not modifying,
-you can use the special <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_ConditionCheck.html">ConditionCheck</a> operation.
-Just like with single condition expressions,
-the expressions can only refer to each item individually
-(you can't have a condition about two items in the transaction).</p>
-<p>You can also read up to 100 items transactionally
-(to ensure serialization with transactional writes).</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transactions.html">Working with transactions</a></li>
-</ul>
-</section>
-<h3 id="batch-operations">Batch operations<span class="headerlink">&nbsp;<a href="#batch-operations" title="permalink">#</a></span></h3>
-<p>You can put/delete up to 25 items or get up to 100 items
-in a single request up to 16 MB in size;
-this allows reading / writing / deleting large amounts of data efficiently.</p>
-<p>The operations within a batch are entirely independent from one another –
-some of the operations may fail / a partial result may be returned
-(e.g. if <a class="anchor" href="#partition-throughput">throughput limits</a> are reached).
-Also, batch writes don't support condition expressions.</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchGetItem.html">BatchGetItem</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html">BatchWriteItem</a></li>
-</ul>
-</section>
-<h3 id="streams">Streams<span class="headerlink">&nbsp;<a href="#streams" title="permalink">#</a></span></h3>
-<p>Streams are DynamoDB's <a class="external" href="https://en.wikipedia.org/wiki/Change_data_capture">change data capture</a> mechanism,
-and allow you to get notified in &quot;near-real time&quot;
-when an item is created, updated, or deleted.
-There are two flavors of streams,
-<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html">DynamoDB Streams</a> (the original one)
-and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/kds.html">Kinesis Data Streams</a> (integration with Amazon Kinesis).</p>
-<p>Two notable applications of streams are:</p>
-<ul>
-<li>Lambda triggers (similar to triggers in relational databases)</li>
-<li>replication to other places like S3 or Redshift (via Firehose)</li>
-</ul>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.Streams">Core components # DynamoDB Streams</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/streamsmain.html">Working with streams</a></li>
-<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/bites/dynamodb-streams/">What you should know about DynamoDB Streams</a></li>
-</ul>
-</section>
-<h2 id="design-patterns">Design patterns<span class="headerlink">&nbsp;<a href="#design-patterns" title="permalink">#</a></span></h2>
-<p>To help deal with DynamoDB being as low level as it is
-(i.e. to work around its <a class="anchor" href="#limits">limits</a>,
-and perhpas make best use of its <a class="anchor" href="#features">features</a>),
+<h2 id="philosophy">Philosophy<span class="headerlink">&nbsp;<a href="#philosophy" title="permalink">#</a></span></h2>
+<p>One can't help but feel this kind of simplicity would be severely limiting.</p>
+<p>A consequence of DynamoDB being this low level is that,
+unlike with most relational databases,
+<strong>query planning</strong> and sometimes <strong>index management</strong>
+happen at the <strong>application level</strong>,
+i.e. you have to do them yourself in code.
+In turn, this means
+you need to have a clear, <strong>upfront understanding</strong>
+of your application's <strong>access patterns</strong>,
+and accept that changes in access patterns
+will require changes to the application.</p>
+<p>In return, you get
+a <strong>fully managed</strong>,
+<strong>highly-available</strong> database
+that <strong>scales infinitely</strong>:<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
+there are no servers to take care of,
+there's almost no downtime, and
+there are no limits on table size or the number of items in a table;
+where limits do exist, they are clearly documented,
+allowing for <strong>predictable performance</strong>.</p>
+<p>This highlights an intentional design decision
+that is essentially DynamoDB's main proposition to you as its user:
+<strong>data modeling complexity
+is always preferable to complexity coming from
+infrastructure maintenance, availability, and scalability</strong>
+(what <abbr title="Amazon Web Services">AWS</abbr> marketing calls &quot;undifferentiated heavy lifting&quot;).</p>
+<p>To help manage this complexity,
 a number of design patterns have arisen,
-documented pretty extensively in the official documentation.</p>
-<p>TODO: in this section, I'll go through some of the most important patterns (nonexhaustive)</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling.html">Data modeling</a><ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-schemas.html">Data modeling schemas</a> (worked examples)</li>
-</ul>
-</li>
-</ul>
-</section>
-<h3 id="composite-keys">Composite keys<span class="headerlink">&nbsp;<a href="#composite-keys" title="permalink">#</a></span></h3>
-<p>The most basic pattern that underpins many of the other patterns
-is that
-your partition and sort keys are not natural attributes of your data,
-but composites of multiple other attributes,
-to enable specific access patterns;
-this works equally well with both table and index keys.</p>
-<section class="admonition note">
-<p class="admonition-title">Example</p>
-<p>In <a class="anchor" href="#single-table-design">single table design</a>,
-you have multiple types of items in the same table / partition
-by prefixing the key with the type,
-e.g. <code>song#{SongTitle}</code>.</p>
-<p>Or, you can sort lexicographically by more than one attribute
-by having a sort key composed of multiple attributes,
-e.g. <code>{AlbumTitle}#{SongTitle}</code>.</p>
-<p>Or, in <a class="anchor" href="#partition-key-sharding">partition key sharding</a>,
-you spread the load on a <abbr title="Global Secondary Index">GSI</abbr> partition by splitting one partition key
-into multiple ones, e.g. <code>{Genre}#{shard}</code>.</p>
-</section>
-<p>This is so pervasive that in November 2025,
-they finally added support for <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.DesignPattern.MultiAttributeKeys.html">multi-attribute keys</a>,
-no string manipulation needed
-(alas, only for <abbr title="Global Secondary Index">GSI</abbr>s, not tables).</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-composite">Data modeling building blocks # Composite sort key</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-adjacency-graphs.html">Many-to-many relationships</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.MultiAttributeKeys">Global secondary indexes # Multi-attribute key schema</a></li>
-</ul>
-</section>
-<h3 id="single-table-design">Single table design<span class="headerlink">&nbsp;<a href="#single-table-design" title="permalink">#</a></span></h3>
-<p>In most cases, <abbr title="Amazon Web Services">AWS</abbr> <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html#bp-general-nosql-design-approach">recommends</a> using as few tables as possible:</p>
+covered extensively by the official documentation,
+and which we'll discuss in a future article.
+Even so, the toll can be heavy –
+by <abbr title="Amazon Web Services">AWS</abbr>'s <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-foundations.html#data-modeling-foundations-single">own admission</a>,
+the prime disadvantage of single table design,
+the fundamental design pattern, is that:</p>
 <blockquote>
-<p>As a general rule,
-you should maintain as few tables as possible in a DynamoDB application.
-[...]
-A single table with inverted indexes can usually enable simple queries
-to create and retrieve the complex hierarchical data structures
-required by your application.</p>
+<p>[the] learning curve can be steep due to paradoxical design compared to relational databases</p>
 </blockquote>
-<p>The culmination of this is <strong>single table design</strong>,
-where a DynamoDB table corresponds to a whole database
-in a relational database system.
-You do this by storing multiple entities in the same table,
-and distinguishing between them by prefixing the key with the type.</p>
-<p>One way of doing it is to have all items related to a &quot;top-level&quot; entity
-on the same partition,
-and prefix the sort key with the item type;
-this has the advantage of data locality,
-which reduces the number of queries needed to get related items,
-and may also make them faster
-(since DynamoDB ends up talking with fewer nodes).</p>
-<!-- TODO spare provisioned capacity, easier scaling -->
-
-<section class="admonition note">
-<p class="admonition-title">Example</p>
-<p>You could use <code>Artist</code> as partition key,
-and the sort key to tell sub-entities apart,
-e.g. <code>artist</code>, <code>album#{AlbumTitle}</code>, and <code>song#{AlbumTitle}#{SongTitle}</code>.</p>
-</section>
-<p>If some of the entities have very different access patterns,
-you can put them in dedicated partitions instead
-using the same prefix trick.</p>
-<section class="admonition note">
-<p class="admonition-title">Example</p>
-<p>If an artist has so many songs that you reach
-<a class="anchor" href="#partition-throughput">partition thoughput</a> limits,
-perhaps it's better to put the songs in an album on their own partitions:</p>
-<ul>
-<li>partition key <code>artist#{Artist}</code><ul>
-<li>sort key <code>artist</code></li>
-<li>sort key <code>album#{AlbumTitle}</code></li>
-</ul>
-</li>
-<li>partition key <code>song#{Artist}#{AlbumTitle}</code>, sort key <code>{SongTitle}</code></li>
-</ul>
-</section>
-<p>A consequence of this is that
-if you want to list all items of specific type,
-you have to use a <abbr title="Global Secondary Index">GSI</abbr>
-(otherwise, you end up doing full table scan);
-this can, in turn, lead to hitting <em><abbr title="Global Secondary Index">GSI</abbr></em> partition throughput limits,
-but <a class="anchor" href="#partition-key-sharding">partition key sharding</a> can help.</p>
+<p>As <a class="external" href="https://www.trek10.com/blog/dynamodb-single-table-relational-modeling/">this walkthrough</a> puts it:</p>
+<blockquote>
+<p>a well-optimized single-table DynamoDB layout looks more like machine code than a simple spreadsheet</p>
+</blockquote>
+<p>...which, admittedly, sounds pretty cool,
+but also why would I want that?
+After all, most useful programming most people do
+is one or two abstraction levels above assembly,
+itself one over machine code.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html">NoSQL design</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-foundations.html#data-modeling-foundations-single">Data modeling foundations # Single table design foundation</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-relational-modeling.html">Relational modeling</a></li>
-<li><small>(blog)</small> <a class="external" href="https://aws.amazon.com/blogs/database/single-table-vs-multi-table-design-in-amazon-dynamodb/">Single-table vs. multi-table design in Amazon DynamoDB</a></li>
-<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-single-table/">The What, Why, and When of Single-Table Design with DynamoDB</a></li>
+<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-limits/#the-dynamodb-philosophy-of-limits"># The DynamoDB philosophy of limits</a></li>
 </ul>
 </section>
-<h3 id="gsi-overloading"><abbr title="Global Secondary Index">GSI</abbr> overloading<span class="headerlink">&nbsp;<a href="#gsi-overloading" title="permalink">#</a></span></h3>
-<p>Just like tables
-can have more than one type of item,
-so can <abbr title="Global Secondary Index">GSI</abbr>s –
-that is,
-you can put different things in the <abbr title="Global Secondary Index">GSI</abbr> partition/sort key attributes,
-depending on item type.
-This allows indexing more fields than the 20 <abbr title="Global Secondary Index">GSI</abbr>s per table quota,
-and may be cheaper too,
-since fewer <abbr title="Global Secondary Index">GSI</abbr>s can make better use of spare provisioned capacity.</p>
-<section class="admonition note">
-<p class="admonition-title">Example</p>
-<p>For a table that contains both artist and album items,
-a single <abbr title="Global Secondary Index">GSI</abbr> could be used for entirely different purposes:</p>
-<ul>
-<li>artist: partition key <code>artist#{Country}</code>, sort key <code>details</code>
-– list artists by country</li>
-<li>album: partition key <code>album#{Genre}</code>, sort key <code>{Artist}</code>
-– list albums by genre</li>
-</ul>
-</section>
+<h2 id="a-bit-of-history">A bit of history<span class="headerlink">&nbsp;<a href="#a-bit-of-history" title="permalink">#</a></span></h2>
+<p>Perhaps it's worth having a look at where DynamoDB comes from.</p>
+<p>Amazon.com used Oracle databases for a long time.
+To cope with the increasing scale,
+they first adopted a database-per-service model,
+and then sharding,
+with all the architectural and operational overhead
+you would expect.
+At its 2017 peak
+(five years after DynamoDB was released in <abbr title="Amazon Web Services">AWS</abbr>,
+and over ten years after some version of it was available internally),
+they <a class="external" href="https://youtu.be/vPF9l9OmiXE?t=449">still had</a>
+75 PB of data
+in nearly 7500 Oracle databases,
+owned by 100+ teams, with thousands of applications,
+<em>for <abbr title="Online Transaction Processing">OLTP</abbr> workloads alone</em>.
+That sounds pretty traumatic
+–
+it was definitely bad enough to
+<a class="external" href="https://news.ycombinator.com/item?id=42677767">allegedly</a> ban <abbr title="Online Transaction Processing">OLTP</abbr> relational databases internally,
+and require that teams get VP approval to use one.</p>
+<p>Yeah, coming from <em>that</em>,
+it's hard to argue DynamoDB adds complexity.</p>
+<p>That is not to say relational databases
+cannot be as scalable as DynamoDB,
+just that Amazon doesn't belive in them
+–
+<a class="external" href="https://en.wikipedia.org/wiki/Distributed_SQL">distributed SQL</a> databases like Google's <a class="external" href="https://en.wikipedia.org/wiki/Spanner_(database)">Spanner</a> and <a class="external" href="https://en.wikipedia.org/wiki/CockroachDB">CockroachDB</a>
+have existed for a while now,
+and even <abbr title="Amazon Web Services">AWS</abbr> seems to be <a class="external" href="https://aws.amazon.com/blogs/database/introducing-amazon-aurora-dsql/">warming up</a> to the idea.</p>
+<p>This might also explain why the design patterns
+are so slow to make their way into SDKs,
+or even better, into DynamoDB itself;
+when you have so many applications and so many experienced teams,
+the cost of yet another bit of code to do partition key sharding
+just isn't that great.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-gsi-overloading.html"><abbr title="Global Secondary Index">GSI</abbr> overloading</a></li>
+<li><small>(paper)</small> <a class="external" href="https://www.usenix.org/system/files/atc22-elhemali.pdf">Amazon DynamoDB: A Scalable, Predictably Performant, and Fully Managed NoSQL Database Service</a> (2022)</li>
+<li><small>(paper)</small> <a class="external" href="https://assets.amazon.science/ac/1d/eb50c4064c538c8ac440ce6a1d91/dynamo-amazons-highly-available-key-value-store.pdf">Dynamo: Amazon’s Highly Available Key-value Store</a> (2007)</li>
 </ul>
 </section>
-<h3 id="partition-key-sharding">Partition key sharding<span class="headerlink">&nbsp;<a href="#partition-key-sharding" title="permalink">#</a></span></h3>
-<p>Sometimes, not even a partition key composed of multiple natural attributes
-is enough to spread the load evenly across partition;
-one way of dealing with this is to put items corresponding
-to a natural attribute on multiple partitions.</p>
-<p>The question is then, what should the partition key for an item be?
-One possibility is to use a <strong>random suffix</strong> from a known range;
-this still allows you to list items for a natural attribute
-by doing multipe queries, one for each suffix.</p>
-<section class="admonition note">
-<p class="admonition-title">Example</p>
-<p>For our table of songs,
-using the album as part of the partition key may not work,
-since not all songs are part of an album these days.
-Instead, we could use <code>{Artist}#{randrange(10)}</code> as partition key.
-Then, to list all the songs for an artist, we'd do:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">for</span> <span class="n">shard</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
-    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">dynamodb</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">artist</span><span class="si">}</span><span class="s2">#</span><span class="si">{</span><span class="n">shard</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">):</span>
-        <span class="k">yield</span> <span class="n">item</span>
-</code></pre></div>
-<p>Now we can have 10 times as many items
-before reaching throughput limits.</p>
-</section>
-<p>A downside of random suffixes is that you can't get a specific item,
-since you don't know what suffix you used for any given item.
-An alternative is to <strong>calculate the suffix</strong>
-from something that you do know,
-like the hash of an attribute modulo N.</p>
-<section class="admonition note">
-<p class="admonition-title">Example</p>
-<p>Instead of a random number,
-we could use <code>{Artist}#{hash(SongTitle) % 10)}</code>.
-Then, to get a song by artist and song title:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">hash</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
-    <span class="k">return</span> <span class="nb">int</span><span class="o">.</span><span class="n">from_bytes</span><span class="p">(</span><span class="n">sha256</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">digest</span><span class="p">())</span>
-
-<span class="n">shard</span> <span class="o">=</span> <span class="nb">hash</span><span class="p">(</span><span class="n">song_title</span><span class="p">)</span> <span class="o">%</span> <span class="mi">10</span>
-<span class="n">dynamodb</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">artist</span><span class="si">}</span><span class="s2">#</span><span class="si">{</span><span class="n">shard</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">song_title</span><span class="p">)</span>
-</code></pre></div>
-</section>
-<p>Sharding may be even more important for <abbr title="Global Secondary Index">GSI</abbr>s,
-where a lot of times you want to list items by a low-cardinality attribute.</p>
-<section class="admonition note">
-<p class="admonition-title">Example</p>
-<p>Assuming you have dedicated album items,
-to list all the albums
-you could use a single <abbr title="Global Secondary Index">GSI</abbr> partition
-with partition key <code>albums</code> (literal string)
-and sort key <code>{AlbumTitle}</code>,
-but this may overload the partition.</p>
-<p>To spread the load,
-you could use <code>album#{hash(AlbumTitle} % 100}</code>
-as partition key
-if you don't care about them being sorted,
-or something like <code>album#{AlbumTitle[0].lower()}</code>
-if you want them sorted alphabetically
-(but, careful about
-some first letters <a class="external" href="https://en.wikipedia.org/wiki/Letter_frequency#Relative_frequencies_of_the_first_letters_of_a_word_in_English_language">being more popular than others</a>,
-and some albums <a class="external" href="https://www.discogs.com/release/10506005--">not starting with a letter at all</a>).</p>
-</section>
-<p>One other benefit of sharding
-is that you can query them in parallel,
-which can speed up getting the entire result set.</p>
 <hr />
-<p>The number of shards is a trade-off –
-too many shards means more queries,
-too few shards means you might still overload the partitions.</p>
-<p>Importantly, <strong>increasing the number of shards is non-trivial</strong>,
-so ideally you should avoid it if possible.</p>
-<p>One way to do it is
-to move to a new index (or just partition key prefix) entirely,
-which means you need to backfill existing items in the new index,
-and then switch to it.
-Alternatively, you could add new shards,
-and either keep old items on existing shards
-(e.g. by assigning them an &quot;epoch&quot; based on when they were created),
-or re-balance them
-(although this may not be possible
-without downtime / inconsistencies).</p>
-<p>Regardless of what you do,
-it requires support in application code,
-and careful orchestration when making the switch
-(for example,
-if you expose a <code>LastEvaluatedKey</code>-derived pagination token to users,
-you have either temporarily support both,
-or accept some downtime).</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-sharding.html">Write sharding</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes-gsi-sharding.html"><abbr title="Global Secondary Index">GSI</abbr> sharding</a></li>
-</ul>
-</section>
-<h3 id="sparse-indexes">Sparse indexes<span class="headerlink">&nbsp;<a href="#sparse-indexes" title="permalink">#</a></span></h3>
-<p>If an item doesn't have one of the attributes
-used as index partition/sort key,
-it won't appear in the index
-(and, you won't pay for it).
-This can be used deliberately to query
-only a subset of the items in the table,
-like those of a specific type,
-or that are in a specific state.</p>
-<section class="admonition note">
-<p class="admonition-title">Example</p>
-<p>Assuming you have dedicated album items,
-an alternative way to list all the albums
-is to have a <abbr title="Global Secondary Index">GSI</abbr>
-with <code>{AlbumTitle}</code> as partition key,
-and just scan the entire index
-(the primary key should be a dedicated attribute,
-say <em>Albums<abbr title="Global Secondary Index">GSI</abbr>PK</em>,
-so that only album items appear in the index;
-the sort key can be any other attribute).</p>
-<p>Or, to list only cover songs,
-you could have dedicated <abbr title="Global Secondary Index">GSI</abbr>
-with <em>CoverOfArtist</em> as primary key
-and <em>SongTitle</em> as sort key.</p>
-</section>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes-general-sparse-indexes.html">Sparse indexes</a></li>
-</ul>
-</section>
-<h3 id="base-table-indexes">Base-table indexes<span class="headerlink">&nbsp;<a href="#base-table-indexes" title="permalink">#</a></span></h3>
-<!-- TODO: this is not from official docs, lmk if it has a standard name -->
+<p>Anyway, that's it for now.</p>
+<p>In the next article, we'll have a closer look at the DynamoDB <strong>data model</strong> and <strong>features</strong>.</p>
+<p><strong>Learned something new today?</strong> Share it with others, it really helps! <span class="text-large">
+<span class="share-icons">
+<a
+    class="share-icon pycoders color"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+>PyCoder's Weekly</a>
+<a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/dynamodb&t=DynamoDB%20crash%20course%3A%20part%201%20%E2%80%93%20philosophy"
+>HN</a>
+<a
+    class="share-icon bluesky color"
+    href="https://bsky.%61%70%70/intent/compose?text=DynamoDB%20crash%20course%3A%20part%201%20%E2%80%93%20philosophy%20https%3A//death.andgravity.com/dynamodb"
+>Bluesky</a>
+<!--
+<a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/dynamodb&title=DynamoDB%20crash%20course%3A%20part%201%20%E2%80%93%20philosophy"
+>Reddit</a>
+-->
+<a
+    class="share-icon linkedin color"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/dynamodb"
+>linkedin</a>
+<a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=DynamoDB%20crash%20course%3A%20part%201%20%E2%80%93%20philosophy&url=https%3A//death.andgravity.com/dynamodb&via=_andgravity"
+>Twitter</a>
+</span>
+</span></p>
 
-<p>In some cases, a global secondary index just doesn't cut it –
-maybe you want to model a many-to-one mapping
-(a <abbr title="Global Secondary Index">GSI</abbr> won't help here,
-since it can only map one attribute in the base table
-to another attribute in the index),
-or you want a strongly consistent index.</p>
-<p>You can maintain an index yourself in the base table,
-by having additional &quot;index&quot; items associated with a &quot;main&quot; item;
-this allows you to go from the main item to the &quot;index&quot; items via a normal attribute,
-and from any of the &quot;index&quot; items to the main item via their partition key.
-To ensure consistency when updating the mapping
-you can use transactions <!-- TODO link -->
-(this way, you won't get partial updates if your program crashes mid-update).</p>
-<section class="admonition note">
-<p class="admonition-title">Example</p>
-<p>A song can have multiple identifiers in external systems,
-such as <a class="external" href="https://en.wikipedia.org/wiki/International_Standard_Recording_Code"><abbr title="International Standard Recording Code">ISRC</abbr></a>, <a class="external" href="https://en.wikipedia.org/wiki/International_Standard_Musical_Work_Code"><abbr title="International Standard Musical Work Code">ISWC</abbr></a>, or <a class="external" href="https://musicbrainz.org/doc/MusicBrainz_Identifier"><abbr title="MusicBrainz Identifier">MBID</abbr></a>.
-To query songs by multiple external ids,
-you'd structure your database like this:</p>
-<ul>
-<li>song<ul>
-<li>partition key <code>song#{Artist}#{AlbumTitle}</code></li>
-<li>sort key <code>{SongTitle}</code></li>
-<li><em>ExternalIds</em>: <code>{type: id, ...}</code></li>
-</ul>
-</li>
-<li>external ids<ul>
-<li>partition key <code>external#{type}#{id}</code></li>
-<li>sort key <code>song#{Artist}#{AlbumTitle}#{SongTitle}</code></li>
-</ul>
-</li>
-</ul>
-</section>
-<p>Note that modeling one-to-many relationships isn't this involved,
-since it fits neatly into the different-entities-same-partition variant
-of <a class="anchor" href="#single-table-design">single table design</a>.</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItemCollections.html">Working with item collections</a> (modeling one-to-many relationships)</li>
-</ul>
-</section>
-<h3 id="optimistic-locking">Optimistic locking<span class="headerlink">&nbsp;<a href="#optimistic-locking" title="permalink">#</a></span></h3>
-<p><a class="external" href="https://en.wikipedia.org/wiki/Optimistic_concurrency_control">Optimistic locking</a> is a concurrency control method
-where you're assuming conflicts are rare,
-so instead of acquiring a lock before doing your changes,
-you check if the data has changed right before commiting,
-as an atomic operation.</p>
-<p>In DynamoDB,
-that atomic operation is a <a class="anchor" href="#conditional-updates">conditional update</a>.
-Items have a version attribute,
-and every time you want to update the item, you:</p>
-<ol>
-<li>read the item, including the version</li>
-<li>increment the version and modify the item</li>
-<li>update the item, using a condition expression to ensure the version matches<ol>
-<li>if successful, you're done</li>
-<li>else, start over from the beginning</li>
-</ol>
-</li>
-</ol>
-<p>Notably,
-you can use this with transactions
-to update groups of related items,
-(like in the <a class="anchor" href="#base-table-indexes">base-table index</a> pattern above),
-with only the &quot;main&quot; item requiring a version.</p>
-<p>The upside of this pattern is that most of the time,
-the update will succeed, which should be faster on average
-(also, strongly-consistent reads can lower the chance of conflicts).
-The downside is that your application needs to support this model explicitly
-(it has to be possible to &quot;start over&quot;,
-which can complicate the logic,
-especially if besides updating the item
-you're interacting with an external system,
-e.g. to send a notification).</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/BestPractices_ImplementingVersionControl.html">Implementing version control</a> via optimistic locking (Python example)</li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBMapper.OptimisticLocking.html">Optimistic locking with version number</a> (Java example)</li>
-</ul>
-</section>
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=dynamodb"
+    method="post"
+    id="embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>Obviously a metaphor.
-As the saying goes, the cloud is just someone else's computer.
+<li id="fn-1"><p>Or any other sorted data structure that allows
+fast searches, sequential access, insertions, and deletions. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>As the saying goes, the cloud is just someone else's computers.
 Here, &quot;infinitely&quot; means it scales horizontally,
-and you'll run out of money before <abbr title="Amazon Web Services">AWS</abbr> runs out of computers. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>TODO: unless you use reserved capacity <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+and you'll run out of money before <abbr title="Amazon Web Services">AWS</abbr> runs out of computers. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 

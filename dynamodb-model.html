@@ -1,0 +1,615 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!doctype html>
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+<link rel="icon" href="/_static/xo-system-icon.svg">
+<link rel="apple-touch-icon" href="/_static/xo-system-icon.svg">
+
+
+
+
+
+
+
+<title>DynamoDB crash course - death and gravity</title>
+
+
+
+<meta property="og:title" content="DynamoDB crash course">
+<meta property="og:site_name" content="death and gravity">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://death.andgravity.com/dynamodb-model">
+
+
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1 class="heading-noindex">DynamoDB crash course</h1>
+
+<p class="text-gray text-nowrap">
+
+
+
+<small>
+<span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
+∙ nine minute read
+∙
+</small><span class="share-icons">
+<a
+    class="share-icon pycoders"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+>PyCoder's Weekly</a>
+<a
+    class="share-icon hacker-news"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/dynamodb-model&t=DynamoDB%20crash%20course"
+>HN</a>
+<a
+    class="share-icon bluesky"
+    href="https://bsky.%61%70%70/intent/compose?text=DynamoDB%20crash%20course%20https%3A//death.andgravity.com/dynamodb-model"
+>Bluesky</a>
+<!--
+<a
+    class="share-icon reddit"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/dynamodb-model&title=DynamoDB%20crash%20course"
+>Reddit</a>
+-->
+<a
+    class="share-icon linkedin"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/dynamodb-model"
+>linkedin</a>
+<a
+    class="share-icon twitter"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=DynamoDB%20crash%20course&url=https%3A//death.andgravity.com/dynamodb-model&via=_andgravity"
+>Twitter</a>
+</span>
+
+
+</p>
+
+
+
+
+
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<details class="toc" open>
+<summary>Table of Contents</summary>
+<ul>
+<li><a href="#introduction">Introduction</a></li>
+<li><a href="#tables">Tables</a></li>
+<li><a href="#limits">Limits</a>
+<ul>
+<li><a href="#partition-throughput">Partition throughput</a></li>
+<li><a href="#item-size">Item size</a></li>
+<li><a href="#page-size">Page size</a></li>
+</ul>
+</li>
+<li><a href="#indexes">Indexes</a>
+<ul>
+<li><a href="#global-secondary-indexes">Global secondary indexes</a></li>
+<li><a href="#local-secondary-indexes">Local secondary indexes</a></li>
+</ul>
+</li>
+<li><a href="#features">Features</a>
+<ul>
+<li><a href="#eventual-consistency">Eventual consistency</a></li>
+<li><a href="#conditional-updates">Conditional updates</a></li>
+<li><a href="#transactions">Transactions</a></li>
+<li><a href="#batch-operations">Batch operations</a></li>
+<li><a href="#streams">Streams</a></li>
+</ul>
+</li>
+</ul>
+</details>
+<h2 id="introduction">Introduction<span class="headerlink">&nbsp;<a href="#introduction" title="permalink">#</a></span></h2>
+<p>(This section is meant to be only a refresher,
+see the links at the end for a more in-depth overview of basic concepts).</p>
+<p>Quoting <a class="external" href="https://en.wikipedia.org/wiki/Amazon_DynamoDB">Wikipedia</a>:</p>
+<blockquote>
+<p><strong>Amazon DynamoDB</strong> is a managed NoSQL database service provided by <abbr title="Amazon Web Services">AWS</abbr>.
+It supports key-value and document data structures and is designed to handle
+a wide range of applications requiring scalability and performance.</p>
+</blockquote>
+<p>These are the basic DynamoDB components:</p>
+<dl>
+<dt>Tables</dt>
+<dd>A table is a group of <strong>items</strong>.
+Since DynamoDB is a NoSQL database,
+the items in a table are not required to have a specific schema
+(with the exception of the attributes composing the <strong>primary key</strong>).
+A DynamoDB table can correspond to either a single table or a whole database
+in a relational database system.</dd>
+<dt>Items</dt>
+<dd>An item is a group of key-value <strong>attributes</strong>.
+An item is uniquely identified in a table by a subset of its attributes
+called a <strong>primary key</strong>.
+A DynamoDB item usually corresponds to a row in a relational database system.</dd>
+<dt>Attributes</dt>
+<dd>An attribute is a key-value pair,
+where the key is a string, and the value can be of any type.
+A DynamoDB attribute corresponds to a field in a relational database system.</dd>
+</dl>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html">What is Amazon DynamoDB?</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html">Core components</a></li>
+</ul>
+</section>
+<p>...</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html">NoSQL design</a></li>
+</ul>
+</section>
+<h2 id="tables">Tables<span class="headerlink">&nbsp;<a href="#tables" title="permalink">#</a></span></h2>
+<p>Conceptually, a DynamoDB table is a <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table</a> of <a class="external" href="https://en.wikipedia.org/wiki/B-tree">B-trees</a>
+(or any other kind of sorted data structure that allows
+fast searches, sequential access, insertions, and deletions).</p>
+<p>An item has two <em>hierarchical</em> keys that make up a composite <strong>primary key</strong>:</p>
+<ul>
+<li><strong>partition key</strong> (aka <strong>hash key</strong>);
+this is the hash table key, and allows efficient
+<em>get all items in partition</em> operations</li>
+<li><strong>sort key</strong> (aka <strong>range key</strong>);
+this is the B-tree key, and allows efficient
+<em>get items in partition in a sort key range</em> operations,
+including <em>get item by partition + sort key</em>;
+the sort key is optional, but in most cases you will have one</li>
+</ul>
+<p>In Python, the operations this enables would look something like this:</p>
+<div class="highlight code-container"><pre class="code" data-lang="IPython"><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sortedcontainers</span><span class="w"> </span><span class="kn">import</span> <span class="n">SortedDict</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Table</span><span class="p">:</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pk_name</span><span class="p">,</span> <span class="n">sk_name</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pk_name</span> <span class="o">=</span> <span class="n">pk_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sk_name</span> <span class="o">=</span> <span class="n">sk_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="n">SortedDict</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">put_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="n">pk</span><span class="p">,</span> <span class="n">sk</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_pk_name</span><span class="p">],</span> <span class="n">item</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_sk_name</span><span class="p">]</span>
+        <span class="n">old_item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">old_item</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="n">old_item</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pk</span><span class="p">,</span> <span class="n">sk</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">][</span><span class="n">sk</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pk</span><span class="p">,</span> <span class="n">minimum</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">maximum</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">inclusive</span><span class="o">=</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="c1"># in the real DynamoDB, this operation is paginated</span>
+        <span class="n">partition</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">sk</span> <span class="ow">in</span> <span class="n">partition</span><span class="o">.</span><span class="n">irange</span><span class="p">(</span><span class="n">minimum</span><span class="p">,</span> <span class="n">maximum</span><span class="p">,</span> <span class="n">inclusive</span><span class="p">,</span> <span class="n">reverse</span><span class="p">):</span>
+            <span class="k">yield</span> <span class="nb">dict</span><span class="p">(</span><span class="n">partition</span><span class="p">[</span><span class="n">sk</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">scan</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># in the real DynamoDB, this operation is paginated</span>
+        <span class="k">for</span> <span class="n">partition</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">partition</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="k">yield</span> <span class="nb">dict</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="n">pk</span><span class="p">,</span> <span class="n">sk</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_pk_name</span><span class="p">],</span> <span class="n">item</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_sk_name</span><span class="p">]</span>
+        <span class="n">old_item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">old_item</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">delete_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pk</span><span class="p">,</span> <span class="n">sk</span><span class="p">):</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">][</span><span class="n">sk</span><span class="p">]</span>
+</code></pre></div>
+
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">(</span><span class="s1">&#39;Artist&#39;</span><span class="p">,</span> <span class="s1">&#39;SongTitle&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span><span class="o">.</span><span class="n">put_item</span><span class="p">({</span><span class="s1">&#39;Artist&#39;</span><span class="p">:</span> <span class="s1">&#39;1000mods&#39;</span><span class="p">,</span> <span class="s1">&#39;SongTitle&#39;</span><span class="p">:</span> <span class="s1">&#39;Vidage&#39;</span><span class="p">,</span> <span class="s1">&#39;Year&#39;</span><span class="p">:</span> <span class="mi">2011</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span><span class="o">.</span><span class="n">put_item</span><span class="p">({</span><span class="s1">&#39;Artist&#39;</span><span class="p">:</span> <span class="s1">&#39;1000mods&#39;</span><span class="p">,</span> <span class="s1">&#39;SongTitle&#39;</span><span class="p">:</span> <span class="s1">&#39;Claws&#39;</span><span class="p">,</span> <span class="s1">&#39;Album&#39;</span><span class="p">:</span> <span class="s1">&#39;Vultures&#39;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span><span class="o">.</span><span class="n">put_item</span><span class="p">({</span><span class="s1">&#39;Artist&#39;</span><span class="p">:</span> <span class="s1">&#39;Kyuss&#39;</span><span class="p">,</span> <span class="s1">&#39;SongTitle&#39;</span><span class="p">:</span> <span class="s1">&#39;Space Cadet&#39;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s1">&#39;1000mods&#39;</span><span class="p">,</span> <span class="s1">&#39;Claws&#39;</span><span class="p">)</span>
+<span class="go">{&#39;Artist&#39;: &#39;1000mods&#39;, &#39;SongTitle&#39;: &#39;Claws&#39;, &#39;Album&#39;: &#39;Vultures&#39;}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">i</span><span class="p">[</span><span class="s1">&#39;SongTitle&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;1000mods&#39;</span><span class="p">)]</span>
+<span class="go">[&#39;Claws&#39;, &#39;Vidage&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">i</span><span class="p">[</span><span class="s1">&#39;SongTitle&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;1000mods&#39;</span><span class="p">,</span> <span class="n">minimum</span><span class="o">=</span><span class="s1">&#39;Loose&#39;</span><span class="p">)]</span>
+<span class="go">[&#39;Vidage&#39;]</span>
+</code></pre></div>
+
+<p>Importantly,
+<strong>any access not based on partition/sort key is expensive</strong>,
+since it forces you to do a full table scan
+(ignoring <a class="anchor" href="#indexes">indexes</a> for now),
+and at the scales you'd use DynamoDB at,
+this can mean going through billions of items.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p><small>(from <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=another%20example%20table%20named%20Music">here</a>)</small>
+Given a <em>Music</em> table where items correspond to songs,
+with the <em>Artist</em> attribute as primary key
+and <em>SongTitle</em> as sort key,
+you can efficiently:</p>
+<ul>
+<li>query songs by artist (sorted by song title)</li>
+<li>get the song by artist and song title</li>
+</ul>
+<p>... and that's it, anything else requires a full table scan.</p>
+</section>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.PrimaryKey">Core components # Primary key</a></li>
+<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-partitions">Everything you need to know about DynamoDB Partitions</a></li>
+</ul>
+</section>
+<h2 id="limits">Limits<span class="headerlink">&nbsp;<a href="#limits" title="permalink">#</a></span></h2>
+<p>TODO: rephrase
+The upside is that <strong>for supported dimensions,
+DynamoDB scales infinitely</strong>[^infinitely] –
+there are no limits on table size,
+the number of items or partition keys in a table, or
+the number of sort keys in a partition.</p>
+<p>There are some important limits, though;
+note these are hard, immutable limits, not adjustable quotas,
+and as such you must design your application around them.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/CheatSheet.html#CheatSheet.ServiceBasics">Cheat sheet # Service quota basics</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ServiceQuotas.html">Quotas</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html">Constraints</a></li>
+<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-limits/">The Three DynamoDB Limits You Need to Know</a></li>
+</ul>
+</section>
+<h3 id="partition-throughput">Partition throughput<span class="headerlink">&nbsp;<a href="#partition-throughput" title="permalink">#</a></span></h3>
+<p>Most importantly, there is a per-partition throughput limit:</p>
+<ul>
+<li>for reads, there's a limit of 3,000 read capacity units per second;
+this means 3,000 RCU / s * 4 KB / RCU = 12 MB/s
+(eventually consistent reads are twice this)</li>
+<li>for writes, there's a limit of 1,000 read capacity units per second;
+this means 1,000 WCU / s * 1 KB / WCU = 1 MB/s</li>
+</ul>
+<p>Because of this, you have to be careful
+to distribute requests evenly across partitions;
+if there's no good natural partition key,
+you can use techniques such as sharding (discussed below). <!-- TODO link --></p>
+<p>The amount of consumed capacity units is what you are billed for.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
+While DynamoDB offers some server-side filtering capabilities
+that are not shown in my Python mock-up above
+(you can filter items based on expressions,
+and you can &quot;select&quot; only specific attributes),
+this only saves on network traffic and latency –
+data read to evaluate expressions still counts as read,
+and you will pay for it.
+Because of this, optimizing your data access is not just a performance matter,
+but a cost matter too.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html">Partitions and data distribution</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html">Read and write operations</a> (capacity unit consumption)</li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html">Partition key design</a><ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-uniform-load.html">Distributing workloads</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-sharding.html">Write sharding</a></li>
+</ul>
+</li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-sort-keys.html">Sort key design</a></li>
+<li><small>(blog)</small> <a class="external" href="https://aws.amazon.com/blogs/database/choosing-the-right-dynamodb-partition-key/">Choosing the Right DynamoDB Partition Key</a></li>
+</ul>
+</section>
+<h3 id="item-size">Item size<span class="headerlink">&nbsp;<a href="#item-size" title="permalink">#</a></span></h3>
+<p>Second, the maximum size of an item is 400 KB.
+This can be worked around by either splitting an item into multiple ones
+on the same partition,
+or by storing only the metadata in DynamoDB,
+with data somewhere else, like S3
+(this is a pretty common pattern).</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html#limits-items">Constraints # Items</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-use-s3-too.html">Large items</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-vertical-partitioning">Data modeling building blocks # Vertical partitioning building block</a></li>
+</ul>
+</section>
+<h3 id="page-size">Page size<span class="headerlink">&nbsp;<a href="#page-size" title="permalink">#</a></span></h3>
+<p>Finally, the result set of the query and scan operations
+is limited to 1 MB per page,
+but it is possible to stitch together multiple pages
+by using a form of <a class="internal" href="/query-builder-why#intermission-scrolling-window-queries">keyset pagination</a>
+(specifically, there's a <code>LastEvaluatedKey</code> that allows you to query/scan from the end of the previous page).</p>
+<p>However, this has implications on consistency,
+especially for secondary indexes –
+if an attribute used in a <abbr title="Global Secondary Index">GSI</abbr> primary or sort key changes,
+an item can appear zero or multiple times in the entire (multi-page) result set.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html#limits-api">Constraints # API-specific constraints</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.Pagination.html">Paginating query results</a></li>
+</ul>
+</section>
+<h2 id="indexes">Indexes<span class="headerlink">&nbsp;<a href="#indexes" title="permalink">#</a></span></h2>
+<p>When discussing tables,
+I said that access not based on partition/sort key is expensive.
+Secondary indexes allow other access patterns
+by using an <strong>alternate primary key</strong>
+composed of different attributes than that of the table.
+You can query or scan an index just like you would a table.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.SecondaryIndexes">Core components # Secondary indexes</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/SecondaryIndexes.html">Working with indexes</a></li>
+</ul>
+</section>
+<h3 id="global-secondary-indexes">Global secondary indexes<span class="headerlink">&nbsp;<a href="#global-secondary-indexes" title="permalink">#</a></span></h3>
+<p>Conceptually, a global secondary index is a separate table
+that's automatically kept in sync with the base table,
+and allows having different attributes as primary key.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p><small>(from <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=query%20the%20data%20by%20Genre%20and%20AlbumTitle">here</a>)</small>
+Continuing with the music example,
+a <abbr title="Global Secondary Index">GSI</abbr> with <em>Genre</em> and <em>AlbumTitle</em> as primary key
+would allow you to <em>also</em> efficiently:</p>
+<ul>
+<li>query songs by genre
+(and, if you collapse results in application code,
+query albums by genre <em>somewhat</em> efficiently)</li>
+<li>query songs by genre and album title
+(but, two albums can have the same genre and title,
+so you might want to group by artist in application code)</li>
+</ul>
+</section>
+<p>Aside from item partition and sort keys,
+the index can include additional attributes,
+so you can query the index alone;
+this is called <strong><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.Projections">attribute projection</a></strong>,
+and is analogous to a <a class="external" href="https://en.wikipedia.org/wiki/Database_index#Covering_index">covering index</a> in relational databases;
+however,
+if you need an attribute that's not in the index,
+you'll have to get it yourself from the base table
+(batch operations can make this faster). <!-- TODO link --></p>
+<p>Unlike real tables,
+<abbr title="Global Secondary Index">GSI</abbr>s support only eventually consistent reads,
+and their primary keys do not need to be unique.
+In all other respects,
+<strong><abbr title="Global Secondary Index">GSI</abbr>s behave like real tables</strong>:</p>
+<ul>
+<li>they have their own <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.ThroughputConsiderations">separate capacity</a></li>
+<li>they have no limits on size or the number of primary keys</li>
+<li>they have the same <a class="anchor" href="#partition-throughput">partition throughput</a> limits,
+and the same workarounds <!-- TODO link to sharding --></li>
+</ul>
+<p>You can have up to 20 <abbr title="Global Secondary Index">GSI</abbr>s per table,
+although in practice you can reuse them.</p>
+<!-- TODO link to overloading -->
+
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html">Global secondary indexes</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes.html">Best practices for secondary indexes</a></li>
+</ul>
+</section>
+<h3 id="local-secondary-indexes">Local secondary indexes<span class="headerlink">&nbsp;<a href="#local-secondary-indexes" title="permalink">#</a></span></h3>
+<p>A local secondary index allows you to have an <strong>alternate sort key</strong> for a partition
+(it is <em>local</em> to the partition).</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>For the same <em>Music</em> with <em>Artist</em> as partition key,
+a <abbr title="Local Secondary Index">LSI</abbr> with <em>Year</em> as sort key
+would allow you to <em>also</em> efficiently:</p>
+<ul>
+<li>query songs by artist in chronological order</li>
+<li>query songs by artist and year</li>
+</ul>
+</section>
+<p>Unlike <abbr title="Global Secondary Index">GSI</abbr>s, local secondary indexes support
+retrieving attributes <em>not</em> projected into the index
+(with higher latency and cost),
+and strongly consistent reads.</p>
+<p>However, <abbr title="Local Secondary Index">LSI</abbr>s have their downsides:
+they can only be created/deleted with the table,
+and <strong>using <abbr title="Local Secondary Index">LSI</abbr>s limits partition size to 10 GB</strong>
+(the size of the items in the table plus the items in <abbr title="Local Secondary Index">LSI</abbr>s);
+because of this, people usually prefer using <abbr title="Global Secondary Index">GSI</abbr>s.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LSI.html">Local secondary indexes</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes.html">Best practices for secondary indexes</a></li>
+</ul>
+</section>
+<h2 id="features">Features<span class="headerlink">&nbsp;<a href="#features" title="permalink">#</a></span></h2>
+<p>Before we go into how to structure data for efficient use with DynamoDB,
+let's look at some of the things you can do with tables
+besides simple <abbr title="create, read, update, and delete">CRUD</abbr> operations.</p>
+<h3 id="eventual-consistency">Eventual consistency<span class="headerlink">&nbsp;<a href="#eventual-consistency" title="permalink">#</a></span></h3>
+<p>By default, when reading an item,
+the result may be a slightly older version of the data than the most current one;
+if you repeat the read, you will eventually get the most recent item,
+i.e. reads are <strong>eventually consistent</strong>.
+(In part, this is a consequence DynamoDB replicating your data in <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html#ddb-intro-resilience">multiple availability zones</a>
+– the node you're talking to may have not gotten the most recent data yet.)</p>
+<p>For tables and <abbr title="Local Secondary Index">LSI</abbr>s, you can issue strongly-consistent reads,
+which will give you the most up-to-date data;
+these are slower, and twice as expensive.</p>
+<p>To deal with the lack of a point-in time consistent view of the entire database,
+DynamoDB offers <a class="anchor" href="#conditional-updates">conditional updates</a>,
+as well as a limited form of <a class="anchor" href="#transactions">transactions</a>,
+which serve as a sort of synchronization primitives.</p>
+<p>Note that strongly-consistent reads do not remove
+the need for synchronization primitives
+– by the time you get the response,
+the data may have already been updated by another processl
+instead,
+strong consistency is useful
+to lower the rate at which conditional updates or transactions fail.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html">DynamoDB read consistency</a></li>
+</ul>
+</section>
+<h3 id="conditional-updates">Conditional updates<span class="headerlink">&nbsp;<a href="#conditional-updates" title="permalink">#</a></span></h3>
+<p>For write operations (put/update/delete),
+you can specify a <strong>condition expression</strong>
+(e.g. an attribute exists, or has a specific value)
+that must be true for the operation to happen;
+if the expression evaluates to false,
+the write fails.</p>
+<p>Condition expressions are crucial for ensuring consistency
+(and avoiding <a class="external" href="https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use">time-of-check to time-of-use</a> bugs),
+since they are the only way to run a bit of logic &quot;server-side&quot;,
+on the <em>current</em> version of an item.
+Note that the condition can refer only to the item being modified.</p>
+<p>Higher level things can be built on top of condition expressions,
+including <a href="todo:link">optimistic locking</a> and <a class="external" href="https://github.com/awslabs/amazon-dynamodb-lock-client">distributed locks</a>.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ConditionExpressions.html">DynamoDB condition expression CLI example</a></li>
+<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-condition-expressions/">Understanding DynamoDB Condition Expressions</a></li>
+</ul>
+</section>
+<h3 id="transactions">Transactions<span class="headerlink">&nbsp;<a href="#transactions" title="permalink">#</a></span></h3>
+<p>Transactions allow performing write operations (put/update/delete)
+to up to 100 items as a single all-or-nothing operation –
+either all of them succeed, or none do.
+The items can be in the same or <em>different</em> tables
+in the same account and region.</p>
+<p>Transactions also work with <a class="anchor" href="#conditional-updates">condition expressions</a>,
+so if a condition fails for one item,
+none of the items are modified.
+If you want to evaluate a condition for an item that you're not modifying,
+you can use the special <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_ConditionCheck.html">ConditionCheck</a> operation.
+Just like with single condition expressions,
+the expressions can only refer to each item individually
+(you can't have a condition about two items in the transaction).</p>
+<p>You can also read up to 100 items transactionally
+(to ensure serialization with transactional writes).</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transactions.html">Working with transactions</a></li>
+</ul>
+</section>
+<h3 id="batch-operations">Batch operations<span class="headerlink">&nbsp;<a href="#batch-operations" title="permalink">#</a></span></h3>
+<p>You can put/delete up to 25 items or get up to 100 items
+in a single request up to 16 MB in size;
+this allows reading / writing / deleting large amounts of data efficiently.</p>
+<p>The operations within a batch are entirely independent from one another –
+some of the operations may fail / a partial result may be returned
+(e.g. if <a class="anchor" href="#partition-throughput">throughput limits</a> are reached).
+Also, batch writes don't support condition expressions.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchGetItem.html">BatchGetItem</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html">BatchWriteItem</a></li>
+</ul>
+</section>
+<h3 id="streams">Streams<span class="headerlink">&nbsp;<a href="#streams" title="permalink">#</a></span></h3>
+<p>Streams are DynamoDB's <a class="external" href="https://en.wikipedia.org/wiki/Change_data_capture">change data capture</a> mechanism,
+and allow you to get notified in &quot;near-real time&quot;
+when an item is created, updated, or deleted.
+There are two flavors of streams,
+<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html">DynamoDB Streams</a> (the original one)
+and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/kds.html">Kinesis Data Streams</a> (integration with Amazon Kinesis).</p>
+<p>Two notable applications of streams are:</p>
+<ul>
+<li>Lambda triggers (similar to triggers in relational databases)</li>
+<li>replication to other places like S3 or Redshift (via Firehose)</li>
+</ul>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.Streams">Core components # DynamoDB Streams</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/streamsmain.html">Working with streams</a></li>
+<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/bites/dynamodb-streams/">What you should know about DynamoDB Streams</a></li>
+</ul>
+</section>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>TODO: unless you use reserved capacity <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
+
+
+
+
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+
+
+
+</footer>
+
+
+</div>

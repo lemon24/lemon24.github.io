@@ -1,0 +1,516 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!doctype html>
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+<link rel="icon" href="/_static/xo-system-icon.svg">
+<link rel="apple-touch-icon" href="/_static/xo-system-icon.svg">
+
+
+
+
+
+
+
+<title>DynamoDB crash course - death and gravity</title>
+
+
+
+<meta property="og:title" content="DynamoDB crash course">
+<meta property="og:site_name" content="death and gravity">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://death.andgravity.com/dynamodb-patterns">
+
+
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1 class="heading-noindex">DynamoDB crash course</h1>
+
+<p class="text-gray text-nowrap">
+
+
+
+<small>
+<span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
+∙ eight minute read
+∙
+</small><span class="share-icons">
+<a
+    class="share-icon pycoders"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+>PyCoder's Weekly</a>
+<a
+    class="share-icon hacker-news"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/dynamodb-patterns&t=DynamoDB%20crash%20course"
+>HN</a>
+<a
+    class="share-icon bluesky"
+    href="https://bsky.%61%70%70/intent/compose?text=DynamoDB%20crash%20course%20https%3A//death.andgravity.com/dynamodb-patterns"
+>Bluesky</a>
+<!--
+<a
+    class="share-icon reddit"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/dynamodb-patterns&title=DynamoDB%20crash%20course"
+>Reddit</a>
+-->
+<a
+    class="share-icon linkedin"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/dynamodb-patterns"
+>linkedin</a>
+<a
+    class="share-icon twitter"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=DynamoDB%20crash%20course&url=https%3A//death.andgravity.com/dynamodb-patterns&via=_andgravity"
+>Twitter</a>
+</span>
+
+
+</p>
+
+
+
+
+
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<details class="toc" open>
+<summary>Table of Contents</summary>
+<ul>
+<li><a href="#design-patterns">Design patterns</a>
+<ul>
+<li><a href="#composite-keys">Composite keys</a></li>
+<li><a href="#single-table-design">Single table design</a></li>
+<li><a href="#gsi-overloading">GSI overloading</a></li>
+<li><a href="#partition-key-sharding">Partition key sharding</a></li>
+<li><a href="#sparse-indexes">Sparse indexes</a></li>
+<li><a href="#base-table-indexes">Base-table indexes</a></li>
+<li><a href="#optimistic-locking">Optimistic locking</a></li>
+</ul>
+</li>
+</ul>
+</details>
+<h2 id="design-patterns">Design patterns<span class="headerlink">&nbsp;<a href="#design-patterns" title="permalink">#</a></span></h2>
+<p>To help deal with DynamoDB being as low level as it is
+(i.e. to work around its <a href="todo:link">limits</a>,
+and perhpas make best use of its <a href="todo:link">features</a>),
+a number of design patterns have arisen,
+documented pretty extensively in the official documentation.</p>
+<p>TODO: in this section, I'll go through some of the most important patterns (nonexhaustive)</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling.html">Data modeling</a><ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-schemas.html">Data modeling schemas</a> (worked examples)</li>
+</ul>
+</li>
+</ul>
+</section>
+<h3 id="composite-keys">Composite keys<span class="headerlink">&nbsp;<a href="#composite-keys" title="permalink">#</a></span></h3>
+<p>The most basic pattern that underpins many of the other patterns
+is that
+your partition and sort keys are not natural attributes of your data,
+but composites of multiple other attributes,
+to enable specific access patterns;
+this works equally well with both table and index keys.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>In <a class="anchor" href="#single-table-design">single table design</a>,
+you have multiple types of items in the same table / partition
+by prefixing the key with the type,
+e.g. <code>song#{SongTitle}</code>.</p>
+<p>Or, you can sort lexicographically by more than one attribute
+by having a sort key composed of multiple attributes,
+e.g. <code>{AlbumTitle}#{SongTitle}</code>.</p>
+<p>Or, in <a class="anchor" href="#partition-key-sharding">partition key sharding</a>,
+you spread the load on a GSI partition by splitting one partition key
+into multiple ones, e.g. <code>{Genre}#{shard}</code>.</p>
+</section>
+<p>This is so pervasive that in November 2025,
+they finally added support for <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.DesignPattern.MultiAttributeKeys.html">multi-attribute keys</a>,
+no string manipulation needed
+(alas, only for GSIs, not tables).</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-composite">Data modeling building blocks # Composite sort key</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-adjacency-graphs.html">Many-to-many relationships</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.MultiAttributeKeys">Global secondary indexes # Multi-attribute key schema</a></li>
+</ul>
+</section>
+<h3 id="single-table-design">Single table design<span class="headerlink">&nbsp;<a href="#single-table-design" title="permalink">#</a></span></h3>
+<p>In most cases, AWS <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html#bp-general-nosql-design-approach">recommends</a> using as few tables as possible:</p>
+<blockquote>
+<p>As a general rule,
+you should maintain as few tables as possible in a DynamoDB application.
+[...]
+A single table with inverted indexes can usually enable simple queries
+to create and retrieve the complex hierarchical data structures
+required by your application.</p>
+</blockquote>
+<p>The culmination of this is <strong>single table design</strong>,
+where a DynamoDB table corresponds to a whole database
+in a relational database system.
+You do this by storing multiple entities in the same table,
+and distinguishing between them by prefixing the key with the type.</p>
+<p>One way of doing it is to have all items related to a &quot;top-level&quot; entity
+on the same partition,
+and prefix the sort key with the item type;
+this has the advantage of data locality,
+which reduces the number of queries needed to get related items,
+and may also make them faster
+(since DynamoDB ends up talking with fewer nodes).</p>
+<!-- TODO spare provisioned capacity, easier scaling -->
+
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>You could use <code>Artist</code> as partition key,
+and the sort key to tell sub-entities apart,
+e.g. <code>artist</code>, <code>album#{AlbumTitle}</code>, and <code>song#{AlbumTitle}#{SongTitle}</code>.</p>
+</section>
+<p>If some of the entities have very different access patterns,
+you can put them in dedicated partitions instead
+using the same prefix trick.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>If an artist has so many songs that you reach
+<a href="todo:link">partition thoughput</a> limits,
+perhaps it's better to put the songs in an album on their own partitions:</p>
+<ul>
+<li>partition key <code>artist#{Artist}</code><ul>
+<li>sort key <code>artist</code></li>
+<li>sort key <code>album#{AlbumTitle}</code></li>
+</ul>
+</li>
+<li>partition key <code>song#{Artist}#{AlbumTitle}</code>, sort key <code>{SongTitle}</code></li>
+</ul>
+</section>
+<p>A consequence of this is that
+if you want to list all items of specific type,
+you have to use a GSI
+(otherwise, you end up doing full table scan);
+this can, in turn, lead to hitting <em>GSI</em> partition throughput limits,
+but <a class="anchor" href="#partition-key-sharding">partition key sharding</a> can help.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html">NoSQL design</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-foundations.html#data-modeling-foundations-single">Data modeling foundations # Single table design foundation</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-relational-modeling.html">Relational modeling</a></li>
+<li><small>(blog)</small> <a class="external" href="https://aws.amazon.com/blogs/database/single-table-vs-multi-table-design-in-amazon-dynamodb/">Single-table vs. multi-table design in Amazon DynamoDB</a></li>
+<li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-single-table/">The What, Why, and When of Single-Table Design with DynamoDB</a></li>
+</ul>
+</section>
+<h3 id="gsi-overloading">GSI overloading<span class="headerlink">&nbsp;<a href="#gsi-overloading" title="permalink">#</a></span></h3>
+<p>Just like tables
+can have more than one type of item,
+so can GSIs –
+that is,
+you can put different things in the GSI partition/sort key attributes,
+depending on item type.
+This allows indexing more fields than the 20 GSIs per table quota,
+and may be cheaper too,
+since fewer GSIs can make better use of spare provisioned capacity.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>For a table that contains both artist and album items,
+a single GSI could be used for entirely different purposes:</p>
+<ul>
+<li>artist: partition key <code>artist#{Country}</code>, sort key <code>details</code>
+– list artists by country</li>
+<li>album: partition key <code>album#{Genre}</code>, sort key <code>{Artist}</code>
+– list albums by genre</li>
+</ul>
+</section>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-gsi-overloading.html">GSI overloading</a></li>
+</ul>
+</section>
+<h3 id="partition-key-sharding">Partition key sharding<span class="headerlink">&nbsp;<a href="#partition-key-sharding" title="permalink">#</a></span></h3>
+<p>Sometimes, not even a partition key composed of multiple natural attributes
+is enough to spread the load evenly across partition;
+one way of dealing with this is to put items corresponding
+to a natural attribute on multiple partitions.</p>
+<p>The question is then, what should the partition key for an item be?
+One possibility is to use a <strong>random suffix</strong> from a known range;
+this still allows you to list items for a natural attribute
+by doing multipe queries, one for each suffix.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>For our table of songs,
+using the album as part of the partition key may not work,
+since not all songs are part of an album these days.
+Instead, we could use <code>{Artist}#{randrange(10)}</code> as partition key.
+Then, to list all the songs for an artist, we'd do:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">for</span> <span class="n">shard</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">dynamodb</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">artist</span><span class="si">}</span><span class="s2">#</span><span class="si">{</span><span class="n">shard</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">):</span>
+        <span class="k">yield</span> <span class="n">item</span>
+</code></pre></div>
+<p>Now we can have 10 times as many items
+before reaching throughput limits.</p>
+</section>
+<p>A downside of random suffixes is that you can't get a specific item,
+since you don't know what suffix you used for any given item.
+An alternative is to <strong>calculate the suffix</strong>
+from something that you do know,
+like the hash of an attribute modulo N.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>Instead of a random number,
+we could use <code>{Artist}#{hash(SongTitle) % 10)}</code>.
+Then, to get a song by artist and song title:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">hash</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="o">.</span><span class="n">from_bytes</span><span class="p">(</span><span class="n">sha256</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">digest</span><span class="p">())</span>
+
+<span class="n">shard</span> <span class="o">=</span> <span class="nb">hash</span><span class="p">(</span><span class="n">song_title</span><span class="p">)</span> <span class="o">%</span> <span class="mi">10</span>
+<span class="n">dynamodb</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">artist</span><span class="si">}</span><span class="s2">#</span><span class="si">{</span><span class="n">shard</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">song_title</span><span class="p">)</span>
+</code></pre></div>
+</section>
+<p>Sharding may be even more important for GSIs,
+where a lot of times you want to list items by a low-cardinality attribute.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>Assuming you have dedicated album items,
+to list all the albums
+you could use a single GSI partition
+with partition key <code>albums</code> (literal string)
+and sort key <code>{AlbumTitle}</code>,
+but this may overload the partition.</p>
+<p>To spread the load,
+you could use <code>album#{hash(AlbumTitle} % 100}</code>
+as partition key
+if you don't care about them being sorted,
+or something like <code>album#{AlbumTitle[0].lower()}</code>
+if you want them sorted alphabetically
+(but, careful about
+some first letters <a class="external" href="https://en.wikipedia.org/wiki/Letter_frequency#Relative_frequencies_of_the_first_letters_of_a_word_in_English_language">being more popular than others</a>,
+and some albums <a class="external" href="https://www.discogs.com/release/10506005--">not starting with a letter at all</a>).</p>
+</section>
+<p>One other benefit of sharding
+is that you can query them in parallel,
+which can speed up getting the entire result set.</p>
+<hr />
+<p>The number of shards is a trade-off –
+too many shards means more queries,
+too few shards means you might still overload the partitions.</p>
+<p>Importantly, <strong>increasing the number of shards is non-trivial</strong>,
+so ideally you should avoid it if possible.</p>
+<p>One way to do it is
+to move to a new index (or just partition key prefix) entirely,
+which means you need to backfill existing items in the new index,
+and then switch to it.
+Alternatively, you could add new shards,
+and either keep old items on existing shards
+(e.g. by assigning them an &quot;epoch&quot; based on when they were created),
+or re-balance them
+(although this may not be possible
+without downtime / inconsistencies).</p>
+<p>Regardless of what you do,
+it requires support in application code,
+and careful orchestration when making the switch
+(for example,
+if you expose a <code>LastEvaluatedKey</code>-derived pagination token to users,
+you have either temporarily support both,
+or accept some downtime).</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-sharding.html">Write sharding</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes-gsi-sharding.html">GSI sharding</a></li>
+</ul>
+</section>
+<h3 id="sparse-indexes">Sparse indexes<span class="headerlink">&nbsp;<a href="#sparse-indexes" title="permalink">#</a></span></h3>
+<p>If an item doesn't have one of the attributes
+used as index partition/sort key,
+it won't appear in the index
+(and, you won't pay for it).
+This can be used deliberately to query
+only a subset of the items in the table,
+like those of a specific type,
+or that are in a specific state.</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>Assuming you have dedicated album items,
+an alternative way to list all the albums
+is to have a GSI
+with <code>{AlbumTitle}</code> as partition key,
+and just scan the entire index
+(the primary key should be a dedicated attribute,
+say <em>AlbumsGSIPK</em>,
+so that only album items appear in the index;
+the sort key can be any other attribute).</p>
+<p>Or, to list only cover songs,
+you could have dedicated GSI
+with <em>CoverOfArtist</em> as primary key
+and <em>SongTitle</em> as sort key.</p>
+</section>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes-general-sparse-indexes.html">Sparse indexes</a></li>
+</ul>
+</section>
+<h3 id="base-table-indexes">Base-table indexes<span class="headerlink">&nbsp;<a href="#base-table-indexes" title="permalink">#</a></span></h3>
+<!-- TODO: this is not from official docs, lmk if it has a standard name -->
+
+<p>In some cases, a global secondary index just doesn't cut it –
+maybe you want to model a many-to-one mapping
+(a GSI won't help here,
+since it can only map one attribute in the base table
+to another attribute in the index),
+or you want a strongly consistent index.</p>
+<p>You can maintain an index yourself in the base table,
+by having additional &quot;index&quot; items associated with a &quot;main&quot; item;
+this allows you to go from the main item to the &quot;index&quot; items via a normal attribute,
+and from any of the &quot;index&quot; items to the main item via their partition key.
+To ensure consistency when updating the mapping
+you can use transactions <!-- TODO link -->
+(this way, you won't get partial updates if your program crashes mid-update).</p>
+<section class="admonition note">
+<p class="admonition-title">Example</p>
+<p>A song can have multiple identifiers in external systems,
+such as <a class="external" href="https://en.wikipedia.org/wiki/International_Standard_Recording_Code"><abbr title="International Standard Recording Code">ISRC</abbr></a>, <a class="external" href="https://en.wikipedia.org/wiki/International_Standard_Musical_Work_Code"><abbr title="International Standard Musical Work Code">ISWC</abbr></a>, or <a class="external" href="https://musicbrainz.org/doc/MusicBrainz_Identifier"><abbr title="MusicBrainz Identifier">MBID</abbr></a>.
+To query songs by multiple external ids,
+you'd structure your database like this:</p>
+<ul>
+<li>song<ul>
+<li>partition key <code>song#{Artist}#{AlbumTitle}</code></li>
+<li>sort key <code>{SongTitle}</code></li>
+<li><em>ExternalIds</em>: <code>{type: id, ...}</code></li>
+</ul>
+</li>
+<li>external ids<ul>
+<li>partition key <code>external#{type}#{id}</code></li>
+<li>sort key <code>song#{Artist}#{AlbumTitle}#{SongTitle}</code></li>
+</ul>
+</li>
+</ul>
+</section>
+<p>Note that modeling one-to-many relationships isn't this involved,
+since it fits neatly into the different-entities-same-partition variant
+of <a class="anchor" href="#single-table-design">single table design</a>.</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItemCollections.html">Working with item collections</a> (modeling one-to-many relationships)</li>
+</ul>
+</section>
+<h3 id="optimistic-locking">Optimistic locking<span class="headerlink">&nbsp;<a href="#optimistic-locking" title="permalink">#</a></span></h3>
+<p><a class="external" href="https://en.wikipedia.org/wiki/Optimistic_concurrency_control">Optimistic locking</a> is a concurrency control method
+where you're assuming conflicts are rare,
+so instead of acquiring a lock before doing your changes,
+you check if the data has changed right before commiting,
+as an atomic operation.</p>
+<p>In DynamoDB,
+that atomic operation is a <a href="todo:link">conditional update</a>.
+Items have a version attribute,
+and every time you want to update the item, you:</p>
+<ol>
+<li>read the item, including the version</li>
+<li>increment the version and modify the item</li>
+<li>update the item, using a condition expression to ensure the version matches<ol>
+<li>if successful, you're done</li>
+<li>else, start over from the beginning</li>
+</ol>
+</li>
+</ol>
+<p>Notably,
+you can use this with transactions
+to update groups of related items,
+(like in the <a class="anchor" href="#base-table-indexes">base-table index</a> pattern above),
+with only the &quot;main&quot; item requiring a version.</p>
+<p>The upside of this pattern is that most of the time,
+the update will succeed, which should be faster on average
+(also, strongly-consistent reads can lower the chance of conflicts).
+The downside is that your application needs to support this model explicitly
+(it has to be possible to &quot;start over&quot;,
+which can complicate the logic,
+especially if besides updating the item
+you're interacting with an external system,
+e.g. to send a notification).</p>
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/BestPractices_ImplementingVersionControl.html">Implementing version control</a> via optimistic locking (Python example)</li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBMapper.OptimisticLocking.html">Optimistic locking with version number</a> (Java example)</li>
+</ul>
+</section>
+
+
+
+
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+
+
+
+</footer>
+
+
+</div>

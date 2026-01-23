@@ -2,13 +2,275 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #python</title>
-  <updated>2025-12-01T18:00:00+00:00</updated>
+  <updated>2026-01-23T08:40:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
   </author>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index/_tags/python.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/dynamodb">
+    <id>https://death.andgravity.com/dynamodb</id>
+    <title>DynamoDB crash course: part 1 – philosophy</title>
+    <updated>2026-01-23T08:40:00+00:00</updated>
+    <content type="html">&lt;p&gt;This is part one of a series
+covering core &lt;strong&gt;DynamoDB&lt;/strong&gt; concepts and patterns,
+from the data model and features all the way up to &lt;strong&gt;single-table design&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;The goal is to get you
+to understand what &lt;strong&gt;idiomatic usage&lt;/strong&gt; looks like and
+what the &lt;strong&gt;trade-offs&lt;/strong&gt; are
+in under an hour,
+providing entry points to detailed documentation.&lt;/p&gt;
+&lt;p&gt;(Don't get me wrong, the &lt;abbr title="Amazon Web Services"&gt;AWS&lt;/abbr&gt; documentation is comprehensive,
+but can be quite complex,
+and DynamoDB being a relatively low level product
+with lots of features added over the years
+doesn't really help with that.)&lt;/p&gt;
+&lt;p&gt;Today, we're looking at
+&lt;strong&gt;what DynamoDB is&lt;/strong&gt; and
+&lt;strong&gt;why it is the way it is&lt;/strong&gt;.&lt;/p&gt;
+&lt;h2 id="what-is-dynamodb"&gt;What is DynamoDB?&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#what-is-dynamodb" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Quoting &lt;a class="external" href="https://en.wikipedia.org/wiki/Amazon_DynamoDB"&gt;Wikipedia&lt;/a&gt;:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;strong&gt;Amazon DynamoDB&lt;/strong&gt; is a managed NoSQL database service provided by &lt;abbr title="Amazon Web Services"&gt;AWS&lt;/abbr&gt;.
+It supports key-value and document data structures and is designed to handle
+a wide range of applications requiring scalability and performance.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;p&gt;This definition should suffice for now;
+for a more detailed refresher, see:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html"&gt;What is Amazon DynamoDB?&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html"&gt;Core components&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;p&gt;The DynamoDB data model can be summarized as follows:&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;A &lt;strong&gt;table&lt;/strong&gt; is a collection of &lt;strong&gt;items&lt;/strong&gt;,
+and an item is a collection of named &lt;strong&gt;attributes&lt;/strong&gt;.
+Items are uniquely identified by a &lt;strong&gt;partition key&lt;/strong&gt; attribute
+and an optional &lt;strong&gt;sort key&lt;/strong&gt; attribute.
+The partition key determines where (i.e. on what computer) an item is stored.
+The sort key is used to get ordered ranges of items from a specific partition.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;That's is, that's the whole data model.
+Sure, there's indexes and transactions and other features,
+but at its core, this is it.
+Put another way:&lt;/p&gt;
+&lt;p&gt;A DynamoDB table is &lt;strong&gt;a &lt;a class="external" href="https://en.wikipedia.org/wiki/Hash_table"&gt;hash table&lt;/a&gt; of &lt;a class="external" href="https://en.wikipedia.org/wiki/B-tree"&gt;B-trees&lt;/a&gt;&lt;/strong&gt;&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt; –
+partition keys are hash table keys, and sort keys are B-tree keys.
+Because of this,
+&lt;strong&gt;any access not based on partition and sort key is expensive&lt;/strong&gt;,
+since you end up doing a full table scan.&lt;/p&gt;
+&lt;!-- TODO simple db footnote --&gt;
+
+&lt;p&gt;If you were to implement this model in Python, it'd look something like this:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;collections&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;defaultdict&lt;/span&gt;
+&lt;span class="kn"&gt;from&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;sortedcontainers&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;SortedDict&lt;/span&gt;
+
+&lt;span class="k"&gt;class&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nc"&gt;Table&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="fm"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;pk_name&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;sk_name&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;_pk_name&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;pk_name&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;_sk_name&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;sk_name&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;_partitions&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;defaultdict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;SortedDict&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;put_item&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="n"&gt;pk&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;sk&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;_pk_name&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;_sk_name&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+        &lt;span class="n"&gt;old_item&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;_partitions&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;pk&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;setdefault&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sk&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;{})&lt;/span&gt;
+        &lt;span class="n"&gt;old_item&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;clear&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="n"&gt;old_item&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;update&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;get_item&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;pk&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;sk&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;_partitions&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;pk&lt;/span&gt;&lt;span class="p"&gt;][&lt;/span&gt;&lt;span class="n"&gt;sk&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;query&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;pk&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;minimum&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;maximum&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;inclusive&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;reverse&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;False&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="c1"&gt;# in the real DynamoDB, this operation is paginated&lt;/span&gt;
+        &lt;span class="n"&gt;partition&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;_partitions&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;pk&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+        &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;sk&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;partition&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;irange&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;minimum&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;maximum&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;inclusive&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;reverse&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+            &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="nb"&gt;dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;partition&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;sk&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;scan&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="c1"&gt;# in the real DynamoDB, this operation is paginated&lt;/span&gt;
+        &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;partition&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;_partitions&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;values&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
+            &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;partition&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;values&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
+                &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="nb"&gt;dict&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;update_item&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="n"&gt;pk&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;sk&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;_pk_name&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;_sk_name&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+        &lt;span class="n"&gt;old_item&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;_partitions&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;pk&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;setdefault&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sk&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;{})&lt;/span&gt;
+        &lt;span class="n"&gt;old_item&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;update&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;delete_item&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;pk&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;sk&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;del&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;_partitions&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;pk&lt;/span&gt;&lt;span class="p"&gt;][&lt;/span&gt;&lt;span class="n"&gt;sk&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;table&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;Table&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;Artist&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;SongTitle&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;table&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;put_item&lt;/span&gt;&lt;span class="p"&gt;({&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;Artist&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;1000mods&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;SongTitle&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;Vidage&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;Year&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="mi"&gt;2011&lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;table&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;put_item&lt;/span&gt;&lt;span class="p"&gt;({&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;Artist&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;1000mods&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;SongTitle&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;Claws&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;Album&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;Vultures&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;table&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;put_item&lt;/span&gt;&lt;span class="p"&gt;({&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;Artist&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;Kyuss&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;SongTitle&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;Space Cadet&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;table&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get_item&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;1000mods&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;Claws&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;{&amp;#39;Artist&amp;#39;: &amp;#39;1000mods&amp;#39;, &amp;#39;SongTitle&amp;#39;: &amp;#39;Claws&amp;#39;, &amp;#39;Album&amp;#39;: &amp;#39;Vultures&amp;#39;}&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;SongTitle&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;table&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;1000mods&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
+&lt;span class="go"&gt;[&amp;#39;Claws&amp;#39;, &amp;#39;Vidage&amp;#39;]&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;SongTitle&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;table&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;1000mods&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;minimum&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;Loose&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
+&lt;span class="go"&gt;[&amp;#39;Vidage&amp;#39;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;h2 id="philosophy"&gt;Philosophy&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#philosophy" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;One can't help but feel this kind of simplicity would be severely limiting.&lt;/p&gt;
+&lt;p&gt;A consequence of DynamoDB being this low level is that,
+unlike with most relational databases,
+&lt;strong&gt;query planning&lt;/strong&gt; and sometimes &lt;strong&gt;index management&lt;/strong&gt;
+happen at the &lt;strong&gt;application level&lt;/strong&gt;,
+i.e. you have to do them yourself in code.
+In turn, this means
+you need to have a clear, &lt;strong&gt;upfront understanding&lt;/strong&gt;
+of your application's &lt;strong&gt;access patterns&lt;/strong&gt;,
+and accept that changes in access patterns
+will require changes to the application.&lt;/p&gt;
+&lt;p&gt;In return, you get
+a &lt;strong&gt;fully managed&lt;/strong&gt;,
+&lt;strong&gt;highly-available&lt;/strong&gt; database
+that &lt;strong&gt;scales infinitely&lt;/strong&gt;:&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt;
+there are no servers to take care of,
+there's almost no downtime, and
+there are no limits on table size or the number of items in a table;
+where limits do exist, they are clearly documented,
+allowing for &lt;strong&gt;predictable performance&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;This highlights an intentional design decision
+that is essentially DynamoDB's main proposition to you as its user:
+&lt;strong&gt;data modeling complexity
+is always preferable to complexity coming from
+infrastructure maintenance, availability, and scalability&lt;/strong&gt;
+(what &lt;abbr title="Amazon Web Services"&gt;AWS&lt;/abbr&gt; marketing calls &amp;quot;undifferentiated heavy lifting&amp;quot;).&lt;/p&gt;
+&lt;p&gt;To help manage this complexity,
+a number of design patterns have arisen,
+covered extensively by the official documentation,
+and which we'll discuss in a future article.
+Even so, the toll can be heavy –
+by &lt;abbr title="Amazon Web Services"&gt;AWS&lt;/abbr&gt;'s &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-foundations.html#data-modeling-foundations-single"&gt;own admission&lt;/a&gt;,
+the prime disadvantage of single table design,
+the fundamental design pattern, is that:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;[the] learning curve can be steep due to paradoxical design compared to relational databases&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;As &lt;a class="external" href="https://www.trek10.com/blog/dynamodb-single-table-relational-modeling/"&gt;this walkthrough&lt;/a&gt; puts it:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;a well-optimized single-table DynamoDB layout looks more like machine code than a simple spreadsheet&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;...which, admittedly, sounds pretty cool,
+but also why would I want that?
+After all, most useful programming most people do
+is one or two abstraction levels above assembly,
+itself one over machine code.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html"&gt;NoSQL design&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;small&gt;(unofficial)&lt;/small&gt; &lt;a class="external" href="https://www.alexdebrie.com/posts/dynamodb-limits/#the-dynamodb-philosophy-of-limits"&gt;# The DynamoDB philosophy of limits&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h2 id="a-bit-of-history"&gt;A bit of history&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#a-bit-of-history" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Perhaps it's worth having a look at where DynamoDB comes from.&lt;/p&gt;
+&lt;p&gt;Amazon.com used Oracle databases for a long time.
+To cope with the increasing scale,
+they first adopted a database-per-service model,
+and then sharding,
+with all the architectural and operational overhead
+you would expect.
+At its 2017 peak
+(five years after DynamoDB was released in &lt;abbr title="Amazon Web Services"&gt;AWS&lt;/abbr&gt;,
+and over ten years after some version of it was available internally),
+they &lt;a class="external" href="https://youtu.be/vPF9l9OmiXE?t=449"&gt;still had&lt;/a&gt;
+75 PB of data
+in nearly 7500 Oracle databases,
+owned by 100+ teams, with thousands of applications,
+&lt;em&gt;for &lt;abbr title="Online Transaction Processing"&gt;OLTP&lt;/abbr&gt; workloads alone&lt;/em&gt;.
+That sounds pretty traumatic
+–
+it was definitely bad enough to
+&lt;a class="external" href="https://news.ycombinator.com/item?id=42677767"&gt;allegedly&lt;/a&gt; ban &lt;abbr title="Online Transaction Processing"&gt;OLTP&lt;/abbr&gt; relational databases internally,
+and require that teams get VP approval to use one.&lt;/p&gt;
+&lt;p&gt;Yeah, coming from &lt;em&gt;that&lt;/em&gt;,
+it's hard to argue DynamoDB adds complexity.&lt;/p&gt;
+&lt;p&gt;That is not to say relational databases
+cannot be as scalable as DynamoDB,
+just that Amazon doesn't belive in them
+–
+&lt;a class="external" href="https://en.wikipedia.org/wiki/Distributed_SQL"&gt;distributed SQL&lt;/a&gt; databases like Google's &lt;a class="external" href="https://en.wikipedia.org/wiki/Spanner_(database)"&gt;Spanner&lt;/a&gt; and &lt;a class="external" href="https://en.wikipedia.org/wiki/CockroachDB"&gt;CockroachDB&lt;/a&gt;
+have existed for a while now,
+and even &lt;abbr title="Amazon Web Services"&gt;AWS&lt;/abbr&gt; seems to be &lt;a class="external" href="https://aws.amazon.com/blogs/database/introducing-amazon-aurora-dsql/"&gt;warming up&lt;/a&gt; to the idea.&lt;/p&gt;
+&lt;p&gt;This might also explain why the design patterns
+are so slow to make their way into SDKs,
+or even better, into DynamoDB itself;
+when you have so many applications and so many experienced teams,
+the cost of yet another bit of code to do partition key sharding
+just isn't that great.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;small&gt;(paper)&lt;/small&gt; &lt;a class="external" href="https://www.usenix.org/system/files/atc22-elhemali.pdf"&gt;Amazon DynamoDB: A Scalable, Predictably Performant, and Fully Managed NoSQL Database Service&lt;/a&gt; (2022)&lt;/li&gt;
+&lt;li&gt;&lt;small&gt;(paper)&lt;/small&gt; &lt;a class="external" href="https://assets.amazon.science/ac/1d/eb50c4064c538c8ac440ce6a1d91/dynamo-amazons-highly-available-key-value-store.pdf"&gt;Dynamo: Amazon’s Highly Available Key-value Store&lt;/a&gt; (2007)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;hr /&gt;
+&lt;p&gt;Anyway, that's it for now.&lt;/p&gt;
+&lt;p&gt;In the next article, we'll have a closer look at the DynamoDB &lt;strong&gt;data model&lt;/strong&gt; and &lt;strong&gt;features&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Learned something new today?&lt;/strong&gt; Share it with others, it really helps! &lt;span class="text-large"&gt;
+&lt;span class="share-icons"&gt;
+&lt;a
+    class="share-icon pycoders color"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+&gt;PyCoder's Weekly&lt;/a&gt;
+&lt;a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/dynamodb&amp;t=DynamoDB%20crash%20course%3A%20part%201%20%E2%80%93%20philosophy"
+&gt;HN&lt;/a&gt;
+&lt;a
+    class="share-icon bluesky color"
+    href="https://bsky.%61%70%70/intent/compose?text=DynamoDB%20crash%20course%3A%20part%201%20%E2%80%93%20philosophy%20https%3A//death.andgravity.com/dynamodb"
+&gt;Bluesky&lt;/a&gt;
+&lt;!--
+&lt;a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/dynamodb&amp;title=DynamoDB%20crash%20course%3A%20part%201%20%E2%80%93%20philosophy"
+&gt;Reddit&lt;/a&gt;
+--&gt;
+&lt;a
+    class="share-icon linkedin color"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/dynamodb"
+&gt;linkedin&lt;/a&gt;
+&lt;a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=DynamoDB%20crash%20course%3A%20part%201%20%E2%80%93%20philosophy&amp;url=https%3A//death.andgravity.com/dynamodb&amp;via=_andgravity"
+&gt;Twitter&lt;/a&gt;
+&lt;/span&gt;
+&lt;/span&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;b&gt;
+Want to know when new articles come out?
+
+&lt;a href="#embedded-subscribe-form"&gt;Subscribe here&lt;/a&gt;
+to get new stuff straight to your inbox!
+
+&lt;/b&gt;&lt;/p&gt;
+&lt;section class="footnotes"&gt;
+&lt;ol&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;Or any other sorted data structure that allows
+fast searches, sequential access, insertions, and deletions. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-2"&gt;&lt;p&gt;As the saying goes, the cloud is just someone else's computers.
+Here, &amp;quot;infinitely&amp;quot; means it scales horizontally,
+and you'll run out of money before &lt;abbr title="Amazon Web Services"&gt;AWS&lt;/abbr&gt; runs out of computers. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+    <link href="https://death.andgravity.com/dynamodb" rel="alternate"/>
+    <summary>This is part one of a series covering core DynamoDB concepts and patterns, all the way up to single-table design; the goal is to get you to understand idiomatic usage and trade-offs in under an hour. Today, we're looking at what DynamoDB is and why it is that way.</summary>
+    <published>2026-01-23T08:40:00+00:00</published>
+  </entry>
   <entry xml:base="https://death.andgravity.com/reader-3-20">
     <id>https://death.andgravity.com/reader-3-20</id>
     <title>reader 3.20 released – we're so back</title>
