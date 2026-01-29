@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ 10 minute read
+∙ nine minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -128,6 +128,7 @@ window.addEventListener('resize', set_vh);
 <details class="toc" open>
 <summary>Table of Contents</summary>
 <ul>
+<li><a href="#basic-components">Basic components</a></li>
 <li><a href="#introduction">Introduction</a></li>
 <li><a href="#tables">Tables</a></li>
 <li><a href="#limits">Limits</a>
@@ -154,15 +155,25 @@ window.addEventListener('resize', set_vh);
 </li>
 </ul>
 </details>
-<h2 id="introduction">Introduction<span class="headerlink">&nbsp;<a href="#introduction" title="permalink">#</a></span></h2>
-<p>(This section is meant to be only a refresher,
-see the links at the end for a more in-depth overview of basic concepts).</p>
-<p>Quoting <a class="external" href="https://en.wikipedia.org/wiki/Amazon_DynamoDB">Wikipedia</a>:</p>
+<h2 id="basic-components">Basic components<span class="headerlink">&nbsp;<a href="#basic-components" title="permalink">#</a></span></h2>
+<p>In the previous article, I (following the official documentation) said that:</p>
 <blockquote>
-<p><strong>Amazon DynamoDB</strong> is a managed NoSQL database service provided by <abbr title="Amazon Web Services">AWS</abbr>.
-It supports key-value and document data structures and is designed to handle
-a wide range of applications requiring scalability and performance.</p>
+<p>a <strong>table</strong> is a collection of items,
+and an <strong>item</strong> is a collection of attributes [...]</p>
 </blockquote>
+<p>This is somewhat true. I also said that:</p>
+<blockquote>
+<p>a DynamoDB table is <strong>a <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table</a> of <a class="external" href="https://en.wikipedia.org/wiki/B-tree">B-trees</a></strong> [...]</p>
+</blockquote>
+<p>This is also somewhat true.</p>
+<p>You might think those two things mean the same thing.
+That would <em>not</em> be true.</p>
+<p>To be more precise:</p>
+<p><em>A <strong>table</strong> is a <strong>hash table</strong> of partitions,<br>
+a <strong>partition</strong> is a <strong>B-tree</strong> of items, and<br>
+an <strong>item</strong> is a <strong>hash table</strong> of attributes.</em></p>
+<p>Let's start from the top.</p>
+<h2 id="introduction">Introduction<span class="headerlink">&nbsp;<a href="#introduction" title="permalink">#</a></span></h2>
 <p>These are the basic DynamoDB components:</p>
 <dl>
 <dt>Tables</dt>
@@ -182,20 +193,6 @@ A DynamoDB item usually corresponds to a row in a relational database system.</d
 where the key is a string, and the value can be of any type.
 A DynamoDB attribute corresponds to a field in a relational database system.</dd>
 </dl>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html">What is Amazon DynamoDB?</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html">Core components</a></li>
-</ul>
-</section>
-<p>...</p>
-<section class="admonition tip">
-<p class="admonition-title">See also</p>
-<ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html">NoSQL design</a></li>
-</ul>
-</section>
 <h2 id="tables">Tables<span class="headerlink">&nbsp;<a href="#tables" title="permalink">#</a></span></h2>
 <p>Conceptually, a DynamoDB table is a <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table</a> of <a class="external" href="https://en.wikipedia.org/wiki/B-tree">B-trees</a>
 (or any other kind of sorted data structure that allows
@@ -211,61 +208,7 @@ this is the B-tree key, and allows efficient
 including <em>get item by partition + sort key</em>;
 the sort key is optional, but in most cases you will have one</li>
 </ul>
-<p>In Python, the operations this enables would look something like this:</p>
-<div class="highlight code-container"><pre class="code" data-lang="IPython"><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">sortedcontainers</span><span class="w"> </span><span class="kn">import</span> <span class="n">SortedDict</span>
-
-<span class="k">class</span><span class="w"> </span><span class="nc">Table</span><span class="p">:</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pk_name</span><span class="p">,</span> <span class="n">sk_name</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pk_name</span> <span class="o">=</span> <span class="n">pk_name</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_sk_name</span> <span class="o">=</span> <span class="n">sk_name</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="n">SortedDict</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">put_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
-        <span class="n">pk</span><span class="p">,</span> <span class="n">sk</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_pk_name</span><span class="p">],</span> <span class="n">item</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_sk_name</span><span class="p">]</span>
-        <span class="n">old_item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="p">{})</span>
-        <span class="n">old_item</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-        <span class="n">old_item</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pk</span><span class="p">,</span> <span class="n">sk</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">][</span><span class="n">sk</span><span class="p">])</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pk</span><span class="p">,</span> <span class="n">minimum</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">maximum</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">inclusive</span><span class="o">=</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-        <span class="c1"># in the real DynamoDB, this operation is paginated</span>
-        <span class="n">partition</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">]</span>
-        <span class="k">for</span> <span class="n">sk</span> <span class="ow">in</span> <span class="n">partition</span><span class="o">.</span><span class="n">irange</span><span class="p">(</span><span class="n">minimum</span><span class="p">,</span> <span class="n">maximum</span><span class="p">,</span> <span class="n">inclusive</span><span class="p">,</span> <span class="n">reverse</span><span class="p">):</span>
-            <span class="k">yield</span> <span class="nb">dict</span><span class="p">(</span><span class="n">partition</span><span class="p">[</span><span class="n">sk</span><span class="p">])</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">scan</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="c1"># in the real DynamoDB, this operation is paginated</span>
-        <span class="k">for</span> <span class="n">partition</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">partition</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-                <span class="k">yield</span> <span class="nb">dict</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">update_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
-        <span class="n">pk</span><span class="p">,</span> <span class="n">sk</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_pk_name</span><span class="p">],</span> <span class="n">item</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_sk_name</span><span class="p">]</span>
-        <span class="n">old_item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="p">{})</span>
-        <span class="n">old_item</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">delete_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pk</span><span class="p">,</span> <span class="n">sk</span><span class="p">):</span>
-        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitions</span><span class="p">[</span><span class="n">pk</span><span class="p">][</span><span class="n">sk</span><span class="p">]</span>
-</code></pre></div>
-
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">(</span><span class="s1">&#39;Artist&#39;</span><span class="p">,</span> <span class="s1">&#39;Song&#39;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span><span class="o">.</span><span class="n">put_item</span><span class="p">({</span><span class="s1">&#39;Artist&#39;</span><span class="p">:</span> <span class="s1">&#39;1000mods&#39;</span><span class="p">,</span> <span class="s1">&#39;Song&#39;</span><span class="p">:</span> <span class="s1">&#39;Vidage&#39;</span><span class="p">,</span> <span class="s1">&#39;Year&#39;</span><span class="p">:</span> <span class="mi">2011</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span><span class="o">.</span><span class="n">put_item</span><span class="p">({</span><span class="s1">&#39;Artist&#39;</span><span class="p">:</span> <span class="s1">&#39;1000mods&#39;</span><span class="p">,</span> <span class="s1">&#39;Song&#39;</span><span class="p">:</span> <span class="s1">&#39;Claws&#39;</span><span class="p">,</span> <span class="s1">&#39;Album&#39;</span><span class="p">:</span> <span class="s1">&#39;Vultures&#39;</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span><span class="o">.</span><span class="n">put_item</span><span class="p">({</span><span class="s1">&#39;Artist&#39;</span><span class="p">:</span> <span class="s1">&#39;Kyuss&#39;</span><span class="p">,</span> <span class="s1">&#39;Song&#39;</span><span class="p">:</span> <span class="s1">&#39;Space Cadet&#39;</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s1">&#39;1000mods&#39;</span><span class="p">,</span> <span class="s1">&#39;Claws&#39;</span><span class="p">)</span>
-<span class="go">{&#39;Artist&#39;: &#39;1000mods&#39;, &#39;Song&#39;: &#39;Claws&#39;, &#39;Album&#39;: &#39;Vultures&#39;}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">i</span><span class="p">[</span><span class="s1">&#39;Song&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;1000mods&#39;</span><span class="p">)]</span>
-<span class="go">[&#39;Claws&#39;, &#39;Vidage&#39;]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">i</span><span class="p">[</span><span class="s1">&#39;Song&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;1000mods&#39;</span><span class="p">,</span> <span class="n">minimum</span><span class="o">=</span><span class="s1">&#39;Loose&#39;</span><span class="p">)]</span>
-<span class="go">[&#39;Vidage&#39;]</span>
-</code></pre></div>
-
+<p>TODO: operations</p>
 <p>Importantly,
 <strong>any access not based on partition/sort key is expensive</strong>,
 since it forces you to do a full table scan
