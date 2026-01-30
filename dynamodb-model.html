@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ nine minute read
+∙ 10 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -128,9 +128,15 @@ window.addEventListener('resize', set_vh);
 <details class="toc" open>
 <summary>Table of Contents</summary>
 <ul>
-<li><a href="#core-components">Core components</a></li>
-<li><a href="#">...</a></li>
+<li><a href="#core-components">Core components</a>
+<ul>
 <li><a href="#tables">Tables</a></li>
+<li><a href="#partitions">Partitions</a></li>
+<li><a href="#items">Items</a></li>
+<li><a href="#attributes">Attributes</a></li>
+</ul>
+</li>
+<li><a href="#operations">Operations</a></li>
 <li><a href="#limits">Limits</a>
 <ul>
 <li><a href="#partition-throughput">Partition throughput</a></li>
@@ -166,53 +172,80 @@ false and meaningless in some sense,
 and true and false and meaningless in some sense.
 -->
 
-<p>The <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html">DynamoDB documentation</a>
-says that the &quot;core components that you work with&quot; are
+<p>According to the official <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html">documentation</a>,
+the &quot;core components that you work with&quot; are
 <strong>tables</strong>, <strong>items</strong>, and <strong>attributes</strong>.
 In the sense of <em>what you can act on through the API</em>,
 this is accurate. Let's call this the <em>logical model</em>.</p>
-<p>However, there's another sense that is just as important,
-especially since half of the documentation is about its implications,
-that of <em>how your application scales</em>.</p>
-<p>We can call it the <em>physical model</em> by analogy,
+<p>However, there's another important sense, <!-- half of the docs is about it-->
+that of <em>how your application scales</em>.
+We can call it the <em>physical model</em> by analogy,
 but we should be clear that
 it is physical only in the highest level of ways <!-- most abstract[ed] way -->
 –
 DynamoDB takes the complexity of real computers with real limits
 and packages it into a single inconvenient abstraction:
 the <strong>partition</strong>.</p>
-<hr />
-<p>To be more precise:</p>
-<p><em>A <strong>table</strong> is a hash table of partitions,<br>
-a <strong>partition</strong> is a B-tree of items, and<br>
-an <strong>item</strong> is a hash table of attributes.</em></p>
-<p>Let's start from the top.</p>
-<hr />
-<p>Those descriptions belong to two separate models</p>
-<p>the logical model (aka the API or resource model – resource as in &quot;thing that you can do things to&quot;)</p>
-<p>the physical model (aka the scaling model; note, physical in a very high level way, there's real computers under there that you don't see)</p>
-<hr />
-<h2 id="">...<span class="headerlink">&nbsp;<a href="#" title="permalink">#</a></span></h2>
-<p>These are the basic DynamoDB components:</p>
-<dl>
-<dt>Tables</dt>
-<dd>A table is a group of <strong>items</strong>.
-Since DynamoDB is a NoSQL database,
-the items in a table are not required to have a specific schema
-(with the exception of the attributes composing the <strong>primary key</strong>).
+<!--
+*A **table** is a hash table of partitions,<br>
+a **partition** is a B-tree of items, and<br>
+an **item** is a hash table of attributes.*
+-->
+
+<p>Let's put it all together, starting from the top.</p>
+<h3 id="tables">Tables<span class="headerlink">&nbsp;<a href="#tables" title="permalink">#</a></span></h3>
+<p>In the logical model, a table is a collection of items.
+Additionally, tables serve as container for various configurations
+like the primary key schema, indexes, provisioned capacity, permissions and so on.</p>
+<p>In the physical model, a table is a hash table of partitions,
+where hash table keys are partition keys.
+There are no limits on how many partitions a table can have or what size it can be.</p>
+<p>Depending on how you structure your data,
 A DynamoDB table can correspond to either a single table or a whole database
-in a relational database system.</dd>
-<dt>Items</dt>
-<dd>An item is a group of key-value <strong>attributes</strong>.
-An item is uniquely identified in a table by a subset of its attributes
-called a <strong>primary key</strong>.
-A DynamoDB item usually corresponds to a row in a relational database system.</dd>
-<dt>Attributes</dt>
-<dd>An attribute is a key-value pair,
-where the key is a string, and the value can be of any type.
-A DynamoDB attribute corresponds to a field in a relational database system.</dd>
-</dl>
-<h2 id="tables">Tables<span class="headerlink">&nbsp;<a href="#tables" title="permalink">#</a></span></h2>
+in a relational database system.</p>
+<h3 id="partitions">Partitions<span class="headerlink">&nbsp;<a href="#partitions" title="permalink">#</a></span></h3>
+<p>In the logical model, partitions do not exist
+– you can't create them, delete them, or list them.
+The only way they leak through is that items have to have a primary key.</p>
+<p>In the physical model, a partition is a B-tree of items,
+where B-tree keys are sort keys.
+A partition is uniquely identified within a table by its partition key.
+There are no limits on how many items a partition can have or what size it can be,
+but there is a limit on throughput (aka capacity):
+how much data you can read or write from the partition in a given time.</p>
+<p>Partitions are where the scaling magic happens.
+DynamoDB manages partitions behind the scenes,
+ensuring load is spread evenly across computers <!-- reword -->
+–
+depending on size and throughput,
+multiple partitions may be placed on the same computer,
+or a single partition may be split across multiple computers,
+a contiguous range of sort keys on each.</p>
+<p>TODO: relational equivalent (shard)</p>
+<h3 id="items">Items<span class="headerlink">&nbsp;<a href="#items" title="permalink">#</a></span></h3>
+<p>In the logical model, an item is a collection of attributes.
+An item is uniquely identified within a table by two of its attributes
+called its primary key. <!-- rewrite to mention part/sort --></p>
+<p>In the physical model, an item is
+<strong>the smallest unit of data that you can read or write</strong>
+–
+while the API allows more granular operations,
+the capacity consumed is always that of the entire item.
+An item is uniquely identified within a partition by its sort key.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
+Items have a size limit of 400 KB per item.</p>
+<p>A DynamoDB item usually corresponds to a row in a relational database system.</p>
+<!-- see also https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html -->
+
+<h3 id="attributes">Attributes<span class="headerlink">&nbsp;<a href="#attributes" title="permalink">#</a></span></h3>
+<p>In the logical model, an attribute is <del>the smallest unit of data that</del> ???</p>
+<p>scalar: strings numbers etc
+document: list map set</p>
+<p>In the physical model, attributes don't exist.</p>
+<p>A DynamoDB attribute corresponds to a field in a relational database system.</p>
+<!-- see also https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html -->
+
+<h2 id="operations">Operations<span class="headerlink">&nbsp;<a href="#operations" title="permalink">#</a></span></h2>
+<p>TODO: while API operates on itesms, if you squint only ht of bt ops are allowed</p>
 <p>Conceptually, a DynamoDB table is a <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table</a> of <a class="external" href="https://en.wikipedia.org/wiki/B-tree">B-trees</a>
 (or any other kind of sorted data structure that allows
 fast searches, sequential access, insertions, and deletions).</p>
@@ -296,7 +329,23 @@ this means 1,000 WCU / s * 1 KB / WCU = 1 MB/s</li>
 to distribute requests evenly across partitions;
 if there's no good natural partition key,
 you can use techniques such as <a class="internal" href="/dynamodb-patterns#partition-key-sharding">sharding</a>.</p>
-<p>The amount of consumed capacity units is what you are billed for.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
+<!--
+[400kb limit] which make items less important from a scaling point of view,
+since it pushed the heavy lifting up to partitions.
+!! not true
+-->
+
+<!-- call back to
+In the physical model, an item is
+**the smallest unit of data that you can read or write**
+–
+while the API allows more granular operations,
+the capacity consumed is always that of the entire item.
+
+also just counting
+-->
+
+<p>The amount of consumed capacity units is what you are billed for.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
 While DynamoDB offers some server-side filtering capabilities
 that are not shown in my Python mock-up above
 (you can filter items based on expressions,
@@ -306,6 +355,8 @@ data read to evaluate expressions still counts as read,
 and you will pay for it.
 Because of this, optimizing your data access is not just a performance matter,
 but a cost matter too.</p>
+<!-- trade-off: small and busy partitions vs large and idle partitions -->
+
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -327,6 +378,8 @@ on the same partition,
 or by storing only the metadata in DynamoDB,
 with data somewhere else, like S3
 (this is a pretty common pattern).</p>
+<!-- fixed but generous for most use cases, -->
+
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -590,7 +643,10 @@ and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/
 </section>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>TODO: unless you use reserved capacity <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-1"><p>sortless tables are degenerate cases of sort key being constant;
+since ddb doesn't allow adding a sort key after tbale was created,
+safe to assume there's actually obtimizations <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>TODO: unless you use reserved capacity <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
