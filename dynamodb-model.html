@@ -172,8 +172,8 @@ false and meaningless in some sense,
 and true and false and meaningless in some sense.
 -->
 
-<p>According to the official <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html">documentation</a>,
-the &quot;core components that you work with&quot; are
+<p>According to the <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html">documentation</a>,
+the &quot;core components that you work with&quot; in DynamoDB are
 <strong>tables</strong>, <strong>items</strong>, and <strong>attributes</strong>.
 In the sense of <em>what you can act on through the API</em>,
 this is accurate. Let's call this the <em>logical model</em>.</p>
@@ -181,18 +181,12 @@ this is accurate. Let's call this the <em>logical model</em>.</p>
 that of <em>how your application scales</em>.
 We can call it the <em>physical model</em> by analogy,
 but we should be clear that
-it is physical only in the highest level of ways <!-- most abstract[ed] way -->
+it is &quot;physical&quot; only in the highest level of ways <!-- most abstract[ed] way -->
 –
 DynamoDB takes the complexity of real computers with real limits
 and packages it into a single inconvenient abstraction:
 the <strong>partition</strong>.</p>
 <p>Let's put it all together, starting from the top.</p>
-<!--
-*A **table** is a hash table of partitions,<br>
-a **partition** is a B-tree of items, and<br>
-an **item** is a hash table of attributes.*
--->
-
 <figure class="figure">
 
 <svg xmlns='http://www.w3.org/2000/svg' style='font-size:initial;' class="pikchr" viewBox="0 0 476.64 313.498" data-pikchr-date="20260102012653">
@@ -240,47 +234,45 @@ an **item** is a hash table of attributes.*
 </figure>
 
 <h3 id="tables">Tables<span class="headerlink">&nbsp;<a href="#tables" title="permalink">#</a></span></h3>
-<p>In the logical model, a table is a collection of items.
-Additionally, tables serve as container for various configurations
+<p>In the <em>logical model</em>, a table is <strong>a collection of items</strong>.
+Additionally, tables serve as container for various settings
 like the primary key schema, indexes, provisioned capacity, permissions and so on.</p>
-<p>In the physical model, a table is a hash table of partitions,
-where hash table keys are partition keys.
+<p>In the <em>physical model</em>, a table is <strong>a hash table of partitions</strong>,
+where partition keys are the hash table keys.
 There are no limits on how many partitions a table can have or what size it can be.</p>
 <p>Depending on how you structure your data,
-A DynamoDB table can correspond to either a single table or a whole database
+a DynamoDB table can correspond to either a single table or a whole database
 in a relational database system.</p>
 <h3 id="partitions">Partitions<span class="headerlink">&nbsp;<a href="#partitions" title="permalink">#</a></span></h3>
-<p>In the logical model, partitions do not exist
-– you can't create them, delete them, or list them.
+<p>In the <em>logical model</em>, <strong>partitions do not exist</strong>
+– you can't create, delete, or list them.
 The only way they leak through is that items have to have a primary key.</p>
-<p>In the physical model, a partition is a B-tree of items,
-where B-tree keys are sort keys.
+<p>In the <em>physical model</em>, a partition is <strong>a B-tree of items</strong>,
+where sort keys are the B-tree keys.
 A partition is uniquely identified within a table by its partition key.
 There are no limits on how many items a partition can have or what size it can be,
-but there is a limit on throughput (aka capacity):
+but there is a limit on throughput (aka <em>capacity</em>):
 how much data you can read or write from the partition in a given time.</p>
-<p>Partitions are where the scaling magic happens.
-DynamoDB manages partitions behind the scenes,
-ensuring load is spread evenly across computers <!-- reword -->
-–
+<p>Partitions are where the scaling magic happens –
+DynamoDB manages partitions behind the scene
+to ensure load is spread evenly across computers;
 depending on size and throughput,
 multiple partitions may be placed on the same computer,
 or a single partition may be split across multiple computers,
-a contiguous range of sort keys on each.
+with a contiguous range of sort keys on each.
 This is entirely transparent to you as a user.</p>
 <p>Partitions are somewhat analogous to <a class="external" href="https://en.wikipedia.org/wiki/Shard_(database_architecture)">shards</a>,
 but unlike with most relational databases,
 partitions are built <em>into</em> the database,
 rather than <em>on top</em> of it.</p>
 <h3 id="items">Items<span class="headerlink">&nbsp;<a href="#items" title="permalink">#</a></span></h3>
-<p>In the logical model, an item is a collection of attributes.
-An item is uniquely identified within a table by two of its attributes
-called its primary key. <!-- rewrite to mention part/sort --></p>
-<p>In the physical model, an item is
-<strong>the smallest unit of data that you can read or write</strong>
-–
+<p>In the <em>logical model</em>, an item is <strong>a collection of attributes</strong>.
+An item is uniquely identified within a table by a primary key
+composed of a partition key and an optional sort key attribute.</p>
+<p>In the <em>physical model</em>, an item is
+<strong>the smallest unit of data that you can read or write</strong>;
 while the API allows more granular operations,
-the capacity consumed is always that of the entire item.
+the consumed capacity is always that of the entire item.
 An item is uniquely identified within a partition by its sort key.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>
 Items have a size limit of 400 KB per item.</p>
 <p>A DynamoDB item usually corresponds to a row in a relational database system.</p>
@@ -296,19 +288,18 @@ The value of an attribute can be
 a scalar (string, number, etc.),
 a set of scalars,
 or a document (a list or map of other values, possibly nested).</p>
-<p>In the logical model,
+<p>In the <em>logical model</em>,
 the attribute <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=Document%20model%20support%20with%20JSON">used to be</a>
 the smallest unit of data you could get,
 although nowadays you can access nested attributes using <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ProjectionExpressions.html">projection expressions</a>
 (note that this only saves bandwidth,
 you always pay the capacity for the entire item).</p>
-<p>In the physical model,
-partition and sort keys <em>are</em> attributes;
+<p>In the <em>physical model</em>,
+<strong>partition and sort keys <em>are</em> attributes</strong>;
 since indexes have keys of their own,
-attributes are also what you index on.
+<strong>attributes are also what you index on</strong>.
 Attributes can be any size, within the item size limit;
-partition and sort keys are further limited
-to 2 and 1 KiB, respectively.</p>
+keys are further limited to 2 and 1 KiB, respectively.</p>
 <p>A DynamoDB attribute corresponds to a field in a relational database system.</p>
 <!-- see also https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html -->
 
@@ -711,9 +702,9 @@ and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/
 </section>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>sortless tables are degenerate cases of sort key being constant;
-since ddb doesn't allow adding a sort key after tbale was created,
-safe to assume there's actually obtimizations <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-1"><p>You can think of tables without a sort key
+like degenerate cases where the sort key is a constant value,
+and thus each partition can contain only one item. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-2"><p>TODO: unless you use reserved capacity <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
