@@ -247,7 +247,7 @@ in a relational database system.</p>
 <h3 id="partitions">Partitions<span class="headerlink">&nbsp;<a href="#partitions" title="permalink">#</a></span></h3>
 <p>In the <em>logical model</em>, <strong>partitions do not exist</strong>
 – you can't create, delete, or list them.
-The only way they leak through is that items have to have a primary key.</p>
+The only way they leak through is that items have to have a partition key.</p>
 <p>In the <em>physical model</em>, a partition is <strong>a <a class="external" href="https://en.wikipedia.org/wiki/B-tree">B-tree</a> of items</strong><sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
 where sort keys are the B-tree keys.
 A partition is uniquely identified within a table by its partition key.
@@ -327,21 +327,15 @@ but strictly those enabled by the <em>physical model</em> (hash table of B-trees
 <p>Importantly,
 <strong>any access not based on partition and sort key is expensive</strong>,
 since you end up doing a full table scan,
-and this can mean billions of items;
+and this can mean going through billions of items;
 <a class="anchor" href="#indexes">indexes</a>, which we'll discuss shortly,
 allow alternative access patterns.</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
 <p><small>(from <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=another%20example%20table%20named%20Music">here</a>)</small>
 Given a <em>Music</em> table where items correspond to songs,
-with the <em>Artist</em> attribute as primary key
-and <em>Song</em> as sort key,
-you can efficiently:</p>
-<ul>
-<li>query songs by artist (sorted by song title)</li>
-<li>get the song by artist and song title</li>
-</ul>
-<p>... and that's it, anything else requires a full table scan.</p>
+with <em>Artist</em> as primary key
+and <em>Song</em> as sort key:</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="c1"># table Music (partition key: Artist, sort key: Song)</span>
 <span class="nt">1000mods</span><span class="p">:</span><span class="w"> </span><span class="kt">!btree</span>
 <span class="w">  </span><span class="nt">Claws</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Album</span><span class="p">:</span><span class="w"> </span><span class="nv">Vultures</span><span class="w"> </span><span class="p p-Indicator">}</span>
@@ -349,6 +343,12 @@ you can efficiently:</p>
 <span class="nt">Kyuss</span><span class="p">:</span><span class="w"> </span><span class="kt">!btree</span>
 <span class="w">  </span><span class="nt">Space Cadet</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
+<p>...you can efficiently:</p>
+<ul>
+<li>query songs by artist (sorted by song title)</li>
+<li>get the song by artist and song title</li>
+</ul>
+<p>...and that's it, anything else requires a full table scan.</p>
 </section>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
@@ -707,8 +707,8 @@ and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>Or any other sorted data structure that allows
-fast searches, sequential access, insertions, and deletions.
-For convenience, I'll stick with &quot;B-tree&quot; throughout the article. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+fast searches, sequential access, insertions, and deletions;
+for convenience, I'll stick with &quot;B-tree&quot;. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-2"><p>You can think of tables without a sort key
 like degenerate cases where the sort key is a constant value,
 and thus each partition can contain only one item. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
