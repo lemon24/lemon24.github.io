@@ -252,8 +252,8 @@ The only way they leak through is that items have to have a partition key.</p>
 where sort keys are the B-tree keys.
 A partition is uniquely identified within a table by its partition key.
 There are no limits on how many items a partition can have or what size it can be,
-but there is a limit on throughput (aka <em>capacity</em>):
-how much data you can read or write from the partition in a given time.</p>
+but there is a <a class="anchor" href="#partition-throughput">limit on throughput</a> (aka <em>capacity</em>):
+how much DynamoDB can read or write in a given time.</p>
 <p>Partitions are where the scaling magic happens –
 DynamoDB manages partitions behind the scene
 to ensure load is spread evenly across computers;
@@ -292,9 +292,7 @@ or a document (a list or map of other values, possibly nested).</p>
 <p>In the <em>logical model</em>,
 the attribute <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=Document%20model%20support%20with%20JSON">used to be</a>
 the smallest unit of data you could get,
-although nowadays you can access nested attributes using <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ProjectionExpressions.html">projection expressions</a>
-(note that this only saves bandwidth,
-you always pay the capacity for the entire item).</p>
+although nowadays you can access nested attributes using <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ProjectionExpressions.html">projection expressions</a>.</p>
 <p>In the <em>physical model</em>,
 <strong>partition and sort keys</strong> <em>are</em> attributes;
 since indexes have keys of their own,
@@ -316,7 +314,7 @@ the core DynamoDB data operations are:</p>
 <li>scan() -&gt; item, ...</li>
 </ul>
 <p>You may notice these are not arbitrary operations,
-but strictly those enabled by the <em>physical model</em> (hash table of B-trees):</p>
+but strictly ones enabled by the <em>physical model</em> (hash table of B-trees):</p>
 <ul>
 <li>the <strong>partition key</strong> (aka <strong>hash key</strong>) allows efficient
 <em>find items by partition key</em> operations (query, scan)</li>
@@ -327,7 +325,8 @@ but strictly those enabled by the <em>physical model</em> (hash table of B-trees
 <p>Importantly,
 <strong>any access not based on partition and sort key is expensive</strong>,
 since you end up doing a full table scan,
-and this can mean going through billions of items;
+and at the scales DynamoDB is useful at,
+that can mean going through billions of items;
 <a class="anchor" href="#indexes">indexes</a>, which we'll discuss shortly,
 allow alternative access patterns.</p>
 <section class="admonition note">
@@ -358,15 +357,12 @@ and <em>Song</em> as sort key:</p>
 </ul>
 </section>
 <h2 id="limits">Limits<span class="headerlink">&nbsp;<a href="#limits" title="permalink">#</a></span></h2>
-<p>TODO: rephrase
-The upside is that <strong>for supported dimensions,
-DynamoDB scales infinitely</strong>[^infinitely] –
-there are no limits on table size,
-the number of items or partition keys in a table, or
-the number of sort keys in a partition.</p>
-<p>There are some important limits, though;
-note these are hard, immutable limits, not adjustable quotas,
-and as such you must design your application around them.</p>
+<p>One of DynamoDB's properties is that
+it <strong>scales &quot;infinitely&quot;</strong> for specific dimensions:
+there are no limits on table or partition size,
+or on the number of items.
+However, there are some non-adjustable limits
+that you will have to design your application around.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -376,50 +372,77 @@ and as such you must design your application around them.</p>
 <li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-limits/">The Three DynamoDB Limits You Need to Know</a></li>
 </ul>
 </section>
-<p>TODO/IDEA: cheatsheet table a la big o cheatsheet
+<!--
+TODO/IDEA: cheatsheet table a la big o cheatsheet
 (one for table / partition / item )
-(one for crud / batch / query/scan / transactions)</p>
+(one for crud / batch / query/scan / transactions)
+
+like so
+
+| | read (ec) | read (sc) | write |
+|-|-|-|-|
+| units/s | 3,000 | 3,000 | 1,000 |
+| unit size | 4 KB/unit | 4 KB/unit | 1 KB/unit |
+| cost | 0.5 unit | 1 unit | 1 unit |
+| total | 24 MB/s | 12 MB/s | 1 MB/s |
+
+```
+throughput = units/s * unit size * cost
+```
+
+-->
+
 <h3 id="partition-throughput">Partition throughput<span class="headerlink">&nbsp;<a href="#partition-throughput" title="permalink">#</a></span></h3>
-<p>Most importantly, there is a per-partition throughput limit:</p>
+<p>Most importantly,
+there is a limit on partition throughput –
+how much data DynamoDB can read from or write to a <a class="anchor" href="#partitions">partition</a>
+in a given time:</p>
 <ul>
-<li>for reads, there's a limit of 3,000 read capacity units per second;
-this means 3,000 RCU / s * 4 KB / RCU = 12 MB/s
-(eventually consistent reads are twice this)</li>
-<li>for writes, there's a limit of 1,000 read capacity units per second;
-this means 1,000 WCU / s * 1 KB / WCU = 1 MB/s</li>
+<li><strong>1 MB/s for writes</strong></li>
+<li><strong>24 MB/s for reads</strong> (<a class="anchor" href="#eventual-consistency">eventually consistent</a>)</li>
+<li>12 MB/s for strongly consistent reads</li>
 </ul>
-<p>Because of this, you have to be careful
-to distribute requests evenly across partitions;
-if there's no good natural partition key,
-you can use techniques such as <a class="internal" href="/dynamodb-patterns#partition-key-sharding">sharding</a>.</p>
+<p>Of note,
+<strong>throughput is how much data DynamoDB touches</strong> before processing,
+<strong>not how much data goes through the API</strong>.
+While you can get or update single attributes
+and you can filter items in queries,
+this only saves network bandwidth and latency
+–
+the consumed capacity is always that
+of the <em>whole</em> items DynamoDB had to read or write
+(yes, even just to count them).</p>
+<p>Once you reach the limit,
+the operation will be throttled,
+and you can retry again later,
+ideally with exponential backoff
+(the AWS SDK usually takes care of it for you).</p>
+<p>To avoid throttling,
+you need to <strong>distribute the load evenly</strong> across partitions
+by using a <strong>high-cardinality partition key</strong>;
+if there is no good natural partition key,
+you can make one through sharding <!-- TODO: link -->
+(which we'll discuss in the next article).</p>
+<hr />
+<p>Since the throughput is fixed,
+but the number of items/requests is not
+(it depends on the partition key),
+you have a trade-off between
+<em>small and busy partitions</em>
+and
+<em>large and idle partitions</em>.</p>
+<!-- trade-off: small and busy partitions vs large and idle partitions -->
+
 <!--
 [400kb limit] which make items less important from a scaling point of view,
 since it pushed the heavy lifting up to partitions.
 !! not true
 -->
 
-<!-- call back to
-In the physical model, an item is
-**the smallest unit of data that you can read or write**
-–
-while the API allows more granular operations,
-the capacity consumed is always that of the entire item.
-
-also just counting
--->
-
 <p>The amount of consumed capacity units is what you are billed for.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>
-While DynamoDB offers some server-side filtering capabilities
-that are not shown in my Python mock-up above
-(you can filter items based on expressions,
-and you can &quot;select&quot; only specific attributes),
-this only saves on network traffic and latency –
-data read to evaluate expressions still counts as read,
-and you will pay for it.
+...
 Because of this, optimizing your data access is not just a performance matter,
 but a cost matter too.</p>
-<!-- trade-off: small and busy partitions vs large and idle partitions -->
-
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -433,6 +456,7 @@ but a cost matter too.</p>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-sort-keys.html">Sort key design</a></li>
 <li><small>(blog)</small> <a class="external" href="https://aws.amazon.com/blogs/database/choosing-the-right-dynamodb-partition-key/">Choosing the Right DynamoDB Partition Key</a></li>
 </ul>
+<p>https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-write-sharding</p>
 </section>
 <h3 id="item-size">Item size<span class="headerlink">&nbsp;<a href="#item-size" title="permalink">#</a></span></h3>
 <p>Second, the maximum size of an item is 400 KB.
