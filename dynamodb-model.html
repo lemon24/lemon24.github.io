@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ 11 minute read
+∙ 12 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -134,6 +134,13 @@ window.addEventListener('resize', set_vh);
 <li><a href="#partitions">Partitions</a></li>
 <li><a href="#items">Items</a></li>
 <li><a href="#attributes">Attributes</a></li>
+</ul>
+</li>
+<li><a href="#core-components-v2">Core components v2</a>
+<ul>
+<li><a href="#api-model-tables-items-attributes">API model: tables, items, attributes</a></li>
+<li><a href="#logical-model-tables-collections-items">Logical model: tables, collections, items</a></li>
+<li><a href="#physical-model-tables-partitions-items">Physical model: tables, partitions, items</a></li>
 </ul>
 </li>
 <li><a href="#operations">Operations</a></li>
@@ -332,6 +339,52 @@ keys are further limited to 2 and 1 KiB, respectively.</p>
 <p>A DynamoDB attribute corresponds to a field in a relational database system.</p>
 <!-- see also https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html -->
 
+<h2 id="core-components-v2">Core components v2<span class="headerlink">&nbsp;<a href="#core-components-v2" title="permalink">#</a></span></h2>
+<p>According to the <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html">documentation</a>,
+the core components of DynamoDB are tables, items, and attributes.
+This is accurate in the sense of <strong>what you can act on</strong> through the API,
+but can be deceptively simple,
+and leaves out two other equally important aspects:
+<strong>what you can do with it</strong> (the <em>logical model</em>)
+and <strong>how it scales</strong> (the <em>physical model</em>).</p>
+<p>Since these last two can help explain the quirks of the API,
+let's put it all together, starting from the top.</p>
+<h3 id="api-model-tables-items-attributes">API model: tables, items, attributes<span class="headerlink">&nbsp;<a href="#api-model-tables-items-attributes" title="permalink">#</a></span></h3>
+<p>flat collection of items, collection of attributes</p>
+<p>uniquely identified (named so and so)</p>
+<p>limits (including items, key attribetus limit)</p>
+<p>scalars documents etc.</p>
+<p>smallest, granular operations, even lower than attributes</p>
+<h3 id="logical-model-tables-collections-items">Logical model: tables, collections, items<span class="headerlink">&nbsp;<a href="#logical-model-tables-collections-items" title="permalink">#</a></span></h3>
+<p>hash table of btrees, keys, limits</p>
+<p>don't create collections, they just exist &quot;virtual&quot;</p>
+<p>operations</p>
+<p>items further hash table of attribuets, but not that important (why?)</p>
+<p>indexes alternative btree; attributes are what you index on</p>
+<p>logical good first approximation for physical
+– you can imagine each collection is on its own dedicated computer;
+by extension, what is good for partition is good for collection
+(&quot;spread load evenly&quot; etc.)
+(troughput inherited from paritition)</p>
+<h3 id="physical-model-tables-partitions-items">Physical model: tables, partitions, items<span class="headerlink">&nbsp;<a href="#physical-model-tables-partitions-items" title="permalink">#</a></span></h3>
+<p>there are not infintely many computers for all the collections,</p>
+<p>multiple collections on a single partition by using hash of partition key;</p>
+<p>partition is rougly analogous to hash table bucket
+(naming note: unfortunate, item key or hash table key, not bucket key (whihc is the hash),
+perhaps partition<em>ing</em> key?)</p>
+<p>and since the size of a collection is not limited,
+some collections may be bigger than a single computer,
+a collection may be split into ranges on differnt partitions</p>
+<p>don't create, don't know how many exist, scaling magic happens</p>
+<blockquote>
+<p>DynamoDB takes the complexity of real computers with real limits and packages it into a single inconvenient abstraction: the partition.</p>
+</blockquote>
+<p>partition throughput limit;
+assuming your table has enough capacity
+(depends on provisioned and ondemand),
+after it reaches steady state,
+partition : collection (or even higher?)</p>
+<p>an item is the smallest unit of data that you can read or write; while the API allows more granular operations, the consumed capacity is always that of the entire item.</p>
 <h2 id="operations">Operations<span class="headerlink">&nbsp;<a href="#operations" title="permalink">#</a></span></h2>
 <p>As we've seen <a class="internal" href="/dynamodb#python-mockup">in the previous article</a>,
 the core DynamoDB data operations are:</p>
