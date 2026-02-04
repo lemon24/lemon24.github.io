@@ -347,30 +347,28 @@ but can be deceptively simple,
 and leaves out two other equally important aspects:
 <strong>what you can do with it</strong> (the <em>logical model</em>)
 and <strong>how it scales</strong> (the <em>physical model</em>).</p>
-<p>Since they explain a lot about <strong>how you're supposed to use</strong> DynamoDB,
-let's put it all together, starting from the top.</p>
+<p>Since the last two are critical to <strong>how you're supposed to use</strong> DynamoDB,
+let's put them all together, starting from the top.</p>
 <h3 id="api-model-tables-items-attributes">API model: tables, items, attributes<span class="headerlink">&nbsp;<a href="#api-model-tables-items-attributes" title="permalink">#</a></span></h3>
 <p>As far as the API is concerned,
 &quot;a <strong>table</strong> is a collection of <strong>items</strong>,
 and each item is a collection of <strong>attributes</strong>&quot;.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
-<p>Items are uniquely identified by two attributes,
+<p>An item is uniquely identified by two attributes,
 the <strong>partition key</strong> and the <strong>sort key</strong>,<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup>
-which together compose the item's <strong>primary key</strong>.<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup></p>
-<p>The documentation also defines an <strong>item collection</strong> as
-&quot;a group of items that share the same partition key value&quot;.<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
-Item collections are more of a logical grouping,
-since they don't really exist at the API level as an entity,
-and you can't create, delete, or list them.</p>
-<p>An attribute is
-&quot;a fundamental data element,
-something that does not need to be broken down any further&quot;.<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup>
+which together compose its <strong>primary key</strong>.<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup>
+A group of items with the same partition key value
+is called an <strong>item collection</strong>,<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
+but this is more of a logical grouping,
+and does not exist as a distinct entity in the API.</p>
+<p>An attribute is a named data element.
 The value of an attribute can be
-a scalar (string, number, etc.),
+a scalar (number, string, binary, boolean, null),
 a set of scalars,
-or a document (a list or map of other values, possibly nested).</p>
+or a document (a list or map of nested attributes, similar to JSON).</p>
 <p>There are no limits on table size or number of items,
 nor on those of an item collection.
-Items have a <a class="anchor" href="#item-size">size limit</a> of 400 KB / item.</p>
+Items do have a <a class="anchor" href="#item-size">size limit</a> of 400 KB / item,
+which indirectly affects attribute size.</p>
 <p>As we've seen <a class="internal" href="/dynamodb#python-mockup">in the previous article</a>,
 the core DynamoDB data operations are:</p>
 <ul>
@@ -381,25 +379,26 @@ and optionally narrowed down to a specific a range of sort keys</li>
 </ul>
 <p>Besides whole items,
 the API allows getting and updating specific attributes,
-as well as filtering query and scan results by expressions containing them.</p>
+as well as filtering query and scan results by expressions using them.</p>
 <h3 id="logical-model-hash-table-of-b-trees">Logical model: hash table of B‍-‍trees<span class="headerlink">&nbsp;<a href="#logical-model-hash-table-of-b-trees" title="permalink">#</a></span></h3>
-<p>The operations above may seem arbitratily restrictive
+<p>The operations above may seem arbitrarily restrictive
 – for example, why can't I query items by sort key alone?
-It might make more sense if you think about it like this:</p>
+It might make more sense to think about it like this:</p>
 <p>Conceptually,
 a DynamoDB table is <strong>a <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table</a> of <a class="external" href="https://en.wikipedia.org/wiki/B-tree">B‍-‍trees</a></strong>,
-with partition and sort keys being hash table and B‍-‍tree keys
-(making each <em>item collection</em> a B‍-‍tree).</p>
-<p>The hash table allows efficient <em>find item collection by key</em> operations;
+with partition keys being hash table keys,
+and sort keys being  B‍-‍tree keys,
+making each <em>item collection</em> a B‍-‍tree.
+The hash table allows efficient <em>find collection by partition key</em> operations;
 within each collection,
 the B‍-‍tree keeps the items sorted,
-and allows efficient <em>find items by key range</em> operations
-(with <em>find item by key</em> as a special case).</p>
+and allows efficient <em>find item by sort key</em>
+and <em>find items by sort key range</em> operations.</p>
 <p>As a consequence,
 <strong>any access not based on partition and sort key is expensive</strong>,
 since instead of taking advantage of the underlying data structure,
 you have to go through <em>all the items</em> in the table to find anything
-(aka a <em>full table scan</em>).<sup class="footnote-ref" id="fnref-8"><a href="#fn-8">8</a></sup></p>
+(aka a <em>full table scan</em>).<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup></p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
 <p><small>(from <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=another%20example%20table%20named%20Music">here</a>)</small>
@@ -420,24 +419,31 @@ with <em>Artist</em> as primary key and <em>Song</em> as sort key:</p>
 <p>...and that's it, anything else requires a full table scan.</p>
 </section>
 <p>To a first approximation,
-this is a decent model of how DynamoDB scales
+this is also a decent model of how DynamoDB scales
 –
-you can imagine that each collection has its own dedicated computer,
-which accounts for the unlimited number of collections,
-but also implies there's a limit on collection size.</p>
+you could imagine that each collection has its own dedicated computer,
+which in theory could account for the unlimited number of collections.</p>
 <h3 id="physical-model-partitions">Physical model: partitions<span class="headerlink">&nbsp;<a href="#physical-model-partitions" title="permalink">#</a></span></h3>
-<p>there are not infintely many computers for all the collections,</p>
-<p>multiple collections on a single partition by using hash of partition key;</p>
-<p>partition is rougly analogous to hash table bucket
-(naming note: unfortunate, item key or hash table key, not bucket key (whihc is the hash),
-perhaps partition<em>ing</em> key?)</p>
+<p>Of course, there are <em>not</em> infinitely many computers,
+and anyway, it would be wildly inefficient
+to store a single collection on each.
+Instead, collections are packed together
+into a smaller number of <strong>partitions</strong>;
+to figure out on which partition an item should go,
+DynamoDB hashes its <em>partition key</em>
+(also called the <em>hash key</em>, for obvious reasons).<sup class="footnote-ref" id="fnref-8"><a href="#fn-8">8</a></sup></p>
+<p>But what if a single collection is bigger than a single computer?
+After all, there's no limit on the number of items in a collection.</p>
 <p>and since the size of a collection is not limited,
 some collections may be bigger than a single computer,
 a collection may be split into ranges on differnt partitions</p>
+<p>https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html</p>
 <p>don't create, don't know how many exist, scaling magic happens</p>
 <blockquote>
 <p>DynamoDB takes the complexity of real computers with real limits and packages it into a single inconvenient abstraction: the partition.</p>
 </blockquote>
+<!-- segue into limits section? -->
+
 <p>partition throughput limit;
 assuming your table has enough capacity
 (depends on provisioned and ondemand),
@@ -452,11 +458,6 @@ multiple partitions may be placed on the same computer,
 or a single partition may be split across multiple computers,
 with a contiguous range of sort keys on each.
 This is entirely transparent to you as a user.</p>
-<!--
-Attributes can be any size, within the item size limit;
-partition and sort keys are limited to 2 and 1 KiB, respectively.
--->
-
 <h2 id="operations">Operations<span class="headerlink">&nbsp;<a href="#operations" title="permalink">#</a></span></h2>
 <p>As we've seen <a class="internal" href="/dynamodb#python-mockup">in the previous article</a>,
 the core DynamoDB data operations are:</p>
@@ -903,15 +904,23 @@ a table with only a partition key and no sort key,
 but you can think of that like
 a degenerate case where the sort key is a constant value,
 and thus each partition key can have only one item. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-6"><p>Yes, an <em>item collection</em> is different
-from a &quot;collection of items&quot; (which is a table).
-Blame DynamoDB, I didn't pick the names. ಠ_ಠ <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-7"><p>One reason attributes are &quot;fundamental&quot; is that
-they <em>used to be</em> the smallest unit of data you could access
-early on, before <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=Document%20model%20support%20with%20JSON">document support</a> was added.
-The second reason has to do with keys and indexes, as we'll see soon enough. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-8"><p><a class="anchor" href="#indexes">Indexes</a>, which we'll discuss later,
-offer an escape hatch to this. <a href="#fnref-8" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-6"><p>Yes, an <em>item collection</em> is different from a &quot;collection of items&quot;.
+Don't look at me, it wasn't me that picked the names. ಠ_ಠ <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-7"><p><a class="anchor" href="#indexes">Indexes</a>, which we'll discuss later,
+offer an escape hatch to this. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-8"><p>You could say that a DynamoDB table is like a hash table,
+and partitions are like hash table buckets
+(except you want collisions to happen, to some extent).</p>
+<p>With a hash table,
+you would say &quot;hash table key&quot;,
+or maybe even &quot;item key&quot;;
+you would <em>not</em> say &quot;bucket key&quot;,
+since that's somewhat of a low level detail,
+and also a bucket can have <em>multiple</em> keys.
+You know, just like in DynamoDB.</p>
+<p>THEN WHY DOES DYNAMODB CALL IT A PARTITION KEY</p>
+<p>...partition<em>ing</em> key, maybe?
+because you use it to <em>partition</em> things? <a href="#fnref-8" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-9"><p>Yes, even just to count them. <a href="#fnref-9" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
