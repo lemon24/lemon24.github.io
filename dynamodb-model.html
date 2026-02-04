@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ 13 minute read
+∙ 14 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -139,8 +139,8 @@ window.addEventListener('resize', set_vh);
 <li><a href="#core-components-v2">Core components v2</a>
 <ul>
 <li><a href="#api-model-tables-items-attributes">API model: tables, items, attributes</a></li>
-<li><a href="#logical-model-tables-collections-items">Logical model: tables, collections, items</a></li>
-<li><a href="#physical-model-tables-partitions-items">Physical model: tables, partitions, items</a></li>
+<li><a href="#logical-model-item-collections">Logical model: item collections</a></li>
+<li><a href="#physical-model-partitions">Physical model: partitions</a></li>
 </ul>
 </li>
 <li><a href="#operations">Operations</a></li>
@@ -361,30 +361,39 @@ Items have a <a class="anchor" href="#item-size">size limit</a> of 400 KB / ite
 &quot;a fundamental data element,<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup>
 something that does not need to be broken down any further&quot;.
 The value of an attribute can be
-a scalar (string, number, boolean, null),
+a scalar (string, number, etc.),
 a set of scalars,
 or a document (a list or map of other values, possibly nested).
 Attributes can be any size, within the item size limit;
 partition and sort keys are limited to 2 and 1 KiB, respectively.</p>
 <p>Besides whole items,
-the API allows getting and updating specific attributes
-(again, possibly nested),
+the API allows getting and updating specific attributes (again, possibly nested),
 as well as filtering query results by expressions containing them.</p>
-<p>In addition to holding data,
-tables also store various settings
-like the key schema, throughput configuration, index configuration, permissions and so on.</p>
-<h3 id="logical-model-tables-collections-items">Logical model: tables, collections, items<span class="headerlink">&nbsp;<a href="#logical-model-tables-collections-items" title="permalink">#</a></span></h3>
+<h3 id="logical-model-item-collections">Logical model: item collections<span class="headerlink">&nbsp;<a href="#logical-model-item-collections" title="permalink">#</a></span></h3>
+<p>An <strong>item collection</strong> is
+&quot;a group of items that share the same partition key value&quot;.<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
+At the API level, item collections don't really exist
+– you can't create, delete, or list them.
+However, they are useful because</p>
+<p>At a high level, the core item operations are:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">put_item</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>  <span class="c1"># pk and sk included in item</span>
+<span class="n">get_item</span><span class="p">(</span><span class="n">pk</span><span class="p">,</span> <span class="n">sk</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">item</span>
+<span class="n">update_item</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>  <span class="c1"># pk and sk included in item</span>
+<span class="n">delete_item</span><span class="p">(</span><span class="n">pk</span><span class="p">,</span> <span class="n">sk</span><span class="p">)</span>
+<span class="n">query</span><span class="p">(</span><span class="n">pk</span><span class="p">,</span> <span class="n">min_sk</span><span class="p">,</span> <span class="n">max_sk</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">item</span><span class="p">,</span> <span class="o">...</span>  <span class="c1"># items sorted by sk</span>
+<span class="n">scan</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">item</span><span class="p">,</span> <span class="o">...</span>  <span class="c1"># all items in the table  </span>
+</code></pre></div>
 <p>hash table of btrees, keys, limits</p>
 <p>don't create collections, they just exist &quot;virtual&quot;</p>
 <p>operations</p>
 <p>items further hash table of attribuets, but not that important (why?)</p>
-<p>indexes alternative btree; attributes are what you index on</p>
+<p><del>indexes alternative btree; attributes are what you index on</del></p>
 <p>logical good first approximation for physical
 – you can imagine each collection is on its own dedicated computer;
 by extension, what is good for partition is good for collection
 (&quot;spread load evenly&quot; etc.)
 (troughput inherited from paritition)</p>
-<h3 id="physical-model-tables-partitions-items">Physical model: tables, partitions, items<span class="headerlink">&nbsp;<a href="#physical-model-tables-partitions-items" title="permalink">#</a></span></h3>
+<h3 id="physical-model-partitions">Physical model: partitions<span class="headerlink">&nbsp;<a href="#physical-model-partitions" title="permalink">#</a></span></h3>
 <p>there are not infintely many computers for all the collections,</p>
 <p>multiple collections on a single partition by using hash of partition key;</p>
 <p>partition is rougly analogous to hash table bucket
@@ -406,14 +415,13 @@ partition : collection (or even higher?)</p>
 <h2 id="operations">Operations<span class="headerlink">&nbsp;<a href="#operations" title="permalink">#</a></span></h2>
 <p>As we've seen <a class="internal" href="/dynamodb#python-mockup">in the previous article</a>,
 the core DynamoDB data operations are:</p>
-<ul>
-<li>put_item(item)</li>
-<li>get_item(pk, sk) -&gt; item</li>
-<li>update_item(item)</li>
-<li>delete_item(pk, sk)</li>
-<li>query(pk, min_sk, max_sk) -&gt; item, ...</li>
-<li>scan() -&gt; item, ...</li>
-</ul>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">put_item</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>  <span class="c1"># pk and sk included in item</span>
+<span class="n">get_item</span><span class="p">(</span><span class="n">pk</span><span class="p">,</span> <span class="n">sk</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">item</span>
+<span class="n">update_item</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>  <span class="c1"># pk and sk included in item</span>
+<span class="n">delete_item</span><span class="p">(</span><span class="n">pk</span><span class="p">,</span> <span class="n">sk</span><span class="p">)</span>
+<span class="n">query</span><span class="p">(</span><span class="n">pk</span><span class="p">,</span> <span class="n">min_sk</span><span class="p">,</span> <span class="n">max_sk</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">item</span><span class="p">,</span> <span class="o">...</span>  <span class="c1"># items sorted by sk</span>
+<span class="n">scan</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">item</span><span class="p">,</span> <span class="o">...</span>  <span class="c1"># all items in the table  </span>
+</code></pre></div>
 <p>You may notice these are not arbitrary operations,
 but strictly ones enabled by the <em>physical model</em> (hash table of B-trees):</p>
 <ul>
@@ -511,7 +519,7 @@ and you can filter items in queries,
 this only saves network bandwidth and latency
 –
 the consumed capacity is always that
-of the <em>whole</em> items DynamoDB had to read or write.<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup></p>
+of the <em>whole</em> items DynamoDB had to read or write.<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup></p>
 <p>Once you reach the limit,
 the operation will be throttled,
 and you can retry again later,
@@ -841,13 +849,18 @@ for convenience, I'll stick with &quot;B-tree&quot;. <a href="#fnref-1" class="f
 <li id="fn-2"><p>You can think of tables without a sort key
 like degenerate cases where the sort key is a constant value,
 and thus each partition can contain only one item. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-3"><p>Here, &quot;collection&quot; is used in the general sense of &quot;group of things&quot;. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-4"><p>Ignore the names for now, it'll make sense in the next sections. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>Here, &quot;collection&quot; just means a &quot;group of things&quot;. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-4"><p>Ignore the names for now, it'll make sense in a bit. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-5"><p>One reason attributes are &quot;fundamental&quot; is that
 they <em>used to be</em> the smallest unit of data you could access
 early on, before <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=Document%20model%20support%20with%20JSON">document support</a> was added.
 The second reason has to do with keys and indexes, as we'll see soon enough. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-6"><p>Yes, even just to count them. <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-6"><p>Yes, that's from the DynamoDB documentation.
+Yes, an <em>item collection</em> is different the collection in
+&quot;a table is a collection of items&quot;,
+which is also from the DynamoDB documentation.
+No, a new term would make this even more confusing. <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-7"><p>Yes, even just to count them. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
