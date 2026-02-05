@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ 15 minute read
+∙ 12 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -130,20 +130,11 @@ window.addEventListener('resize', set_vh);
 <ul>
 <li><a href="#core-components">Core components</a>
 <ul>
-<li><a href="#tables">Tables</a></li>
-<li><a href="#partitions">Partitions</a></li>
-<li><a href="#items">Items</a></li>
-<li><a href="#attributes">Attributes</a></li>
-</ul>
-</li>
-<li><a href="#core-components-v2">Core components v2</a>
-<ul>
 <li><a href="#api-model-tables-items-attributes">API model: tables, items, attributes</a></li>
 <li><a href="#logical-model-hash-table-of-b-trees">Logical model: hash table of B‍-‍trees</a></li>
 <li><a href="#physical-model-partitions">Physical model: partitions</a></li>
 </ul>
 </li>
-<li><a href="#operations">Operations</a></li>
 <li><a href="#limits">Limits</a>
 <ul>
 <li><a href="#partition-throughput">Partition throughput</a></li>
@@ -169,30 +160,13 @@ window.addEventListener('resize', set_vh);
 </ul>
 </details>
 <h2 id="core-components">Core components<span class="headerlink">&nbsp;<a href="#core-components" title="permalink">#</a></span></h2>
-<!--
-All statements are true in some sense,
-false in some sense,
-meaningless in some sense,
-true and false in some sense,
-true and meaningless in some sense,
-false and meaningless in some sense,
-and true and false and meaningless in some sense.
--->
-
 <p>According to the <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html">documentation</a>,
-the &quot;core components that you work with&quot; in DynamoDB are
-<strong>tables</strong>, <strong>items</strong>, and <strong>attributes</strong>.
-In the sense of <em>what you can act on through the API</em>,
-this is accurate. Let's call this the <em>logical model</em>.</p>
-<p>However, there's another important sense, <!-- half of the docs is about it-->
-that of <em>how your application scales</em>.
-We can call it the <em>physical model</em> by analogy,
-but we should be clear that
-it is &quot;physical&quot; only in the highest level of ways <!-- most abstract[ed] way -->
-–
-DynamoDB takes the complexity of real computers with real limits
-and packages it into a single inconvenient abstraction:
-the <strong>partition</strong>.</p>
+the core components of DynamoDB are tables, items, and attributes.
+This is accurate in the sense of <strong>what you can act on</strong> through the API,
+but can be deceptively simple,
+and leaves out two other equally important aspects:
+<strong>what you can do with it</strong> (the <em>logical model</em>)
+and <strong>how it scales</strong> (the <em>physical model</em>).</p>
 <p>Let's put it all together, starting from the top.</p>
 <figure class="figure">
 
@@ -248,123 +222,22 @@ the <strong>partition</strong>.</p>
 
 </figure>
 
-<h3 id="tables">Tables<span class="headerlink">&nbsp;<a href="#tables" title="permalink">#</a></span></h3>
-<p>In the <em>logical model</em>, a table is <strong>a collection of items</strong>.
-Additionally, tables serve as container for various settings
-like the primary key schema, indexes, provisioned capacity, permissions and so on.</p>
-<p>In the <em>physical model</em>, a table is <strong>a <a class="external" href="https://en.wikipedia.org/wiki/Hash_table">hash table</a> of partitions</strong>,
-where partition keys are the hash table keys.
-There are no limits on how many partitions a table can have or what size it can be.</p>
-<p>Depending on how you structure your data,
-a DynamoDB table can correspond to either a single table or a whole database
-in a relational database system.</p>
-<h3 id="partitions">Partitions<span class="headerlink">&nbsp;<a href="#partitions" title="permalink">#</a></span></h3>
-<p>In the <em>logical model</em>, <strong>partitions do not exist</strong>
-– you can't create, delete, or list them.
-The only way they leak through is that items have to have a partition key.</p>
-<p>In the <em>physical model</em>, a partition is <strong>a <a class="external" href="https://en.wikipedia.org/wiki/B-tree">B-tree</a> of items</strong><sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,
-where sort keys are the B-tree keys.
-A partition is uniquely identified within a table by its partition key.
-There are no limits on how many items a partition can have or what size it can be,
-but there is a <a class="anchor" href="#partition-throughput">limit on throughput</a> (aka <em>capacity</em>):
-how much DynamoDB can read or write in a given time.</p>
-<p>Partitions are where the scaling magic happens –
-DynamoDB manages partitions behind the scene
-to ensure load is spread evenly across computers;
-depending on size and throughput,
-multiple partitions may be placed on the same computer,
-or a single partition may be split across multiple computers,
-with a contiguous range of sort keys on each.
-This is entirely transparent to you as a user.</p>
-<p>Partitions are somewhat analogous to <a class="external" href="https://en.wikipedia.org/wiki/Shard_(database_architecture)">shards</a>,
-but unlike with most relational databases,
-partitions are built <em>into</em> the database,
-rather than <em>on top</em> of it.</p>
-<!-- FIXME:
-
-The set of items which have the same value of partition key is called an item
-collection. Item collections are optimized for efficient retrieval of ranges of
-the items within the collection. If your table doesn't have local secondary
-indexes, DynamoDB will automatically split your item collection over as many
-partitions as required to store the data and to serve read and write throughput.
-
-
-TODO: replace "partition" with "item collection" everywhere
-
-
-https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-uniform-load.html
-
-The partition key portion of a table's primary key determines the logical partitions in which a table's data is stored.
-
-^^^ although logical might just mean the output of hash(pk), whereas physical also takes splits into account
-
-
--->
-
-<!-- see also https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html -->
-
-<h3 id="items">Items<span class="headerlink">&nbsp;<a href="#items" title="permalink">#</a></span></h3>
-<p>In the <em>logical model</em>, an item is <strong>a collection of attributes</strong>.
-An item is uniquely identified within a table by a primary key
-composed of a partition key attribute and an optional sort key attribute.</p>
-<p>In the <em>physical model</em>, an item is
-<strong>the smallest unit of data that you can read or write</strong>;
-while the API allows more granular operations,
-the consumed capacity is always that of the entire item.
-An item is uniquely identified within a partition by its sort key.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
-Items have a size limit of 400 KB per item.</p>
-<p>A DynamoDB item usually corresponds to a row in a relational database system.</p>
-<!-- see also https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html -->
-
-<!-- see also item size / or mention we'll look them at later -->
-
-<h3 id="attributes">Attributes<span class="headerlink">&nbsp;<a href="#attributes" title="permalink">#</a></span></h3>
-<p>An attribute is
-&quot;a fundamental data element,
-something that does not need to be broken down any further&quot;.
-The value of an attribute can be
-a scalar (string, number, etc.),
-a set of scalars,
-or a document (a list or map of other values, possibly nested).</p>
-<p>In the <em>logical model</em>,
-the attribute <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=Document%20model%20support%20with%20JSON">used to be</a>
-the smallest unit of data you could get,
-although nowadays you can access nested attributes using <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ProjectionExpressions.html">projection expressions</a>.</p>
-<p>In the <em>physical model</em>,
-<strong>partition and sort keys</strong> <em>are</em> attributes;
-since indexes have keys of their own,
-attributes are also <strong>what you index on</strong>.
-Attributes can be any size, within the item size limit;
-keys are further limited to 2 and 1 KiB, respectively.</p>
-<p>A DynamoDB attribute corresponds to a field in a relational database system.</p>
-<!-- see also https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html -->
-
-<h2 id="core-components-v2">Core components v2<span class="headerlink">&nbsp;<a href="#core-components-v2" title="permalink">#</a></span></h2>
-<p>According to the <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html">documentation</a>,
-the core components of DynamoDB are tables, items, and attributes.
-This is accurate in the sense of <strong>what you can act on</strong> through the API,
-but can be deceptively simple,
-and leaves out two other equally important aspects:
-<strong>what you can do with it</strong> (the <em>logical model</em>)
-and <strong>how it scales</strong> (the <em>physical model</em>).</p>
-<p>Since the last two are critical to <strong>how you're supposed to use</strong> DynamoDB,
-let's put them all together, starting from the top.</p>
 <h3 id="api-model-tables-items-attributes">API model: tables, items, attributes<span class="headerlink">&nbsp;<a href="#api-model-tables-items-attributes" title="permalink">#</a></span></h3>
 <p>As far as the API is concerned,
 &quot;a <strong>table</strong> is a collection of <strong>items</strong>,
-and each item is a collection of <strong>attributes</strong>&quot;.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
+and each item is a collection of <strong>attributes</strong>&quot;.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
 <p>An item is uniquely identified by two attributes,
-the <strong>partition key</strong> and the <strong>sort key</strong>,<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup>
-which together compose its <strong>primary key</strong>.<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup>
+the <strong>partition key</strong> and the <strong>sort key</strong>,<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>
+which together compose its <strong>primary key</strong>.<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>
 A group of items with the same partition key value
-is called an <strong>item collection</strong>,<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
+is called an <strong>item collection</strong>,<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup>
 but this is more of a logical grouping,
 and does not exist as a distinct entity in the API.</p>
-<p>An attribute is a named data element.
-The value of an attribute can be
-a scalar (number, string, binary, boolean, null),
+<p>An attribute is a named data element,
+with its value
+either a scalar (number, string, binary, boolean, null),
 a set of scalars,
-or a document (a list or map of nested attributes, similar to JSON).</p>
+or a document (a list or map of possibly nested attributes, similar to JSON).</p>
 <p>There are no limits on table size or number of items,
 nor on those of an item collection.
 Items do have a <a class="anchor" href="#item-size">size limit</a> of 400 KB / item,
@@ -373,13 +246,15 @@ which indirectly affects attribute size.</p>
 the core DynamoDB data operations are:</p>
 <ul>
 <li><code>PutItem</code>, <code>GetItem</code>, <code>UpdateItem</code>, <code>DeleteItem</code></li>
-<li><code>Query</code> items with the same partition key, sorted by sort key,<br>
+<li><code>Query</code> items with the same partition key, sorted by sort key,
 and optionally narrowed down to a specific a range of sort keys</li>
 <li><code>Scan</code> all the items in the table, possibly in parallel</li>
 </ul>
 <p>Besides whole items,
 the API allows getting and updating specific attributes,
 as well as filtering query and scan results by expressions using them.</p>
+<!-- see also https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html -->
+
 <h3 id="logical-model-hash-table-of-b-trees">Logical model: hash table of B‍-‍trees<span class="headerlink">&nbsp;<a href="#logical-model-hash-table-of-b-trees" title="permalink">#</a></span></h3>
 <p>The operations above may seem arbitrarily restrictive
 – for example, why can't I query items by sort key alone?
@@ -398,7 +273,7 @@ and <em>find items by sort key range</em> operations.</p>
 <strong>any access not based on partition and sort key is expensive</strong>,
 since instead of taking advantage of the underlying data structure,
 you have to go through <em>all the items</em> in the table to find anything
-(aka a <em>full table scan</em>).<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup></p>
+(aka a <em>full table scan</em>).<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup></p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
 <p><small>(from <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=another%20example%20table%20named%20Music">here</a>)</small>
@@ -425,85 +300,40 @@ you could imagine that each collection has its own dedicated computer,
 which in theory could account for the unlimited number of collections.</p>
 <h3 id="physical-model-partitions">Physical model: partitions<span class="headerlink">&nbsp;<a href="#physical-model-partitions" title="permalink">#</a></span></h3>
 <p>Of course, there are <em>not</em> infinitely many computers,
-and anyway, it would be wildly inefficient
-to store a single collection on each.
+and it would be wildly inefficient anyway.
 Instead, collections are packed together
-into a smaller number of <strong>partitions</strong>;
-to figure out on which partition an item should go,
+into a smaller number of <strong>partitions</strong>, each a few gigabytes in size.
+To figure out on which partition an item should go,
 DynamoDB hashes its <em>partition key</em>
-(also called the <em>hash key</em>, for obvious reasons).<sup class="footnote-ref" id="fnref-8"><a href="#fn-8">8</a></sup></p>
-<p>But what if a single collection is bigger than a single computer?
-After all, there's no limit on the number of items in a collection.</p>
-<p>and since the size of a collection is not limited,
-some collections may be bigger than a single computer,
-a collection may be split into ranges on differnt partitions</p>
-<p>https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html</p>
-<p>don't create, don't know how many exist, scaling magic happens</p>
-<blockquote>
-<p>DynamoDB takes the complexity of real computers with real limits and packages it into a single inconvenient abstraction: the partition.</p>
-</blockquote>
-<!-- segue into limits section? -->
+(also called a <em>hash key</em>, for obvious reasons).</p>
+<p>You could say partitions are like hash table buckets,
+except there's another level of indirection –
+instead of mapping to a single number,
+each partition maps to a range of numbers,
+which allows splitting a partition in two new partitions
+by splitting its range.
+Furthermore, an item collection
+(that is, items with the same partition key)
+can also be split by using the sort key.
+And <em>that</em> is how the scaling magic happens:</p>
+<ul>
+<li>When you increase provisioned capacity,
+partitions are added as needed.</li>
+<li>If a partition or collection becomes too big,
+it gets split.</li>
+<li>If the <em>throughput</em> to a partition or collection
+is high enough for long enough,
+it also gets split.<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
+This is sometimes called <strong>adaptive capacity</strong>.</li>
+</ul>
+<p>This is handled entirely by DynamoDB
+and is transparent to the user,
+but is not instant,
+it takes several minutes to allocate new partitions and shuffle things around.</p>
+<p>Partitions do have a <a class="anchor" href="#partition-throughput">throughput limit</a>,
+which is what we'll look at next.</p>
+<!-- TODO: add these footnotes? -->
 
-<p>partition throughput limit;
-assuming your table has enough capacity
-(depends on provisioned and ondemand),
-after it reaches steady state,
-partition : collection (or even higher?)</p>
-<p>an item is the smallest unit of data that you can read or write; while the API allows more granular operations, the consumed capacity is always that of the entire item.</p>
-<p>Partitions are where the scaling magic happens –
-DynamoDB manages partitions behind the scene
-to ensure load is spread evenly across computers;
-depending on size and throughput,
-multiple partitions may be placed on the same computer,
-or a single partition may be split across multiple computers,
-with a contiguous range of sort keys on each.
-This is entirely transparent to you as a user.</p>
-<h2 id="operations">Operations<span class="headerlink">&nbsp;<a href="#operations" title="permalink">#</a></span></h2>
-<p>As we've seen <a class="internal" href="/dynamodb#python-mockup">in the previous article</a>,
-the core DynamoDB data operations are:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">put_item</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>  <span class="c1"># pk and sk included in item</span>
-<span class="n">get_item</span><span class="p">(</span><span class="n">pk</span><span class="p">,</span> <span class="n">sk</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">item</span>
-<span class="n">update_item</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>  <span class="c1"># pk and sk included in item</span>
-<span class="n">delete_item</span><span class="p">(</span><span class="n">pk</span><span class="p">,</span> <span class="n">sk</span><span class="p">)</span>
-<span class="n">query</span><span class="p">(</span><span class="n">pk</span><span class="p">,</span> <span class="n">min_sk</span><span class="p">,</span> <span class="n">max_sk</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">item</span><span class="p">,</span> <span class="o">...</span>  <span class="c1"># items sorted by sk</span>
-<span class="n">scan</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">item</span><span class="p">,</span> <span class="o">...</span>  <span class="c1"># all items in the table</span>
-</code></pre></div>
-<p>You may notice these are not arbitrary operations,
-but strictly ones enabled by the <em>physical model</em> (hash table of B-trees):</p>
-<ul>
-<li>the <strong>partition key</strong> (aka <strong>hash key</strong>) allows efficient
-<em>find items by partition key</em> operations (query, scan)</li>
-<li>the <strong>sort key</strong> (aka <strong>range key</strong>) allows efficient
-<em>find items by partition key and sort key range</em> operations
-(query), with single-item operations being a special case</li>
-</ul>
-<p>Importantly,
-<strong>any access not based on partition and sort key is expensive</strong>,
-since you end up doing a full table scan,
-and at the scales DynamoDB is useful at,
-that can mean going through billions of items;
-<a class="anchor" href="#indexes">indexes</a>, which we'll discuss shortly,
-allow alternative access patterns.</p>
-<section class="admonition note">
-<p class="admonition-title">Example</p>
-<p><small>(from <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=another%20example%20table%20named%20Music">here</a>)</small>
-Given a <em>Music</em> table where items correspond to songs,
-with <em>Artist</em> as primary key
-and <em>Song</em> as sort key:</p>
-<div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="c1"># table Music (partition key: Artist, sort key: Song)</span>
-<span class="nt">1000mods</span><span class="p">:</span><span class="w"> </span><span class="kt">!btree</span>
-<span class="w">  </span><span class="nt">Claws</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Album</span><span class="p">:</span><span class="w"> </span><span class="nv">Vultures</span><span class="w"> </span><span class="p p-Indicator">}</span>
-<span class="w">  </span><span class="nt">Vidage</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Year</span><span class="p">:</span><span class="w"> </span><span class="nv">2011</span><span class="w"> </span><span class="p p-Indicator">}</span>
-<span class="nt">Kyuss</span><span class="p">:</span><span class="w"> </span><span class="kt">!btree</span>
-<span class="w">  </span><span class="nt">Space Cadet</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="w"> </span><span class="p p-Indicator">}</span>
-</code></pre></div>
-<p>...you can efficiently:</p>
-<ul>
-<li>query songs by artist (sorted by song title)</li>
-<li>get the song by artist and song title</li>
-</ul>
-<p>...and that's it, anything else requires a full table scan.</p>
-</section>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -511,6 +341,36 @@ and <em>Song</em> as sort key:</p>
 <li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-partitions">Everything you need to know about DynamoDB Partitions</a></li>
 </ul>
 </section>
+<!-- see also
+
+https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html
+https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html
+
+https://aws.amazon.com/blogs/database/part-1-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/
+https://aws.amazon.com/blogs/database/part-2-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/
+https://aws.amazon.com/blogs/database/part-3-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/
+
+-->
+
+<!-- TODO: make this an aside or a bonus
+
+Depending on how you structure your data,
+a DynamoDB table can correspond to either a single table or a whole database
+in a relational database system.
+
+Partitions are somewhat analogous to [shards],
+but unlike with most relational databases,
+partitions are built *into* the database,
+rather than *on top* of it.
+
+A DynamoDB item usually corresponds to a row in a relational database system.
+
+A DynamoDB attribute corresponds to a field in a relational database system.
+
+[shards]: https://en.wikipedia.org/wiki/Shard_(database_architecture)
+
+-->
+
 <h2 id="limits">Limits<span class="headerlink">&nbsp;<a href="#limits" title="permalink">#</a></span></h2>
 <p>One of DynamoDB's properties is that
 it <strong>scales &quot;infinitely&quot;</strong> for specific dimensions:
@@ -550,7 +410,7 @@ throughput = units/s * unit size * cost
 <h3 id="partition-throughput">Partition throughput<span class="headerlink">&nbsp;<a href="#partition-throughput" title="permalink">#</a></span></h3>
 <p>Most importantly,
 there is a limit on partition throughput –
-how much data DynamoDB can read from or write to a <a class="anchor" href="#partitions">partition</a>
+how much data DynamoDB can read from or write to a <a class="anchor" href="#physical-model-partitions">partition</a>
 in a given time:</p>
 <ul>
 <li><strong>1 MB/s for writes</strong></li>
@@ -565,12 +425,18 @@ and you can filter items in queries,
 this only saves network bandwidth and latency
 –
 the consumed capacity is always that
-of the <em>whole</em> items DynamoDB had to read or write.<sup class="footnote-ref" id="fnref-9"><a href="#fn-9">9</a></sup></p>
+of the <em>whole</em> items DynamoDB had to read or write.<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup></p>
 <p>Once you reach the limit,
 the operation will be throttled,
 and you can retry again later,
 ideally with exponential backoff
 (the AWS SDK usually takes care of it for you).</p>
+<!--
+To minimize throttling because of throughput exceptions, DynamoDB uses burst capacity to handle usage spikes. DynamoDB uses adaptive capacity to help accommodate uneven access patterns.
+
+It’s possible for throughput to go above the table’s limit for a short duration thanks to burst capacity, another feature of adaptive capacity that allows a table to borrow capacity (on a best effort basis) to provide temporary capacity above the table capacity limit.
+-->
+
 <p>To avoid throttling,
 you need to <strong>distribute the load evenly</strong> across partitions
 by using a <strong>high-cardinality partition key</strong>;
@@ -598,10 +464,22 @@ you have two trade-offs:</p>
 <li>some partitions have higher utilization than others (aka <em>hot partitions</em>)</li>
 <li>all partitions have high utilization</li>
 </ul>
+<blockquote>
+<p>If your application drives consistently high traffic to a single item, adaptive capacity might rebalance your data so that a partition contains only that single, frequently accessed item. In this case, DynamoDB can deliver throughput up to the partition maximum of 3,000 RCUs and 1,000 WCUs to that single item’s primary key. Adaptive capacity will not split item collections across multiple partitions of the table when there is a local secondary index on the table.</p>
+</blockquote>
 <!-- Because of this, optimizing your data access is not just a performance matter, but a cost matter too. -->
 
+<p><strong>the smallest unit of data that you can read or write</strong>;
+while the API allows more granular operations,
+the consumed capacity is always that of the entire item.</p>
 <!-- TODO: note on partition vs collection, and steady state -->
 
+<p>partition throughput limit;
+assuming your table has enough capacity
+(depends on provisioned and ondemand),
+after it reaches steady state,
+partition : collection (or even higher?)</p>
+<p>an item is the smallest unit of data that you can read or write; while the API allows more granular operations, the consumed capacity is always that of the entire item.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -811,6 +689,10 @@ to lower the rate at which conditional updates or transactions fail.</p>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html">DynamoDB read consistency</a></li>
 </ul>
 </section>
+<p>https://aws.amazon.com/blogs/database/part-2-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/</p>
+<blockquote>
+<p>Every partition has its data spread across three nodes for redundancy—a leader node that takes all writes, and two follower nodes that follow quickly behind. A strongly consistent (SC) read always goes to the leader node to get the latest data. The leader node can handle 3,000 reads per second, which is why a partition can handle 3,000 SC reads per second. An EC read can go to any of the three nodes. When all three nodes are active, a partition can theoretically handle 9,000 reads per second, which is what we find here.</p>
+</blockquote>
 <h3 id="conditional-updates">Conditional updates<span class="headerlink">&nbsp;<a href="#conditional-updates" title="permalink">#</a></span></h3>
 <p>For write operations (put/update/delete),
 you can specify a <strong>condition expression</strong>
@@ -891,37 +773,19 @@ and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/
 </section>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>Or any other sorted data structure that allows
-fast searches, sequential access, insertions, and deletions;
-for convenience, I'll stick with &quot;B-tree&quot;. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-2"><p>You can think of tables without a sort key
-like degenerate cases where the sort key is a constant value,
-and thus each partition can contain only one item. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-3"><p>Here, &quot;collection&quot; just means a &quot;group of things&quot;. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-4"><p>Ignore the names for now, it'll make sense in a bit. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-5"><p>It is also possible to have
+<li id="fn-1"><p>Here, &quot;collection&quot; just means a &quot;group of things&quot;. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>Ignore the names for now, it'll make sense in a bit. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-3"><p>It is also possible to have
 a table with only a partition key and no sort key,
 but you can think of that like
 a degenerate case where the sort key is a constant value,
-and thus each partition key can have only one item. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-6"><p>Yes, an <em>item collection</em> is different from a &quot;collection of items&quot;.
-Don't look at me, it wasn't me that picked the names. ಠ_ಠ <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-7"><p><a class="anchor" href="#indexes">Indexes</a>, which we'll discuss later,
-offer an escape hatch to this. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-8"><p>You could say that a DynamoDB table is like a hash table,
-and partitions are like hash table buckets
-(except you want collisions to happen, to some extent).</p>
-<p>With a hash table,
-you would say &quot;hash table key&quot;,
-or maybe even &quot;item key&quot;;
-you would <em>not</em> say &quot;bucket key&quot;,
-since that's somewhat of a low level detail,
-and also a bucket can have <em>multiple</em> keys.
-You know, just like in DynamoDB.</p>
-<p>THEN WHY DOES DYNAMODB CALL IT A PARTITION KEY</p>
-<p>...partition<em>ing</em> key, maybe?
-because you use it to <em>partition</em> things? <a href="#fnref-8" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-9"><p>Yes, even just to count them. <a href="#fnref-9" class="footnote"><sup>[return]</sup></a></p></li>
+and thus each partition key can have only one item. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-4"><p>Yes, an <em>item collection</em> is different from a &quot;collection of items&quot;.
+Don't look at me, it wasn't me that picked the names. ಠ_ಠ <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-5"><p><a class="anchor" href="#indexes">Indexes</a>, which we'll discuss later,
+offer an escape hatch to this. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-6"><p>Assuming the table has enough configured throughput. <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-7"><p>Yes, even just to count them. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
