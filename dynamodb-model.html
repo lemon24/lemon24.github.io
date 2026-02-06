@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ 13 minute read
+∙ 12 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -308,16 +308,17 @@ into a smaller number of <strong>partitions</strong>, each a few gigabytes in si
 To figure out which partition an item should go on,
 DynamoDB hashes its <em>partition key</em>
 (also called a <em>hash key</em>, for obvious reasons).</p>
-<p>You could say partitions are like hash table buckets,
+<p>This is kinda like hash table buckets,
 except there's another level of indirection –
 instead of mapping to a single number,
 each partition maps to a range of numbers,
-which allows splitting a partition into two new partitions
+which allows splitting a partition into two new ones
 by splitting its range.
 Furthermore, an item collection
 (that is, items with the same partition key)
-can also be split by using the sort key.
-And <em>that</em> is how the scaling magic happens:</p>
+can be split on multiple partitions too
+by using the sort key.</p>
+<p>And <em>that</em> is how the scaling magic happens:</p>
 <ul>
 <li>When you increase provisioned capacity,
 partitions are added as needed.</li>
@@ -325,15 +326,16 @@ partitions are added as needed.</li>
 it gets split.</li>
 <li>If the <em>throughput</em> to a partition or collection
 is high enough for long enough,
-it also gets split.<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
-This is sometimes called <strong>adaptive capacity</strong>.</li>
+it also gets split,<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
+with a bias towards keys with higher utilization;
+this was added <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=Adaptive%20capacity%20support%20for%20imbalanced%20workload">in 2019</a>.</li>
 </ul>
-<p>This is handled entirely by DynamoDB
+<p>Partition management is handled entirely by DynamoDB
 and is transparent to the user,
-but is not instant –
+but it doesn't happen instantly –
 it takes several minutes to allocate new partitions and shuffle things around.</p>
-<p>Partitions have a <a class="anchor" href="#partition-throughput">limit on throughput</a> (aka <em>capacity</em>),
-which is what we'll look at next.</p>
+<p>Since they are backed by real computers,
+partitions do have a <a class="anchor" href="#partition-throughput">throughput limit</a>.</p>
 <!-- TODO: add these footnotes? -->
 
 <section class="admonition tip">
@@ -375,7 +377,7 @@ A DynamoDB attribute corresponds to a field in a relational database system.
 
 <h2 id="limits">Limits<span class="headerlink">&nbsp;<a href="#limits" title="permalink">#</a></span></h2>
 <p>Part of DynamoDB's appeal is that
-it <strong>scales infinitely</strong> for specific dimensions:
+it <strong>scales &quot;infinitely&quot;</strong> for specific dimensions:
 there are no limits on table size or number of items.
 However, there are some hard, non-adjustable limits
 you will have to take into account when designing your application.</p>
@@ -409,91 +411,54 @@ throughput = units/s * unit size * cost
 -->
 
 <h3 id="partition-throughput">Partition throughput<span class="headerlink">&nbsp;<a href="#partition-throughput" title="permalink">#</a></span></h3>
-<p>Most importantly,
-there is a limit on partition throughput –
+<p>The most important limit is
+on partition throughput (aka <em>capacity</em>) –
 how much data DynamoDB can read from or write
 to a <a class="anchor" href="#physical-model-partitions">partition</a>
-in a given amount of time.
-In normal people units,<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup>
-the limits are:</p>
+in a given amount of time:<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup></p>
 <ul>
 <li><strong>1 MB/s for writes</strong></li>
-<li><strong>24 MB/s for reads</strong> (<a class="anchor" href="#eventual-consistency">eventually consistent</a>)</li>
-<li>12 MB/s for strongly consistent reads</li>
+<li><strong>24 MB/s for reads</strong>, <a class="anchor" href="#eventual-consistency">eventually consistent</a></li>
+<li>12 MB/s for reads, strongly consistent</li>
 </ul>
-<p>Of note, when measuring throughput,
-the <strong>item is the smallest unit of data</strong> that you can read or write,
-and <strong>throughput is how much data DynamoDB touches</strong>,
-not how much data goes through the API.
-While you can get or update single attributes
-and you can filter items in queries,
-this only saves network bandwidth and latency
-–
-the consumed capacity is always that
-of the <em>whole</em> items DynamoDB had to read or write.</p>
-<p>;
-while the API allows more granular operations,
-the consumed capacity is always that of the entire item.</p>
-<p>Of note,
-<strong>throughput is how much data DynamoDB touches</strong> before processing,
-<strong>not how much data goes through the API</strong>.
-While you can get or update single attributes
-and you can filter items in queries,
-this only saves network bandwidth and latency
-–
+<p>Notably, this applies to
+<strong>whole items DynamoDB has to access</strong>,
+not the data that goes through the API.
+While you can touch single attributes and filter query results,
 the consumed capacity is always that
 of the <em>whole</em> items DynamoDB had to read or write.<sup class="footnote-ref" id="fnref-8"><a href="#fn-8">8</a></sup></p>
 <p>Once you reach the limit,
 the operation will be throttled,
-and you can retry again later,
+and you can try again later,
 ideally with exponential backoff
-(the AWS SDK usually takes care of it for you).</p>
-<!--
-To minimize throttling because of throughput exceptions, DynamoDB uses burst capacity to handle usage spikes. DynamoDB uses adaptive capacity to help accommodate uneven access patterns.
+(the AWS SDK usually takes care of this for you).</p>
+<p>The best way to avoid throttling is
+to <strong>distribute the load uniformly across partitions</strong>
+by using a <strong>high-cardinality partition key</strong>.<sup class="footnote-ref" id="fnref-9"><a href="#fn-9">9</a></sup>
+Uneven traffic can create <em>hot partitions</em>
+that suffer from persistent throttling.</p>
+<!-- TODO: should this be a footnote? -->
 
-It’s possible for throughput to go above the table’s limit for a short duration thanks to burst capacity, another feature of adaptive capacity that allows a table to borrow capacity (on a best effort basis) to provide temporary capacity above the table capacity limit.
--->
-
-<p>To avoid throttling,
-you need to <strong>distribute the load evenly</strong> across partitions
-by using a <strong>high-cardinality partition key</strong>;
-if there is no good natural partition key,
-you can make one through sharding, <!-- TODO: link -->
-which we'll discuss in the next article.</p>
-<hr />
-<p>Since for a given partition,
-the throughput is fixed,
-but the number of items and the item size is not,
-you have two trade-offs:</p>
-<ul>
-<li>you can have <em>small and busy partitions</em> or <em>large and idle partitions</em></li>
-<li>you can have partitions with <em>more, smaller items</em> or <em>fewer, bigger items</em></li>
-</ul>
-<p>XXX three things:</p>
-<ul>
-<li>uneven traffic across partitions (<em>hot partitions</em>)
--&gt; more partitions</li>
-<li>many items on partition -&gt; more partitions</li>
-<li>big items on partitions -&gt; more partitions, vertical partitioning</li>
-</ul>
-<p>There are two main ways in which throttling can happen:</p>
-<ul>
-<li>some partitions have higher utilization than others (aka <em>hot partitions</em>)</li>
-<li>all partitions have high utilization</li>
-</ul>
-<blockquote>
-<p>If your application drives consistently high traffic to a single item, adaptive capacity might rebalance your data so that a partition contains only that single, frequently accessed item. In this case, DynamoDB can deliver throughput up to the partition maximum of 3,000 <abbr title="Read Capacity Units">RCU</abbr>s and 1,000 <abbr title="Write Capacity Units">WCU</abbr>s to that single item’s primary key. Adaptive capacity will not split item collections across multiple partitions of the table when there is a local secondary index on the table.</p>
-</blockquote>
-<!-- Because of this, optimizing your data access is not just a performance matter, but a cost matter too. -->
-
-<!-- TODO: note on partition vs collection, and steady state -->
-
-<p>partition throughput limit;
-assuming your table has enough capacity
-(depends on provisioned and ondemand),
-after it reaches steady state,
-partition : collection (or even higher?)</p>
-<p>an item is the smallest unit of data that you can read or write; while the API allows more granular operations, the consumed capacity is always that of the entire item.</p>
+<p>Nowadays, uneven traffic is less of a problem.
+For short-term imbalances like traffic spikes,
+<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#burst-capacity">burst capacity</a> and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#adaptive-capacity">adaptive capacity</a>
+will, <em>on a best effort basis</em>,
+borrow capacity above the table capacity limit
+and between partitions.
+For long-term imbalances,
+<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#isolate-frequent-access-items">partition splitting</a>
+should deal with the imbalance over time;
+according to AWS,
+you &quot;might&quot; even end up with a partition containing a single popular item.
+However,
+the documentation is very non-committal about their behaviour,
+and there's no knobs you can tweak,
+so <strong>good partition key design</strong> remains key.</p>
+<p>Finally, it is worth noting that the throughput is fixed,
+but the other dimensions are not;
+thus, you have a trade-off between
+<em>how often you access items</em>,
+the <em>number of items</em>, and average <em>item size</em>.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -507,7 +472,8 @@ partition : collection (or even higher?)</p>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-sort-keys.html">Sort key design</a></li>
 <li><small>(blog)</small> <a class="external" href="https://aws.amazon.com/blogs/database/choosing-the-right-dynamodb-partition-key/">Choosing the Right DynamoDB Partition Key</a></li>
 </ul>
-<p>https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-write-sharding</p>
+ <!-- https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-write-sharding -->
+
 </section>
 <h3 id="item-size">Item size<span class="headerlink">&nbsp;<a href="#item-size" title="permalink">#</a></span></h3>
 <p>Second, the maximum size of an item is 400 KB.
@@ -801,12 +767,17 @@ Don't look at me, it wasn't me that picked the names. ಠ_ಠ <a href="#fnref-4"
 <li id="fn-5"><p><a class="anchor" href="#indexes">Indexes</a>, which we'll discuss later,
 offer an escape hatch to this. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-6"><p>Assuming the table has enough configured throughput. <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-7"><p>DynamoDB uses its own <em>capacity units</em>
-to convey that
-item size is rounded up to 4 KB for reads (1 <abbr title="Read Capacity Units">RCU</abbr>)
-and 1 KB for writes (1 <abbr title="Write Capacity Units">WCU</abbr>)
-for accounting purposes. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-8"><p>Yes, even just to count them. <a href="#fnref-8" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-7"><p>Converted to normal people units for your convenience.
+DynamoDB uses its own <em>capacity units</em>
+as a convoluted way of saying that for accounting purposes,
+item size is rounded up to 4 KB (1 <abbr title="Read Capacity Units">RCU</abbr>) for reads
+and 1 KB (1 <abbr title="Write Capacity Units">WCU</abbr>) for writes.
+This is presumably because the size of a capacity unit
+<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=4%20KB%20read%20capacity%20unit%20size">can increase</a> over time. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-8"><p>Yes, this includes just counting them. <a href="#fnref-8" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-9"><p>If there is no good natural partition key,
+you can manufacture one through sharding, <!-- TODO: link -->
+which we'll cover in the next article. <a href="#fnref-9" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
