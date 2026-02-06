@@ -308,12 +308,12 @@ into a smaller number of <strong>partitions</strong>, each a few gigabytes in si
 To figure out which partition an item should go on,
 DynamoDB hashes its <em>partition key</em>
 (also called a <em>hash key</em>, for obvious reasons).</p>
-<p>This is kinda like hash table buckets,
-except there's another level of indirection –
+<p>This is similar to hash table buckets,<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
+except there's one more level of indirection –
 instead of mapping to a single number,
 each partition maps to a range of numbers,
 which allows splitting a partition into two new ones
-by splitting its range.
+by splitting its range.<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup>
 Furthermore, an item collection
 (that is, items with the same partition key)
 can be split on multiple partitions too
@@ -326,9 +326,8 @@ partitions are added as needed.</li>
 it gets split.</li>
 <li>If the <em>throughput</em> to a partition or collection
 is high enough for long enough,
-it also gets split,<sup class="footnote-ref" id="fnref-6"><a href="#fn-6">6</a></sup>
-with a bias towards keys with higher utilization;
-this was added <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=Adaptive%20capacity%20support%20for%20imbalanced%20workload">in 2019</a>.</li>
+it also gets split,<sup class="footnote-ref" id="fnref-8"><a href="#fn-8">8</a></sup>
+possibly with a bias towards keys with higher utilization.</li>
 </ul>
 <p>Partition management is handled entirely by DynamoDB
 and is transparent to the user,
@@ -336,8 +335,6 @@ but it doesn't happen instantly –
 it takes several minutes to allocate new partitions and shuffle things around.</p>
 <p>Since they are backed by real computers,
 partitions do have a <a class="anchor" href="#partition-throughput">throughput limit</a>.</p>
-<!-- TODO: add these footnotes? -->
-
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -415,7 +412,7 @@ throughput = units/s * unit size * cost
 on partition throughput (aka <em>capacity</em>) –
 how much data DynamoDB can read from or write
 to a <a class="anchor" href="#physical-model-partitions">partition</a>
-in a given amount of time:<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup></p>
+in a given amount of time:<sup class="footnote-ref" id="fnref-9"><a href="#fn-9">9</a></sup></p>
 <ul>
 <li><strong>1 MB/s for writes</strong></li>
 <li><strong>24 MB/s for reads</strong>, <a class="anchor" href="#eventual-consistency">eventually consistent</a></li>
@@ -426,7 +423,7 @@ in a given amount of time:<sup class="footnote-ref" id="fnref-7"><a href="#fn-7"
 not the data that goes through the API.
 While you can touch single attributes and filter query results,
 the consumed capacity is always that
-of the <em>whole</em> items DynamoDB had to read or write.<sup class="footnote-ref" id="fnref-8"><a href="#fn-8">8</a></sup></p>
+of the <em>whole</em> items DynamoDB had to read or write.<sup class="footnote-ref" id="fnref-10"><a href="#fn-10">10</a></sup></p>
 <p>Once you reach the limit,
 the operation will be throttled,
 and you can try again later,
@@ -434,7 +431,7 @@ ideally with exponential backoff
 (the AWS SDK usually takes care of this for you).</p>
 <p>The best way to avoid throttling is
 to <strong>distribute the load uniformly across partitions</strong>
-by using a <strong>high-cardinality partition key</strong>.<sup class="footnote-ref" id="fnref-9"><a href="#fn-9">9</a></sup>
+by using a <strong>high-cardinality partition key</strong>.<sup class="footnote-ref" id="fnref-11"><a href="#fn-11">11</a></sup>
 Uneven traffic can create <em>hot partitions</em>
 that suffer from persistent throttling.</p>
 <!-- TODO: should this be a footnote? -->
@@ -766,18 +763,31 @@ and thus each partition key can have only one item. <a href="#fnref-3" class="fo
 Don't look at me, it wasn't me that picked the names. ಠ_ಠ <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-5"><p><a class="anchor" href="#indexes">Indexes</a>, which we'll discuss later,
 offer an escape hatch to this. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-6"><p>Assuming the table has enough configured throughput. <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-7"><p>Converted to normal people units for your convenience.
+<li id="fn-6"><p>A quick rant on naming.
+With a hash table,
+you would say &quot;hash table key&quot;,
+or maybe even &quot;item key&quot;;
+you would <em>not</em> say &quot;bucket key&quot;,
+since that's a low level detail,
+and also a bucket can have <em>multiple</em> keys.
+You know, like in DynamoDB.</p>
+<p>THEN WHY IS IT CALLED A PARTITION KEY <!-- ...partition*ing* key, maybe? --> <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-7"><p>You have to admit that this is a great explanation.
+Surely you would expect to find it in the official documentation,
+and not burried in a <a class="external" href="https://aws.amazon.com/blogs/database/part-1-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/#:~:text=how%20data%20gets%20assigned%20to%20partitions">random blog post</a> published
+three years <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=Adaptive%20capacity%20support%20for%20imbalanced%20workload">after the feature was actually launched</a>. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-8"><p>Assuming the table has enough configured throughput. <a href="#fnref-8" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-9"><p>Converted to normal people units for your convenience.
 DynamoDB uses its own <em>capacity units</em>
 as a convoluted way of saying that for accounting purposes,
 item size is rounded up to 4 KB (1 <abbr title="Read Capacity Units">RCU</abbr>) for reads
 and 1 KB (1 <abbr title="Write Capacity Units">WCU</abbr>) for writes.
 This is presumably because the size of a capacity unit
-<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=4%20KB%20read%20capacity%20unit%20size">can increase</a> over time. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-8"><p>Yes, this includes just counting them. <a href="#fnref-8" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-9"><p>If there is no good natural partition key,
-you can manufacture one through sharding, <!-- TODO: link -->
-which we'll cover in the next article. <a href="#fnref-9" class="footnote"><sup>[return]</sup></a></p></li>
+<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=4%20KB%20read%20capacity%20unit%20size">can increase</a> over time. <a href="#fnref-9" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-10"><p>Yes, this includes just counting them. <a href="#fnref-10" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-11"><p>If there is no good natural partition key,
+you can make one by sharding a low-cardinality attribute, <!-- TODO: link -->
+which we'll cover in the next article. <a href="#fnref-11" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
