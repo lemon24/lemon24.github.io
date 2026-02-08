@@ -436,19 +436,19 @@ Uneven traffic can create <em>hot partitions</em>
 that suffer from persistent throttling.</p>
 <!-- TODO: should this be a footnote? -->
 
-<p>Nowadays, uneven traffic is less of a problem.
+<p>Nowadays, this is less of a problem.
+For long-term imbalances,
+<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#isolate-frequent-access-items">partition splitting</a>
+should rebalance things over time;
+according to AWS,
+you &quot;might&quot; even end up with a partition containing a single popular item.
 For short-term imbalances like traffic spikes,
 <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#burst-capacity">burst capacity</a> and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#adaptive-capacity">adaptive capacity</a>
 will, <em>on a best effort basis</em>,
-borrow capacity above the table capacity limit
+borrow capacity above the table limit
 and between partitions.
-For long-term imbalances,
-<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#isolate-frequent-access-items">partition splitting</a>
-should deal with the imbalance over time;
-according to AWS,
-you &quot;might&quot; even end up with a partition containing a single popular item.
 However,
-the documentation is very non-committal about their behaviour,
+the documentation is very non-committal about the behavior of these features,
 and there's no knobs you can tweak
 besides increasing traffic gradually,
 so <strong>good partition key design</strong> remains key.</p>
@@ -539,6 +539,12 @@ a global secondary index is <strong>just a table</strong>:
 it has its own <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.ThroughputConsiderations">separate capacity</a>,
 no limits on size or number of items,
 and the same <a class="anchor" href="#partition-throughput">partition throughput</a> limits apply.</p>
+<p>Despite indexes being updated asynchronously,
+an index without enough capacity to process the updates
+will cause <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html">write throttling</a>.
+Also, to retrieve attributes not in the index,
+you have to get each item from the table
+(<a class="anchor" href="#batch-operations">batch operations</a> can speed this up).</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
 <p><small>(from <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=query%20the%20data%20by%20Genre%20and%20Album">here</a>)</small>
@@ -571,12 +577,6 @@ so you might want to group by artist in application code)</li>
 <span class="w">  </span><span class="nt">Leaving Home</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">Solar Fields</span><span class="p p-Indicator">,</span><span class="nt"> Song</span><span class="p">:</span><span class="w"> </span><span class="nv">Air Song</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
 </section>
-<p>Despite indexes being updated asynchronously,
-an index without enough capacity to process the updates
-will cause <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html">write throttling</a>.
-Also, to retrieve attributes not in the index,
-you have to get each item from the table
-(<a class="anchor" href="#batch-operations">batch operations</a> can speed this up).</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -585,8 +585,19 @@ you have to get each item from the table
 </ul>
 </section>
 <h3 id="local-secondary-indexes">Local secondary indexes<span class="headerlink">&nbsp;<a href="#local-secondary-indexes" title="permalink">#</a></span></h3>
-<p>A local secondary index allows you to have an <strong>alternate sort key</strong> for a partition
-(it is <em>local</em> to the partition).</p>
+<p>A local secondary index allows using a <strong>different sort key attribute</strong>.</p>
+<p>Data in a <abbr title="Local Secondary Index">LSI</abbr> is stored together with partition data
+(the index is <em>local</em> to the partition);
+besides the table B‍-‍tree,
+each collection has one B‍-‍tree per <abbr title="Local Secondary Index">LSI</abbr>.</p>
+<p>This allows strongly consistent reads
+and retrieving attributes not included in the index.
+Unfortunately,
+it also  <strong>limits collection size to 10 GB</strong>
+and <strong>collection throughput
+to the <a class="anchor" href="#partition-throughput">partition</a> limit</strong>,
+since it prevents splitting
+(as each B‍-‍tree would split differently).</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
 <p>For the same <em>Music</em> with <em>Artist</em> as partition key,
@@ -613,15 +624,6 @@ would allow you to <em>also</em> efficiently:</p>
 <span class="w">  </span><span class="nt">2011</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Song</span><span class="p">:</span><span class="w"> </span><span class="nv">Sombrero</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
 </section>
-<p>Unlike <abbr title="Global Secondary Index">GSI</abbr>s, local secondary indexes support
-retrieving attributes <em>not</em> projected into the index
-(with higher latency and cost),
-and strongly consistent reads.</p>
-<p>However, <abbr title="Local Secondary Index">LSI</abbr>s have their downsides:
-they can only be created/deleted with the table,
-and <strong>using <abbr title="Local Secondary Index">LSI</abbr>s limits partition size to 10 GB</strong>
-(the size of the items in the table plus the items in <abbr title="Local Secondary Index">LSI</abbr>s);
-because of this, people usually prefer using <abbr title="Global Secondary Index">GSI</abbr>s.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
