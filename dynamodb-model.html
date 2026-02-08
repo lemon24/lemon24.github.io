@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2025-12-19">December 2025</span>
-∙ 12 minute read
+∙ 13 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -241,7 +241,7 @@ or a document (a list or map of possibly nested attributes, similar to JSON).</p
 <p>There are no limits on table size or number of items,
 nor on those of an item collection.
 Items do have a <a class="anchor" href="#item-size">size limit</a> of 400 KB / item,
-which indirectly affects attribute size.</p>
+which indirectly limits attribute size.</p>
 <p>As we've seen <a class="internal" href="/dynamodb#python-mockup">in the previous article</a>,
 the core DynamoDB data operations are:</p>
 <ul>
@@ -408,7 +408,7 @@ throughput = units/s * unit size * cost
 -->
 
 <h3 id="partition-throughput">Partition throughput<span class="headerlink">&nbsp;<a href="#partition-throughput" title="permalink">#</a></span></h3>
-<p>The most important limit is
+<p>The most important limit is that
 on partition throughput (aka <em>capacity</em>) –
 how much data DynamoDB can read from or write
 to a <a class="anchor" href="#physical-model-partitions">partition</a>
@@ -418,14 +418,14 @@ in a given amount of time:<sup class="footnote-ref" id="fnref-9"><a href="#fn-9"
 <li><strong>24 MB/s for reads</strong>, <a class="anchor" href="#eventual-consistency">eventually consistent</a></li>
 <li>12 MB/s for reads, strongly consistent</li>
 </ul>
-<p>Notably, this applies to
+<p>Throughput measures
 <strong>whole items DynamoDB has to access</strong>,
 not the data that goes through the API.
 While you can touch single attributes and filter query results,
 the consumed capacity is always that
 of the <em>whole</em> items DynamoDB had to read or write.<sup class="footnote-ref" id="fnref-10"><a href="#fn-10">10</a></sup></p>
 <p>Once you reach the limit,
-the operation will be throttled,
+the operation is throttled,
 and you can try again later,
 ideally with exponential backoff
 (the AWS SDK usually takes care of this for you).</p>
@@ -449,13 +449,16 @@ according to AWS,
 you &quot;might&quot; even end up with a partition containing a single popular item.
 However,
 the documentation is very non-committal about their behaviour,
-and there's no knobs you can tweak,
+and there's no knobs you can tweak
+besides increasing traffic gradually,
 so <strong>good partition key design</strong> remains key.</p>
-<p>Finally, it is worth noting that the throughput is fixed,
-but the other dimensions are not;
-thus, you have a trade-off between
+<p>Of note, while the throughput is fixed,
+the other dimensions are not;
+this means that you have a trade-off between
 <em>how often you access items</em>,
-the <em>number of items</em>, and average <em>item size</em>.</p>
+the <em>number of items</em>, and <em>item size</em>;
+for example, you can split items into smaller ones
+based on how attributes are accessed, aka <em><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-vertical-partitioning">vertical partitioning</a></em>.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -468,39 +471,37 @@ the <em>number of items</em>, and average <em>item size</em>.</p>
 </li>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-sort-keys.html">Sort key design</a></li>
 <li><small>(blog)</small> <a class="external" href="https://aws.amazon.com/blogs/database/choosing-the-right-dynamodb-partition-key/">Choosing the Right DynamoDB Partition Key</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-vertical-partitioning">Data modeling building blocks # Vertical partitioning building block</a></li>
 </ul>
  <!-- https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-write-sharding -->
 
 </section>
 <h3 id="item-size">Item size<span class="headerlink">&nbsp;<a href="#item-size" title="permalink">#</a></span></h3>
-<p>Second, the maximum size of an item is 400 KB.
-This can be worked around by either splitting an item into multiple ones
-on the same partition,
-or by storing only the metadata in DynamoDB,
-with data somewhere else, like S3
-(this is a pretty common pattern).</p>
-<!-- fixed but generous for most use cases, -->
-
+<p>Second, <strong>the maximum item size is 400 KB</strong>,
+which ought to be enough for anybody.
+You can work around this limit either by <strong>splitting items into parts</strong>,
+or by <strong>putting the data somewhere else</strong> entirely, like S3,
+and keeping only a reference in DynamoDB.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html#limits-items">Constraints # Items</a></li>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-use-s3-too.html">Large items</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-vertical-partitioning">Data modeling building blocks # Vertical partitioning building block</a></li>
 </ul>
 </section>
 <h3 id="page-size">Page size<span class="headerlink">&nbsp;<a href="#page-size" title="permalink">#</a></span></h3>
-<p>Finally, the result set of the query and scan operations
-is limited to 1 MB per page,
-but it is possible to stitch together multiple pages
-by using a form of <a class="internal" href="/query-builder-why#intermission-scrolling-window-queries">keyset pagination</a>
-(specifically, there's a <code>LastEvaluatedKey</code> that allows you to query/scan from the end of the previous page).</p>
-<!-- link to eventual consistency -->
-
-<p>However, this has implications on consistency,
-especially for secondary indexes –
-if an attribute used in a <abbr title="Global Secondary Index">GSI</abbr> primary or sort key changes,
-an item can appear zero or multiple times in the entire (multi-page) result set.</p>
+<p>Finally,
+<strong>the maximum response size for query and scan operations is 1 MB</strong>
+(a <em>page</em>).
+You can continue from the end of the previous page
+by passing the <code>LastEvaluatedKey</code> response element to subsequent calls,
+which is essentially
+<a class="internal" href="/query-builder-why#intermission-scrolling-window-queries">keyset pagination</a>.
+One consequence of this is that,
+throughput limit aside,
+there's an implicit limit
+on how fast you can query the items in a collection,
+since the calls are sequential by definition.<sup class="footnote-ref" id="fnref-12"><a href="#fn-12">12</a></sup></p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -509,12 +510,20 @@ an item can appear zero or multiple times in the entire (multi-page) result set.
 </ul>
 </section>
 <h2 id="indexes">Indexes<span class="headerlink">&nbsp;<a href="#indexes" title="permalink">#</a></span></h2>
-<p>When discussing tables,
-I said that access not based on partition/sort key is expensive.
-Secondary indexes allow other access patterns
-by using an <strong>alternate primary key</strong>
-composed of different attributes than that of the table.
-You can query or scan an index just like you would a table.</p>
+<p>As discussed in the <a class="anchor" href="#logical-model-hash-table-of-b-trees">logical model</a>,
+access not based on primary key is very inefficient.</p>
+<p>Secondary indexes allow queries and scans that use <strong>alternative primary keys</strong>,
+that is, ones composed of different attributes than that of the base table.
+Unlike tables,
+index sort keys do not have to be unique for a given partition key.
+An item that does not have both of the index primary key attributes
+will not appear in the index.</p>
+<p>Changes to the table are automatically propagated to any secondary indexes.
+Aside from the index and table primary key attributes,
+an index can include copies of other attributes
+(aka <em><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.Projections">attribute projection</a></em>),
+which allows the index to answer queries alone,
+without extra reads to the base table.<sup class="footnote-ref" id="fnref-13"><a href="#fn-13">13</a></sup></p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -523,9 +532,7 @@ You can query or scan an index just like you would a table.</p>
 </ul>
 </section>
 <h3 id="global-secondary-indexes">Global secondary indexes<span class="headerlink">&nbsp;<a href="#global-secondary-indexes" title="permalink">#</a></span></h3>
-<p>Conceptually, a global secondary index is a separate table
-that's automatically kept in sync with the base table,
-and allows having different attributes as primary key.</p>
+<p>A global secondary index allows using <strong>different partition <em>and</em> sort key attributes</strong>.</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
 <p><small>(from <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=query%20the%20data%20by%20Genre%20and%20Album">here</a>)</small>
@@ -558,31 +565,27 @@ so you might want to group by artist in application code)</li>
 <span class="w">  </span><span class="nt">Leaving Home</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">Solar Fields</span><span class="p p-Indicator">,</span><span class="nt"> Song</span><span class="p">:</span><span class="w"> </span><span class="nv">Air Song</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
 </section>
-<p>Aside from item partition and sort keys,
-the index can include additional attributes,
-so you can query the index alone;
-this is called <strong><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.Projections">attribute projection</a></strong>,
-and is analogous to a <a class="external" href="https://en.wikipedia.org/wiki/Database_index#Covering_index">covering index</a> in relational databases;
-however,
+<p>Conceptually,
+a global secondary index is <strong>just a table</strong>:
+it has its own <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.ThroughputConsiderations">separate capacity</a>,
+no limits on size or number of items,
+and the same <a class="anchor" href="#partition-throughput">partition throughput</a> limits apply.
+Although <abbr title="Global Secondary Index">GSI</abbr>s are synchronized with the table asynchronously,
+a <abbr title="Global Secondary Index">GSI</abbr> without enough write capacity
+will cause <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html">write throttling</a> for the table,
+regardless of the table capacity.</p>
+<!-- FIXME: continue from here -->
+
+<p>To get attributes not projected into the index,</p>
+<p>Attributes projected into the index</p>
+<p>however,
 if you need an attribute that's not in the index,
 you'll have to get it yourself from the base table
-(batch operations can make this faster). <!-- TODO link --></p>
-<p>Unlike real tables,
-<abbr title="Global Secondary Index">GSI</abbr>s support only eventually consistent reads,
-and their primary keys do not need to be unique.
-In all other respects,
-<strong><abbr title="Global Secondary Index">GSI</abbr>s behave like real tables</strong>:</p>
-<ul>
-<li>they have their own <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.ThroughputConsiderations">separate capacity</a></li>
-<li>they have no limits on size or the number of primary keys</li>
-<li>they have the same <a class="anchor" href="#partition-throughput">partition throughput</a> limits,
-and the same workarounds <!-- TODO link to sharding --></li>
-</ul>
-<p>You can have up to 20 <abbr title="Global Secondary Index">GSI</abbr>s per table,
-although in practice you can reuse them.</p>
-<!-- TODO link to overloading -->
-
-<p>TODO: discuss <abbr title="Global Secondary Index">GSI</abbr> write throttling</p>
+(<a class="anchor" href="#batch-operations">batch operations</a> can make this faster).</p>
+<p>However, this has implications on consistency,
+especially for secondary indexes –
+if an attribute used in a <abbr title="Global Secondary Index">GSI</abbr> primary or sort key changes,
+an item can appear zero or multiple times in the entire (multi-page) result set.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -760,7 +763,7 @@ but you can think of that like
 a degenerate case where the sort key is a constant value,
 and thus each partition key can have only one item. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-4"><p>Yes, an <em>item collection</em> is different from a &quot;collection of items&quot;.
-Don't look at me, it wasn't me that picked the names. ಠ_ಠ <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
+Don't look at me, I didn't pick the names. ಠ_ಠ <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-5"><p><a class="anchor" href="#indexes">Indexes</a>, which we'll discuss later,
 offer an escape hatch to this. <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-6"><p>A quick rant on naming.
@@ -775,7 +778,8 @@ You know, like in DynamoDB.</p>
 <li id="fn-7"><p>You have to admit that this is a great explanation.
 Surely you would expect to find it in the official documentation,
 and not burried in a <a class="external" href="https://aws.amazon.com/blogs/database/part-1-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/#:~:text=how%20data%20gets%20assigned%20to%20partitions">random blog post</a> published
-three years <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=Adaptive%20capacity%20support%20for%20imbalanced%20workload">after the feature was actually launched</a>. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
+at least three years
+<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=Adaptive%20capacity%20support%20for%20imbalanced%20workload">after the feature actually launched</a>. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-8"><p>Assuming the table has enough configured throughput. <a href="#fnref-8" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-9"><p>Converted to normal people units for your convenience.
 DynamoDB uses its own <em>capacity units</em>
@@ -788,6 +792,13 @@ This is presumably because the size of a capacity unit
 <li id="fn-11"><p>If there is no good natural partition key,
 you can make one by sharding a low-cardinality attribute, <!-- TODO: link -->
 which we'll cover in the next article. <a href="#fnref-11" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-12"><p>You could make it twice as fast by querying from both ends,
+but probably no faster,
+since for <a class="internal" href="/pwned#binary-skipping">binary search</a>
+you'd need to jump in the middle of two sort keys.
+Unsurprisingly,
+we'll look at a potential solution in the next article. <a href="#fnref-12" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-13"><p>This is the same as a <a class="external" href="https://en.wikipedia.org/wiki/Database_index#Covering_index">covering index</a> in relational databases. <a href="#fnref-13" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
