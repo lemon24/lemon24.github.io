@@ -432,7 +432,7 @@ ideally with exponential backoff
 <p>The best way to avoid throttling is
 to <strong>distribute the load uniformly across partitions</strong>
 by using a <strong>high-cardinality partition key</strong>.<sup class="footnote-ref" id="fnref-11"><a href="#fn-11">11</a></sup>
-Uneven traffic can create <em>hot partitions</em>
+Uneven key distribution can create <em>hot partitions</em>
 that suffer from persistent throttling.</p>
 <!-- TODO: should this be a footnote? -->
 
@@ -440,17 +440,16 @@ that suffer from persistent throttling.</p>
 For long-term imbalances,
 <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#isolate-frequent-access-items">partition splitting</a>
 should rebalance things over time;
-according to AWS,
-you &quot;might&quot; even end up with a partition containing a single popular item.
-For short-term imbalances like traffic spikes,
-<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#burst-capacity">burst capacity</a> and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#adaptive-capacity">adaptive capacity</a>
+you &quot;might&quot; even end up with a single popular item per partition.
+For short-term ones like traffic spikes,
+<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#burst-capacity">burst</a> and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#adaptive-capacity">adaptive capacity</a>
 will, <em>on a best effort basis</em>,
-borrow capacity above the table limit
+&quot;borrow&quot; capacity above the table limit
 and between partitions.
 However,
-the documentation is non-committal
-about the behavior of any of these features,
-and there's no knobs you can tweak
+AWS is very non-committal
+about their behavior,
+and there's nothing you can do
 besides increasing traffic gradually,
 so <strong>good partition key design</strong> remains key.</p>
 <p>Of note, while the throughput is fixed,
@@ -502,7 +501,7 @@ One consequence of this is that,
 throughput limit aside,
 there's an implicit limit
 on how fast you can query the items in a collection,
-since the calls are sequential by definition.<sup class="footnote-ref" id="fnref-12"><a href="#fn-12">12</a></sup></p>
+since the calls are sequentiall.<sup class="footnote-ref" id="fnref-12"><a href="#fn-12">12</a></sup></p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -514,10 +513,10 @@ since the calls are sequential by definition.<sup class="footnote-ref" id="fnref
 <p>As discussed in the <a class="anchor" href="#logical-model-hash-table-of-b-trees">logical model</a>,
 access not based on primary key is very inefficient.</p>
 <p>Secondary indexes allow queries and scans that use <strong>alternative primary keys</strong>,
-that is, ones composed of different attributes than that of the base table.
+ones composed of different attributes than that of the base table.
 Unlike tables,
 index sort keys do not have to be unique for a given partition key.
-An item that does not have both of the index primary key attributes
+An item that is missing one of the index primary key attributes
 will not appear in the index.</p>
 <p>Changes to the table are automatically propagated to any secondary indexes.
 Aside from the index and table primary key attributes,
@@ -588,16 +587,14 @@ so you might want to group by artist in application code)</li>
 <h3 id="local-secondary-indexes">Local secondary indexes<span class="headerlink">&nbsp;<a href="#local-secondary-indexes" title="permalink">#</a></span></h3>
 <p>A local secondary index allows using a <strong>different sort key attribute</strong>.</p>
 <p>Data in a <abbr title="Local Secondary Index">LSI</abbr> is stored together with partition data
-(the index is <em>local</em> to the partition)
-–
-besides the table B‍-‍tree,
+(the index is <em>local</em> to the partition),
+so besides the table B‍-‍tree,
 each collection has one B‍-‍tree per <abbr title="Local Secondary Index">LSI</abbr>.</p>
 <p>This allows strongly consistent reads
-and retrieving non-projected attributes.
-Sadly,
-it also  <strong>limits collection size to 10 GB</strong>
-and <strong>collection throughput to the <a class="anchor" href="#partition-throughput">partition limit</a></strong>,
-since it prevents further splitting
+and fetching non-projected attributes,
+but also  <strong>limits collection size to 10 GB</strong>
+and <strong>throughput to the <a class="anchor" href="#partition-throughput">partition limit</a></strong>,
+since it prevents partition splitting
 (as each sort key would split the items in a different way).</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
