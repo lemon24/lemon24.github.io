@@ -539,31 +539,30 @@ a global secondary index is <strong>just a table</strong>:
 it has its own <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.ThroughputConsiderations">separate capacity</a>,
 no limits on size or number of items,
 and the same <a class="anchor" href="#partition-throughput">partition throughput</a> limits apply.</p>
-<p>Despite indexes being updated asynchronously,
+<p>Despite <abbr title="Global Secondary Index">GSI</abbr>s being updated asynchronously,
 an index without enough capacity to process the updates
 will cause <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html">write throttling</a>.
-Also, to retrieve attributes not in the index,
-you have to get each item from the table
+To retrieve attributes not in the index,
+you have to get them yourself from the table
 (<a class="anchor" href="#batch-operations">batch operations</a> can speed this up).</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
 <p><small>(from <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=query%20the%20data%20by%20Genre%20and%20Album">here</a>)</small>
 Continuing with the music example,
-a <abbr title="Global Secondary Index">GSI</abbr> with <em>Genre</em> and <em>Album</em> as primary and sort key,
+a <abbr title="Global Secondary Index">GSI</abbr> with <em>Genre</em> and <em>Album</em> as partition and sort keys
 would allow you to <em>also</em> efficiently:</p>
 <ul>
-<li>query songs by genre
-(and, if you collapse results in application code,
-query albums by genre <em>somewhat</em> efficiently)</li>
-<li>query songs by genre and album title
-(but, two albums can have the same genre and title,
-so you might want to group by artist in application code)</li>
+<li>query songs by genre (and, with additional processing, albums by genre)</li>
+<li>query songs by genre and album
+(but, since two albums can have the same genre and title,
+you might want to group by artist in application code)</li>
 </ul>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="c1"># table Music (partition key: Artist, sort key: Song)</span>
 <span class="nt">Kyuss</span><span class="p">:</span><span class="w"> </span><span class="kt">!btree</span>
 <span class="w">  </span><span class="nt">Demon Cleaner</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Album</span><span class="p">:</span><span class="w"> </span><span class="nv">Welcome To Sky Valley</span><span class="p p-Indicator">,</span><span class="nt"> Genre</span><span class="p">:</span><span class="w"> </span><span class="nv">Rock</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">  </span><span class="nt">Space Cadet</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Album</span><span class="p">:</span><span class="w"> </span><span class="nv">Welcome To Sky Valley</span><span class="p p-Indicator">,</span><span class="nt"> Genre</span><span class="p">:</span><span class="w"> </span><span class="nv">Rock</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="nt">1000mods</span><span class="p">:</span><span class="w"> </span><span class="kt">!btree</span>
+<span class="w">  </span><span class="nt">Claws</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Genre</span><span class="p">:</span><span class="w"> </span><span class="nv">Rock</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w">  </span><span class="c1"># has no Album!</span>
 <span class="w">  </span><span class="nt">Vidage</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Album</span><span class="p">:</span><span class="w"> </span><span class="nv">Super Van Vacation</span><span class="p p-Indicator">,</span><span class="nt"> Genre</span><span class="p">:</span><span class="w"> </span><span class="nv">Rock</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="nt">Solar Fields</span><span class="p">:</span><span class="w"> </span><span class="kt">!btree</span>
 <span class="w">  </span><span class="nt">Air Song</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Album</span><span class="p">:</span><span class="w"> </span><span class="nv">Leaving Home</span><span class="p p-Indicator">,</span><span class="nt"> Genre</span><span class="p">:</span><span class="w"> </span><span class="nv">Electronic</span><span class="w"> </span><span class="p p-Indicator">}</span>
@@ -586,23 +585,22 @@ so you might want to group by artist in application code)</li>
 </section>
 <h3 id="local-secondary-indexes">Local secondary indexes<span class="headerlink">&nbsp;<a href="#local-secondary-indexes" title="permalink">#</a></span></h3>
 <p>A local secondary index allows using a <strong>different sort key attribute</strong>.</p>
-<p>Data in a <abbr title="Local Secondary Index">LSI</abbr> is stored together with partition data
+<p><abbr title="Local Secondary Index">LSI</abbr> data is stored together with partition data
 (the index is <em>local</em> to the partition),
 so besides the table B‍-‍tree,
 each collection has one B‍-‍tree per <abbr title="Local Secondary Index">LSI</abbr>.</p>
 <p>This allows strongly consistent reads
 and fetching non-projected attributes,
-but also  <strong>limits collection size to 10 GB</strong>
-and <strong>throughput to the <a class="anchor" href="#partition-throughput">partition limit</a></strong>,
-since it prevents partition splitting
+but also <strong>limits collection size to 10 GB</strong>
+and <strong>collection throughput to the <a class="anchor" href="#partition-throughput">partition limit</a></strong>,
+since it prevents further partition splitting
 (as each sort key would split the items in a different way).</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
-<p>For the same <em>Music</em> with <em>Artist</em> as partition key,
-a <abbr title="Local Secondary Index">LSI</abbr> with <em>Year</em> as sort key
+<p>A <abbr title="Local Secondary Index">LSI</abbr> with <em>Year</em> as sort key
 would allow you to <em>also</em> efficiently:</p>
 <ul>
-<li>query songs by artist in chronological order</li>
+<li>query songs by artist, in chronological order</li>
 <li>query songs by artist and year</li>
 </ul>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="c1"># table Music (partition key: Artist, sort key: Song)</span>
