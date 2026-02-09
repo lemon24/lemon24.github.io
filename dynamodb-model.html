@@ -656,12 +656,10 @@ besides simple <abbr title="create, read, update, and delete">CRUD</abbr> operat
 <p>So, remember I said partitions are backed by real computers?
 I didn't say <em>how many</em>.</p>
 <p>To allow the high-availability magic to happen,
-each partition is backed not by one,
-but by <a class="external" href="https://aws.amazon.com/blogs/database/part-2-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/#:~:text=spread%20across%20three%20nodes%20for%20redundancy">three nodes</a>:
-a leader that handles writes,
-and two replicas updated asynchronously;
-the nodes are in different datacenters
-(or better said, in different <em><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html#ddb-intro-resilience">availability zones</a></em>).</p>
+a partition is backed by <a class="external" href="https://aws.amazon.com/blogs/database/part-2-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/#:~:text=spread%20across%20three%20nodes%20for%20redundancy">three nodes</a>
+in separate data centers:<sup class="footnote-ref" id="fnref-14"><a href="#fn-14">14</a></sup>
+a leader that handles writes
+and two asynchronous replicas.</p>
 <p>This explains why there are two kinds of reads:</p>
 <ul>
 <li><strong>strongly consistent</strong> reads go to the leader,
@@ -670,17 +668,16 @@ so you always get the latest data</li>
 so you may get slightly older data,
 but if you repeat the read later,
 you will <em><a class="external" href="https://en.wikipedia.org/wiki/Eventual_consistency">eventually</a></em> get the latest data;
-since they use all the available nodes,
+because they use all the available nodes,
 they are more efficient, and thus cheaper</li>
 </ul>
 <p>Note that strongly consistent reads
 <strong>do not replace synchronization primitives</strong>
 like <a class="anchor" href="#conditional-writes">conditional writes</a>
-and <a class="anchor" href="#transactions">transactions</a>;
-instead,
-strong consistency
-can help lower the rate at which
-conditional updates and transactions fail
+and <a class="anchor" href="#transactions">transactions</a>,
+but they can be useful to lower the rate
+at which
+these operations fail
 for highly-contended items.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
@@ -689,21 +686,21 @@ for highly-contended items.</p>
 </ul>
 </section>
 <h3 id="conditional-writes">Conditional writes<span class="headerlink">&nbsp;<a href="#conditional-writes" title="permalink">#</a></span></h3>
-<p>Write operations allow specifying a <strong>condition expression</strong>
+<p>Write operations can specify a <strong>condition expression</strong>
 that must be true for the write to happen
-(e.g. an attribute exists or has a specific value);
+(e.g. an attribute has a specific value);
 if the expression is false,
 the write fails.
-A condition expression can refer only to the item being modified.</p>
+Condition expressions can refer only to the item being modified.</p>
 <p>Conditional writes are critical for data consistency
 and avoiding concurrency <a class="external" href="https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use">bugs</a>,
 since they are only the way to run logic server-side,
-on the <em>current</em> version of an item.
+while the item is being modified.
 You can use conditional writes
 to build higher level abstractions like
 optimistic locking, <!-- TODO: link -->
 <a class="external" href="https://github.com/awslabs/amazon-dynamodb-lock-client">distributed locks</a>,
-or atomic counters.<sup class="footnote-ref" id="fnref-14"><a href="#fn-14">14</a></sup></p>
+and atomic counters.<sup class="footnote-ref" id="fnref-15"><a href="#fn-15">15</a></sup></p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -718,17 +715,17 @@ or atomic counters.<sup class="footnote-ref" id="fnref-14"><a href="#fn-14">14</
 as <strong>a single atomic operation</strong>,
 isolated from other operations;
 if two operations attempt to change an item at the same time,
-one of them will fail.
+one of them fails.
 Transactions can target <strong>up to 100 distinct items</strong>
 in one or more tables in the same region,
 and consume twice as much capacity.</p>
-<p>Transactions work with <a class="anchor" href="#conditional-writes">condition expressions</a>
+<p>You can use transactions with <a class="anchor" href="#conditional-writes">condition expressions</a>
 – if a condition fails for one item,
-none of the items is modified;
-you can also <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_ConditionCheck.html">check conditions</a> for items without modifying them.
+none of the items are modified;
+you can also <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_ConditionCheck.html">check an item</a> without modifying it.
 Like with single-item writes,
-the expression can only refer to individual items
-(you can't have a condition about <em>two</em> items in a transaction).</p>
+an expression can refer only an individual item
+(you can't have a condition about another item in the transaction).</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -902,7 +899,8 @@ you'd need to jump in the middle of two sort keys.
 Unsurprisingly,
 we'll look at a potential solution in the next article. <a href="#fnref-12" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-13"><p>This is the same as a <a class="external" href="https://en.wikipedia.org/wiki/Database_index#Covering_index">covering index</a> in relational databases. <a href="#fnref-13" class="footnote"><sup>[return]</sup></a></p></li>
-<li id="fn-14"><p>Atomic counters can also be implemented with <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html">update expressions</a>. <a href="#fnref-14" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-14"><p>Or better said, <em><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html#ddb-intro-resilience">availability zones</a></em>. <a href="#fnref-14" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-15"><p>Although you can also use update expressions for <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.AtomicCounters">atomic counters</a>. <a href="#fnref-15" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
