@@ -31,14 +31,14 @@
 
 
 <title>DynamoDB crash course: part 2 – data model - death and gravity</title>
-
+<meta name="description" content="This is part one of a series covering core DynamoDB concepts and patterns, all the way up to single-table design; the goal is to get you to understand idiomatic usage and trade-offs in under an hour. Today, we&#39;re FIXME" />
 
 
 <meta property="og:title" content="DynamoDB crash course: part 2 – data model">
 <meta property="og:site_name" content="death and gravity">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://death.andgravity.com/dynamodb-model">
-
+<meta property="og:description" content="This is part one of a series covering core DynamoDB concepts and patterns, all the way up to single-table design; the goal is to get you to understand idiomatic usage and trade-offs in under an hour. Today, we&#39;re FIXME">
 
 
 
@@ -125,8 +125,24 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
-<details class="toc" open>
-<summary>Table of Contents</summary>
+<p>This is part two of a series
+covering core <strong>DynamoDB</strong> concepts and patterns,
+from the data model and features all the way up to <strong>single-table design</strong>.</p>
+<p>The goal is to get you
+to understand what <strong>idiomatic usage</strong> looks like and
+what the <strong>trade-offs</strong> are
+in under an hour,
+providing entry points to detailed documentation.</p>
+<p>FIXME:
+(Don't get me wrong, the AWS documentation is comprehensive,
+but can be quite complex,
+and DynamoDB being a relatively low level product
+with lots of features added over the years
+doesn't really help with that.)</p>
+<p>In the last article, we looked at</p>
+<p>Today, we're looking at FIXME</p>
+<details class="toc">
+<summary>Contents</summary>
 <ul>
 <li><a href="#core-components">Core components</a>
 <ul>
@@ -151,7 +167,7 @@ window.addEventListener('resize', set_vh);
 <li><a href="#features">Features</a>
 <ul>
 <li><a href="#eventual-consistency">Eventual consistency</a></li>
-<li><a href="#conditional-updates">Conditional updates</a></li>
+<li><a href="#conditional-writes">Conditional writes</a></li>
 <li><a href="#transactions">Transactions</a></li>
 <li><a href="#batch-operations">Batch operations</a></li>
 <li><a href="#streams">Streams</a></li>
@@ -253,7 +269,10 @@ and optionally narrowed down to a specific a range of sort keys</li>
 <p>Besides whole items,
 the API allows getting and updating specific attributes,
 as well as filtering query and scan results by expressions using them.</p>
-<!-- see also https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html -->
+<!-- see also
+https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html
+https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html
+-->
 
 <h3 id="logical-model-hash-table-of-b-trees">Logical model: hash table of B‍-‍trees<span class="headerlink">&nbsp;<a href="#logical-model-hash-table-of-b-trees" title="permalink">#</a></span></h3>
 <p>The operations above may seem arbitrarily restrictive
@@ -333,8 +352,8 @@ possibly with a bias towards keys with higher utilization.</li>
 and is transparent to the user,
 but it doesn't happen instantly –
 it takes several minutes to allocate new partitions and shuffle things around.</p>
-<p>Since a partition is backed by a real computer,
-partitions do have a <a class="anchor" href="#partition-throughput">throughput limit</a>.</p>
+<p>Since partitions are backed by real computers,
+they do have a <a class="anchor" href="#partition-throughput">throughput limit</a>.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -539,7 +558,7 @@ a global secondary index is <strong>just a table</strong>:
 it has its own <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.ThroughputConsiderations">separate capacity</a>,
 no limits on size or number of items,
 and the same <a class="anchor" href="#partition-throughput">partition throughput</a> limits apply.</p>
-<p>Despite <abbr title="Global Secondary Index">GSI</abbr>s being updated asynchronously,
+<p>Despite <abbr title="Global Secondary Index">GSI</abbr>s being updated <a class="anchor" href="#eventual-consistency">asynchronously</a>,
 an index without enough capacity to process the updates
 will cause <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html">write throttling</a>.
 To retrieve attributes not in the index,
@@ -631,76 +650,85 @@ would allow you to <em>also</em> efficiently:</p>
 <p>Before we go into how to structure data for efficient use with DynamoDB,
 let's look at some of the things you can do with tables
 besides simple <abbr title="create, read, update, and delete">CRUD</abbr> operations.</p>
+<!-- FIXME -->
+
 <h3 id="eventual-consistency">Eventual consistency<span class="headerlink">&nbsp;<a href="#eventual-consistency" title="permalink">#</a></span></h3>
-<p>By default, when reading an item,
-the result may be a slightly older version of the data than the most current one;
-if you repeat the read, you will eventually get the most recent item,
-i.e. reads are <strong>eventually consistent</strong>.
-(In part, this is a consequence DynamoDB replicating your data in <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html#ddb-intro-resilience">multiple availability zones</a>
-– the node you're talking to may have not gotten the most recent data yet.)</p>
-<p>For tables and <abbr title="Local Secondary Index">LSI</abbr>s, you can issue strongly-consistent reads,
-which will give you the most up-to-date data;
-these are slower, and twice as expensive.</p>
-<p>To deal with the lack of a point-in time consistent view of the entire database,
-DynamoDB offers <a class="anchor" href="#conditional-updates">conditional updates</a>,
-as well as a limited form of <a class="anchor" href="#transactions">transactions</a>,
-which serve as a sort of synchronization primitives.</p>
-<p>Note that strongly-consistent reads do not remove
-the need for synchronization primitives
-– by the time you get the response,
-the data may have already been updated by another processl
+<p>So, remember I said partitions are backed by real computers?
+I didn't say <em>how many</em>.</p>
+<p>To allow the high-availability magic to happen,
+each partition is backed not by one,
+but by <a class="external" href="https://aws.amazon.com/blogs/database/part-2-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/#:~:text=spread%20across%20three%20nodes%20for%20redundancy">three nodes</a>:
+a leader that handles writes,
+and two replicas updated asynchronously;
+the nodes are in different datacenters
+(or better said, in different <em><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html#ddb-intro-resilience">availability zones</a></em>).</p>
+<p>This explains why there are two kinds of reads:</p>
+<ul>
+<li><strong>strongly consistent</strong> reads go to the leader,
+so you always get the latest data</li>
+<li><strong>eventually consistent</strong> reads go to <em>any</em> node,
+so you may get slightly older data,
+but if you repeat the read later,
+you will <em><a class="external" href="https://en.wikipedia.org/wiki/Eventual_consistency">eventually</a></em> get the latest data;
+since they use all the available nodes,
+they are more efficient, and thus cheaper</li>
+</ul>
+<p>Note that strongly consistent reads
+<strong>do not replace synchronization primitives</strong>
+like <a class="anchor" href="#conditional-writes">conditional writes</a>
+and <a class="anchor" href="#transactions">transactions</a>;
 instead,
-strong consistency is useful
-to lower the rate at which conditional updates or transactions fail.</p>
+strong consistency
+can help lower the rate at which
+conditional updates and transactions fail
+for highly-contended items.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html">DynamoDB read consistency</a></li>
 </ul>
 </section>
-<p>https://aws.amazon.com/blogs/database/part-2-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/</p>
-<blockquote>
-<p>Every partition has its data spread across three nodes for redundancy—a leader node that takes all writes, and two follower nodes that follow quickly behind. A strongly consistent (SC) read always goes to the leader node to get the latest data. The leader node can handle 3,000 reads per second, which is why a partition can handle 3,000 SC reads per second. An EC read can go to any of the three nodes. When all three nodes are active, a partition can theoretically handle 9,000 reads per second, which is what we find here.</p>
-</blockquote>
-<h3 id="conditional-updates">Conditional updates<span class="headerlink">&nbsp;<a href="#conditional-updates" title="permalink">#</a></span></h3>
-<p>For write operations (put/update/delete),
-you can specify a <strong>condition expression</strong>
-(e.g. an attribute exists, or has a specific value)
-that must be true for the operation to happen;
-if the expression evaluates to false,
-the write fails.</p>
-<p>Condition expressions are crucial for ensuring consistency
-(and avoiding <a class="external" href="https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use">time-of-check to time-of-use</a> bugs),
-since they are the only way to run a bit of logic &quot;server-side&quot;,
+<h3 id="conditional-writes">Conditional writes<span class="headerlink">&nbsp;<a href="#conditional-writes" title="permalink">#</a></span></h3>
+<p>Write operations allow specifying a <strong>condition expression</strong>
+that must be true for the write to happen
+(e.g. an attribute exists or has a specific value);
+if the expression is false,
+the write fails.
+A condition expression can refer only to the item being modified.</p>
+<p>Conditional writes are critical for data consistency
+and avoiding concurrency <a class="external" href="https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use">bugs</a>,
+since they are only the way to run logic server-side,
 on the <em>current</em> version of an item.
-Note that the condition can refer only to the item being modified.</p>
-<p>Higher level things can be built on top of condition expressions,
-including <a class="internal" href="/dynamodb-patterns#optimistic-locking">optimistic locking</a> and <a class="external" href="https://github.com/awslabs/amazon-dynamodb-lock-client">distributed locks</a>.</p>
+You can use conditional writes
+to build higher level abstractions like
+optimistic locking, <!-- TODO: link -->
+<a class="external" href="https://github.com/awslabs/amazon-dynamodb-lock-client">distributed locks</a>,
+or atomic counters.<sup class="footnote-ref" id="fnref-14"><a href="#fn-14">14</a></sup></p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ConditionExpressions.html">DynamoDB condition expression CLI example</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.ConditionalUpdate">Working with items # Conditional writes</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.OperatorsAndFunctions.html">Condition and filter expressions</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ConditionExpressions.html#Expressions.ConditionExpressions.ConditionalExamples">Conditional expressions examples</a></li>
 <li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-condition-expressions/">Understanding DynamoDB Condition Expressions</a></li>
 </ul>
 </section>
 <h3 id="transactions">Transactions<span class="headerlink">&nbsp;<a href="#transactions" title="permalink">#</a></span></h3>
-<p>Transactions allow performing write operations (put/update/delete)
-to up to 100 items as a single all-or-nothing operation –
-either all of them succeed, or none do.
-The items can be in the same or <em>different</em> tables
-in the same account and region.</p>
-<p>Transactions also work with <a class="anchor" href="#conditional-updates">condition expressions</a>,
-so if a condition fails for one item,
-none of the items are modified.
-If you want to evaluate a condition for an item that you're not modifying,
-you can use the special <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_ConditionCheck.html">ConditionCheck</a> operation.
-Just like with single condition expressions,
-the expressions can only refer to each item individually
-(you can't have a condition about two items in the transaction).</p>
-<p>You can also read up to 100 items transactionally
-(to ensure serialization with transactional writes).</p>
-<!-- * transactional operations consume twice as much capacity -->
-
+<p>Transactions allow performing <strong>multiple writes</strong>
+as <strong>a single atomic operation</strong>,
+isolated from other operations;
+if two operations attempt to change an item at the same time,
+one of them will fail.
+Transactions can target <strong>up to 100 distinct items</strong>
+in one or more tables in the same region,
+and consume twice as much capacity.</p>
+<p>Transactions work with <a class="anchor" href="#conditional-writes">condition expressions</a>
+– if a condition fails for one item,
+none of the items is modified;
+you can also <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_ConditionCheck.html">check conditions</a> for items without modifying them.
+Like with single-item writes,
+the expression can only refer to individual items
+(you can't have a condition about <em>two</em> items in a transaction).</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -708,32 +736,35 @@ the expressions can only refer to each item individually
 </ul>
 </section>
 <h3 id="batch-operations">Batch operations<span class="headerlink">&nbsp;<a href="#batch-operations" title="permalink">#</a></span></h3>
-<p>You can put/delete up to 25 items or get up to 100 items
-in a single request up to 16 MB in size;
-this allows reading / writing / deleting large amounts of data efficiently.</p>
-<p>The operations within a batch are entirely independent from one another –
-some of the operations may fail / a partial result may be returned
-(e.g. if <a class="anchor" href="#partition-throughput">throughput limits</a> are reached).
-Also, batch writes don't support condition expressions.</p>
+<p>Batch operations allow you to
+<strong>put/delete up to 25 items</strong> or <strong>read up to 100 items</strong>
+in a <strong>single request</strong>, up to 16 MB in total,
+more efficiently than using single-item operations.
+Batch writes don't support updates or condition expressions.</p>
+<p>The operations in a batch are independent from one another
+– some writes may fail, or only some of the read items may be returned
+(e.g. if <a class="anchor" href="#partition-throughput">throughput limits</a> are reached).</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.BatchOperations">Working with items # Batch operations</a></li>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchGetItem.html">BatchGetItem</a></li>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html">BatchWriteItem</a></li>
 </ul>
 </section>
 <h3 id="streams">Streams<span class="headerlink">&nbsp;<a href="#streams" title="permalink">#</a></span></h3>
-<p>Streams are DynamoDB's <a class="external" href="https://en.wikipedia.org/wiki/Change_data_capture">change data capture</a> mechanism,
-and allow you to get notified in &quot;near-real time&quot;
-when an item is created, updated, or deleted.
+<p>Streams allow you to <a class="external" href="https://en.wikipedia.org/wiki/Change_data_capture">capture</a>
+changes to the items in a table in near-real time.
 There are two flavors of streams,
-<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html">DynamoDB Streams</a> (the original one)
-and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/kds.html">Kinesis Data Streams</a> (integration with Amazon Kinesis).</p>
-<p>Two notable applications of streams are:</p>
-<ul>
-<li>Lambda triggers (similar to triggers in relational databases)</li>
-<li>replication to other places like S3 or Redshift (via Firehose)</li>
-</ul>
+<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html">DynamoDB Streams</a>
+and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/kds.html">Kinesis Data Streams</a>,
+each with different features and integrations.</p>
+<p>Notable applications of streams are
+<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.Lambda.html">Lambda triggers</a>
+(similar to the ones in relational databases,
+except they run <em>after</em> the change),
+replication to places like S3 or Redshift <a class="external" href="https://docs.aws.amazon.com/firehose/latest/dev/basic-deliver.html">via Firehose</a>,
+and automatic <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-ttl-archival">archival</a>.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -742,6 +773,89 @@ and <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/
 <li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/bites/dynamodb-streams/">What you should know about DynamoDB Streams</a></li>
 </ul>
 </section>
+<hr />
+<p>Anyway, that's it for now.</p>
+<p>In the next article, we'll have a closer look at FIXME</p>
+<p><strong>Learned something new today?</strong> Share it with others, it really helps! <span class="text-large">
+<span class="share-icons">
+<a
+    class="share-icon pycoders color"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+>PyCoder's Weekly</a>
+<a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/dynamodb-model&t=DynamoDB%20crash%20course%3A%20part%202%20%E2%80%93%20data%20model"
+>HN</a>
+<a
+    class="share-icon bluesky color"
+    href="https://bsky.%61%70%70/intent/compose?text=DynamoDB%20crash%20course%3A%20part%202%20%E2%80%93%20data%20model%20https%3A//death.andgravity.com/dynamodb-model"
+>Bluesky</a>
+<!--
+<a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/dynamodb-model&title=DynamoDB%20crash%20course%3A%20part%202%20%E2%80%93%20data%20model"
+>Reddit</a>
+-->
+<a
+    class="share-icon linkedin color"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/dynamodb-model"
+>linkedin</a>
+<a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=DynamoDB%20crash%20course%3A%20part%202%20%E2%80%93%20data%20model&url=https%3A//death.andgravity.com/dynamodb-model&via=_andgravity"
+>Twitter</a>
+</span>
+</span></p>
+
+<form
+    action="https://gmail.us7.list-manage.com/subscribe/post?u=9909b0e978d8d8d941bd3c8dc&amp;id=c61d63d661&SIGNUP=dynamodb-model"
+    method="post"
+    id="embedded-subscribe-form"
+    name="mc-embedded-subscribe-form"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="text" name="FNAME" id="mce-FNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input type="email" name="EMAIL" id="mce-EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9909b0e978d8d8d941bd3c8dc_c61d63d661" tabindex="-1" value=""></div>
+
+    </div>
+    <div class="panel-footer">
+
+        <div class="form-group">
+        <input type="submit"  name="subscribe" id="mc-embedded-subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+    </div>
+
+</form>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>Here, &quot;collection&quot; just means a &quot;group of things&quot;. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
@@ -788,6 +902,7 @@ you'd need to jump in the middle of two sort keys.
 Unsurprisingly,
 we'll look at a potential solution in the next article. <a href="#fnref-12" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-13"><p>This is the same as a <a class="external" href="https://en.wikipedia.org/wiki/Database_index#Covering_index">covering index</a> in relational databases. <a href="#fnref-13" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-14"><p>Atomic counters can also be implemented with <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html">update expressions</a>. <a href="#fnref-14" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
