@@ -2,13 +2,749 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #python</title>
-  <updated>2026-01-27T17:00:00+00:00</updated>
+  <updated>2026-02-10T10:35:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
   </author>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index/_tags/python.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/dynamodb-model">
+    <id>https://death.andgravity.com/dynamodb-model</id>
+    <title>DynamoDB crash course: part 2 – data model</title>
+    <updated>2026-02-10T10:35:00+00:00</updated>
+    <content type="html">&lt;p&gt;This is part two of a series
+covering core &lt;strong&gt;DynamoDB&lt;/strong&gt; concepts,
+from &lt;a class="internal" href="/dynamodb"&gt;philosophy&lt;/a&gt;
+all the way to &lt;strong&gt;single-table design&lt;/strong&gt;.
+The goal is to get you
+to understand &lt;strong&gt;idiomatic usage&lt;/strong&gt; and &lt;strong&gt;trade-offs&lt;/strong&gt;
+in under an hour.&lt;/p&gt;
+&lt;p&gt;Today, we're looking at the DynamoDB data model –
+&lt;strong&gt;what the main abstractions are&lt;/strong&gt;,
+&lt;strong&gt;what you can do with them&lt;/strong&gt;,
+and &lt;strong&gt;how they scale&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;(While the AWS documentation is &lt;em&gt;mostly&lt;/em&gt; comprehensive,
+it's also all over the place,
+including some places that aren't the documentation at all,
+like the AWS blog.
+This series aims to bring the important stuff in one place,
+so you can form a mental model of how it all ties together
+without having to read the entire documentation).&lt;/p&gt;
+&lt;details class="toc"&gt;
+&lt;summary&gt;Contents&lt;/summary&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#core-components"&gt;Core components&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#api-model-tables-items-attributes"&gt;API model: tables, items, attributes&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#logical-model-hash-table-of-b-trees"&gt;Logical model: hash table of B‍-‍trees&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#physical-model-partitions"&gt;Physical model: partitions&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#limits"&gt;Limits&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#partition-throughput"&gt;Partition throughput&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#item-size"&gt;Item size&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#page-size"&gt;Page size&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#indexes"&gt;Indexes&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#global-secondary-indexes"&gt;Global secondary indexes&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#local-secondary-indexes"&gt;Local secondary indexes&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#features"&gt;Features&lt;/a&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#eventual-consistency"&gt;Eventual consistency&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#conditional-writes"&gt;Conditional writes&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#transactions"&gt;Transactions&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#batch-operations"&gt;Batch operations&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#streams"&gt;Streams&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/details&gt;
+&lt;h2 id="core-components"&gt;Core components&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#core-components" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;According to the &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html"&gt;documentation&lt;/a&gt;,
+the core components of DynamoDB are tables, items, and attributes.
+This is accurate in the sense of &lt;strong&gt;what you can act on&lt;/strong&gt; through the API,
+but can be deceptively simple,
+and leaves out two other equally important aspects:
+&lt;strong&gt;what you can do with it&lt;/strong&gt; (the &lt;em&gt;logical model&lt;/em&gt;)
+and &lt;strong&gt;how it scales&lt;/strong&gt; (the &lt;em&gt;physical model&lt;/em&gt;).&lt;/p&gt;
+&lt;p&gt;&lt;a id="diagram"&gt;&lt;/a&gt;
+Let's put it all together, starting from the top.&lt;/p&gt;
+&lt;figure class="figure"&gt;
+
+&lt;svg xmlns='http://www.w3.org/2000/svg' style='font-size:initial;' class="pikchr" viewBox="0 0 655.2 371.098" data-pikchr-date="20260102012653"&gt;
+&lt;path d="M3.6,329.76L651.6,329.76A1.44 1.44 0 0 0 653.04 328.32L653.04,3.6A1.44 1.44 0 0 0 651.6 2.16L3.6,2.16A1.44 1.44 0 0 0 2.16 3.6L2.16,328.32A1.44 1.44 0 0 0 3.6 329.76Z"  style="fill:rgb(230,230,250);stroke-width:2.16;stroke:rgb(102,51,153);" /&gt;
+&lt;path d="M18,315.36L487.44,315.36A1.44 1.44 0 0 0 488.88 313.92L488.88,39.6A1.44 1.44 0 0 0 487.44 38.16L18,38.16A1.44 1.44 0 0 0 16.56 39.6L16.56,313.92A1.44 1.44 0 0 0 18 315.36Z"  style="fill:rgb(255,228,225);stroke-width:1.4472;stroke:rgb(255,0,0);stroke-dasharray:4.32,4.32;" /&gt;
+&lt;path d="M32.4,300.96L323.28,300.96A1.44 1.44 0 0 0 324.72 299.52L324.72,97.2A1.44 1.44 0 0 0 323.28 95.76L32.4,95.76A1.44 1.44 0 0 0 30.96 97.2L30.96,299.52A1.44 1.44 0 0 0 32.4 300.96Z"  style="fill:rgb(230,230,250);stroke-width:2.16;stroke:rgb(102,51,153);" /&gt;
+&lt;path d="M46.8,286.56L159.12,286.56A1.44 1.44 0 0 0 160.56 285.12L160.56,162A1.44 1.44 0 0 0 159.12 160.56L46.8,160.56A1.44 1.44 0 0 0 45.36 162L45.36,285.12A1.44 1.44 0 0 0 46.8 286.56Z"  style="fill:rgb(230,230,250);stroke-width:2.16;stroke:rgb(102,51,153);" /&gt;
+&lt;path d="M61.2,221.76L144.72,221.76A1.44 1.44 0 0 0 146.16 220.32L146.16,198A1.44 1.44 0 0 0 144.72 196.56L61.2,196.56A1.44 1.44 0 0 0 59.76 198L59.76,220.32A1.44 1.44 0 0 0 61.2 221.76Z"  style="fill:rgb(255,255,255);stroke-width:0;stroke:rgb(30,144,255);" /&gt;
+&lt;text x="102.96" y="209.16" text-anchor="middle" fill="rgb(30,144,255)" dominant-baseline="central"&gt;attribute&lt;/text&gt;
+&lt;path d="M61.2,246.96L144.72,246.96A1.44 1.44 0 0 0 146.16 245.52L146.16,223.2A1.44 1.44 0 0 0 144.72 221.76L61.2,221.76A1.44 1.44 0 0 0 59.76 223.2L59.76,245.52A1.44 1.44 0 0 0 61.2 246.96Z"  style="fill:rgb(255,255,255);stroke-width:0;stroke:rgb(30,144,255);" /&gt;
+&lt;text x="102.96" y="234.36" text-anchor="middle" fill="rgb(30,144,255)" dominant-baseline="central"&gt;attribute&lt;/text&gt;
+&lt;path d="M61.2,272.16L144.72,272.16A1.44 1.44 0 0 0 146.16 270.72L146.16,248.4A1.44 1.44 0 0 0 144.72 246.96L61.2,246.96A1.44 1.44 0 0 0 59.76 248.4L59.76,270.72A1.44 1.44 0 0 0 61.2 272.16Z"  style="fill:rgb(255,255,255);stroke-width:0;stroke:rgb(30,144,255);" /&gt;
+&lt;text x="102.96" y="259.56" text-anchor="middle" font-weight="bold" fill="rgb(30,144,255)" dominant-baseline="central"&gt;···&lt;/text&gt;
+&lt;text x="51.12" y="175.68" text-anchor="start" font-weight="bold" fill="rgb(102,51,153)" dominant-baseline="central"&gt;item&lt;/text&gt;
+&lt;path d="M176.4,286.56L259.92,286.56A1.44 1.44 0 0 0 261.36 285.12L261.36,162A1.44 1.44 0 0 0 259.92 160.56L176.4,160.56A1.44 1.44 0 0 0 174.96 162L174.96,285.12A1.44 1.44 0 0 0 176.4 286.56Z"  style="fill:rgb(230,230,250);stroke-width:2.16;stroke:rgb(102,51,153);" /&gt;
+&lt;text x="218.16" y="223.56" text-anchor="middle" font-weight="bold" fill="rgb(102,51,153)" dominant-baseline="central"&gt;···&lt;/text&gt;
+&lt;text x="180.72" y="175.68" text-anchor="start" font-weight="bold" fill="rgb(102,51,153)" dominant-baseline="central"&gt;item&lt;/text&gt;
+&lt;text x="293.04" y="223.56" text-anchor="middle" font-weight="bold" fill="rgb(102,51,153)" dominant-baseline="central"&gt;···&lt;/text&gt;
+&lt;text x="36.72" y="110.88" text-anchor="start" font-weight="bold" fill="rgb(102,51,153)" dominant-baseline="central"&gt;collection (B-tree)&lt;/text&gt;
+&lt;path d="M340.56,300.96L424.08,300.96A1.44 1.44 0 0 0 425.52 299.52L425.52,97.2A1.44 1.44 0 0 0 424.08 95.76L340.56,95.76A1.44 1.44 0 0 0 339.12 97.2L339.12,299.52A1.44 1.44 0 0 0 340.56 300.96Z"  style="fill:rgb(230,230,250);stroke-width:2.16;stroke:rgb(102,51,153);" /&gt;
+&lt;text x="382.32" y="198.36" text-anchor="middle" font-weight="bold" fill="rgb(102,51,153)" dominant-baseline="central"&gt;···&lt;/text&gt;
+&lt;text x="344.88" y="110.88" text-anchor="start" font-weight="bold" fill="rgb(102,51,153)" dominant-baseline="central"&gt;collection&lt;/text&gt;
+&lt;text x="457.2" y="198.36" text-anchor="middle" font-weight="bold" fill="rgb(102,51,153)" dominant-baseline="central"&gt;···&lt;/text&gt;
+&lt;text x="22.32" y="53.28" text-anchor="start" fill="rgb(255,0,0)" dominant-baseline="central"&gt;partition&lt;/text&gt;
+&lt;path d="M504.72,315.36L588.24,315.36A1.44 1.44 0 0 0 589.68 313.92L589.68,39.6A1.44 1.44 0 0 0 588.24 38.16L504.72,38.16A1.44 1.44 0 0 0 503.28 39.6L503.28,313.92A1.44 1.44 0 0 0 504.72 315.36Z"  style="fill:rgb(255,228,225);stroke-width:1.4472;stroke:rgb(255,0,0);stroke-dasharray:4.32,4.32;" /&gt;
+&lt;text x="546.48" y="176.76" text-anchor="middle" font-weight="bold" fill="rgb(255,0,0)" dominant-baseline="central"&gt;···&lt;/text&gt;
+&lt;text x="509.04" y="53.28" text-anchor="start" fill="rgb(255,0,0)" dominant-baseline="central"&gt;partition&lt;/text&gt;
+&lt;text x="621.36" y="176.76" text-anchor="middle" font-weight="bold" fill="rgb(255,0,0)" dominant-baseline="central"&gt;···&lt;/text&gt;
+&lt;text x="7.92" y="17.28" text-anchor="start" font-weight="bold" fill="rgb(102,51,153)" dominant-baseline="central"&gt;table (hash table)&lt;/text&gt;
+&lt;polygon points="218.16,160.56 215.266,152.842 221.054,152.842" style="fill:rgb(102,51,153)"/&gt;
+&lt;path d="M218.16,156.701L218.16,146.16"  style="fill:none;stroke-width:1.4472;stroke:rgb(102,51,153);" /&gt;
+&lt;text x="218.16" y="133.56" text-anchor="middle" fill="rgb(102,51,153)" dominant-baseline="central"&gt;sort key&lt;/text&gt;
+&lt;polygon points="102.96,160.56 100.066,152.842 105.854,152.842" style="fill:rgb(102,51,153)"/&gt;
+&lt;path d="M102.96,156.701L102.96,146.16"  style="fill:none;stroke-width:1.4472;stroke:rgb(102,51,153);" /&gt;
+&lt;text x="102.96" y="133.56" text-anchor="middle" fill="rgb(102,51,153)" dominant-baseline="central"&gt;sort key&lt;/text&gt;
+&lt;text x="160.56" y="133.56" text-anchor="middle" fill="rgb(102,51,153)" dominant-baseline="central"&gt;&amp;lt;&lt;/text&gt;
+&lt;polygon points="177.84,95.76 174.946,88.0416 180.734,88.0416" style="fill:rgb(102,51,153)"/&gt;
+&lt;path d="M177.84,91.9008L177.84,81.36"  style="fill:none;stroke-width:1.4472;stroke:rgb(102,51,153);" /&gt;
+&lt;text x="177.84" y="68.76" text-anchor="middle" fill="rgb(102,51,153)" dominant-baseline="central"&gt;partition key&lt;/text&gt;
+&lt;polygon points="382.32,95.76 379.426,88.0416 385.214,88.0416" style="fill:rgb(102,51,153)"/&gt;
+&lt;path d="M382.32,91.9008L382.32,81.36"  style="fill:none;stroke-width:1.4472;stroke:rgb(102,51,153);" /&gt;
+&lt;text x="382.32" y="68.76" text-anchor="middle" fill="rgb(102,51,153)" dominant-baseline="central"&gt;partition key&lt;/text&gt;
+&lt;path d="M4.02177,368.938L87.5418,368.938A1.44 1.44 0 0 0 88.9818 367.498L88.9818,345.178A1.44 1.44 0 0 0 87.5418 343.738L4.02177,343.738A1.44 1.44 0 0 0 2.58177 345.178L2.58177,367.498A1.44 1.44 0 0 0 4.02177 368.938Z"  style="fill:rgb(230,230,250);stroke-width:2.16;stroke:rgb(102,51,153);" /&gt;
+&lt;text x="45.7818" y="356.338" text-anchor="middle" fill="rgb(102,51,153)" font-size="80%" dominant-baseline="central"&gt;logical&lt;/text&gt;
+&lt;path d="M97.6218,368.938L181.142,368.938A1.44 1.44 0 0 0 182.582 367.498L182.582,345.178A1.44 1.44 0 0 0 181.142 343.738L97.6218,343.738A1.44 1.44 0 0 0 96.1818 345.178L96.1818,367.498A1.44 1.44 0 0 0 97.6218 368.938Z"  style="fill:rgb(255,228,225);stroke-width:1.4472;stroke:rgb(255,0,0);stroke-dasharray:4.32,4.32;" /&gt;
+&lt;text x="139.382" y="356.338" text-anchor="middle" fill="rgb(255,0,0)" font-size="80%" dominant-baseline="central"&gt;physical only&lt;/text&gt;
+&lt;path d="M191.222,368.938L274.742,368.938A1.44 1.44 0 0 0 276.182 367.498L276.182,345.178A1.44 1.44 0 0 0 274.742 343.738L191.222,343.738A1.44 1.44 0 0 0 189.782 345.178L189.782,367.498A1.44 1.44 0 0 0 191.222 368.938Z"  style="fill:rgb(255,255,255);stroke-width:0;stroke:rgb(30,144,255);" /&gt;
+&lt;text x="232.982" y="356.338" text-anchor="middle" fill="rgb(30,144,255)" font-size="80%" dominant-baseline="central"&gt;API only&lt;/text&gt;
+&lt;text x="162.298" y="217.109" text-anchor="middle" fill="rgb(255,228,225)" font-size="64%" transform="rotate(90 162.298,223.56)" dominant-baseline="central"&gt;death.andgravity.com&lt;/text&gt;
+&lt;/svg&gt;
+
+
+&lt;/figure&gt;
+
+&lt;h3 id="api-model-tables-items-attributes"&gt;API model: tables, items, attributes&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#api-model-tables-items-attributes" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;As far as the API is concerned,
+&amp;quot;a &lt;strong&gt;table&lt;/strong&gt; is a collection of &lt;strong&gt;items&lt;/strong&gt;,
+and each item is a collection of &lt;strong&gt;attributes&lt;/strong&gt;&amp;quot;.&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;An item is uniquely identified by two attributes,
+the &lt;strong&gt;partition key&lt;/strong&gt; and the &lt;strong&gt;sort key&lt;/strong&gt;,&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt;
+which together compose its &lt;strong&gt;primary key&lt;/strong&gt;.&lt;sup class="footnote-ref" id="fnref-3"&gt;&lt;a href="#fn-3"&gt;3&lt;/a&gt;&lt;/sup&gt;
+A group of items with the same partition key value
+is called an &lt;strong&gt;item collection&lt;/strong&gt;,&lt;sup class="footnote-ref" id="fnref-4"&gt;&lt;a href="#fn-4"&gt;4&lt;/a&gt;&lt;/sup&gt;
+but this is more of a logical grouping,
+and does not exist as a distinct entity in the API.&lt;/p&gt;
+&lt;p&gt;An attribute is a named data element,
+with its value
+either a scalar (number, string, binary, boolean, null),
+a set of scalars,
+or a document (a list or map of possibly nested attributes, similar to JSON).&lt;/p&gt;
+&lt;p&gt;There are no limits on table size or number of items,
+nor on those of an item collection.
+Items do have a &lt;a class="anchor" href="#item-size"&gt;size limit&lt;/a&gt; of 400 KB / item,
+which indirectly limits attribute size.&lt;/p&gt;
+&lt;p&gt;As we've seen &lt;a class="internal" href="/dynamodb#python-mockup"&gt;in the previous article&lt;/a&gt;,
+the core DynamoDB data operations are:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;PutItem&lt;/code&gt;, &lt;code&gt;GetItem&lt;/code&gt;, &lt;code&gt;UpdateItem&lt;/code&gt;, &lt;code&gt;DeleteItem&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Query&lt;/code&gt; items with the same partition key, sorted by sort key,
+and optionally narrowed down to a specific a range of sort keys&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Scan&lt;/code&gt; all the items in the table, possibly in parallel&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Besides whole items,
+the API allows getting and updating specific attributes,
+as well as filtering query and scan results by expressions using them.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html"&gt;Core components&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html"&gt;Working with items&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html"&gt;Supported data types and naming rules&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h3 id="logical-model-hash-table-of-b-trees"&gt;Logical model: hash table of B‍-‍trees&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#logical-model-hash-table-of-b-trees" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;The operations above may seem arbitrarily restrictive
+– for example, why can't I query items by sort key alone?
+It might make more sense to think about it like this:&lt;/p&gt;
+&lt;p&gt;Conceptually,
+a DynamoDB table is &lt;strong&gt;a &lt;a class="external" href="https://en.wikipedia.org/wiki/Hash_table"&gt;hash table&lt;/a&gt; of &lt;a class="external" href="https://en.wikipedia.org/wiki/B-tree"&gt;B‍-‍trees&lt;/a&gt;&lt;/strong&gt;,
+with partition keys being hash table keys,
+and sort keys being B‍-‍tree keys
+(making &lt;em&gt;item collections&lt;/em&gt; B‍-‍trees).
+The hash table allows efficient &lt;em&gt;find collection by partition key&lt;/em&gt; operations;
+within each collection,
+the B‍-‍tree keeps the items sorted,
+and allows efficient &lt;em&gt;find item by sort key&lt;/em&gt;
+and &lt;em&gt;find items by sort key range&lt;/em&gt; operations.&lt;/p&gt;
+&lt;p&gt;As a consequence,
+&lt;strong&gt;any access not based on partition and sort key is expensive&lt;/strong&gt;,
+since instead of taking advantage of the underlying data structure,
+you have to go through &lt;em&gt;all the items&lt;/em&gt; in the table to find anything
+(aka a &lt;em&gt;full table scan&lt;/em&gt;),
+and at the scales you'd use DynamoDB at,
+this can mean billions of items.&lt;sup class="footnote-ref" id="fnref-5"&gt;&lt;a href="#fn-5"&gt;5&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Example&lt;/p&gt;
+&lt;p&gt;&lt;small&gt;(from &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=another%20example%20table%20named%20Music"&gt;here&lt;/a&gt;)&lt;/small&gt;
+Take a &lt;em&gt;Music&lt;/em&gt; table where items correspond to songs,
+with &lt;em&gt;Artist&lt;/em&gt; as primary key and &lt;em&gt;Song&lt;/em&gt; as sort key:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="YAML"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# table Music (partition key: Artist, sort key: Song)&lt;/span&gt;
+&lt;span class="nt"&gt;1000mods&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Claws&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Album&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Vultures&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Vidage&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Year&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;2011&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="nt"&gt;Kyuss&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Space Cadet&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;You can efficiently:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;query songs by artist (sorted by song title)&lt;/li&gt;
+&lt;li&gt;get the song by artist and song title&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;...and that's it, anything else requires a full table scan.&lt;/p&gt;
+&lt;/section&gt;
+&lt;p&gt;To a first approximation,
+this is also a decent model of how DynamoDB scales
+–
+you could imagine that each collection has its own dedicated computer,
+which in theory would account for the unlimited number of collections.&lt;/p&gt;
+&lt;h3 id="physical-model-partitions"&gt;Physical model: partitions&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#physical-model-partitions" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Of course, there are &lt;em&gt;not&lt;/em&gt; infinitely many computers,
+and that would be wildly inefficient anyway.
+Instead, collections are packed together
+into a smaller number of &lt;strong&gt;partitions&lt;/strong&gt;, each a few gigabytes in size.
+To figure out which partition an item should go on,
+DynamoDB hashes its &lt;em&gt;partition key&lt;/em&gt;
+(also called a &lt;em&gt;hash key&lt;/em&gt;, for obvious reasons).&lt;/p&gt;
+&lt;p&gt;This is similar to hash table buckets,&lt;sup class="footnote-ref" id="fnref-6"&gt;&lt;a href="#fn-6"&gt;6&lt;/a&gt;&lt;/sup&gt;
+except there's one more level of indirection –
+instead of mapping to a single number,
+each partition maps to a range of numbers,
+which allows splitting a partition into two new ones
+by splitting its range.
+Furthermore, an item collection
+can be split on multiple partitions too,
+by using the sort key.&lt;sup class="footnote-ref" id="fnref-7"&gt;&lt;a href="#fn-7"&gt;7&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;And &lt;em&gt;that&lt;/em&gt; is how the scaling magic happens:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;When you increase provisioned capacity,
+partitions are split as needed.&lt;/li&gt;
+&lt;li&gt;If a partition or collection becomes too big,
+it gets split.&lt;/li&gt;
+&lt;li&gt;If the &lt;em&gt;throughput&lt;/em&gt; to a partition or collection
+is high enough for long enough,
+it also gets split,&lt;sup class="footnote-ref" id="fnref-8"&gt;&lt;a href="#fn-8"&gt;8&lt;/a&gt;&lt;/sup&gt;
+possibly with a bias towards keys with higher utilization;
+this is a feature of &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#isolate-frequent-access-items"&gt;adaptive capacity&lt;/a&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Partition management is handled entirely by DynamoDB
+and is transparent to the user,
+but it doesn't happen instantly –
+it takes several minutes to allocate new partitions and shuffle things around.&lt;/p&gt;
+&lt;p&gt;Since partitions are backed by real computers,
+they do have a &lt;a class="anchor" href="#partition-throughput"&gt;throughput limit&lt;/a&gt;.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html"&gt;Partitions and data distribution&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#isolate-frequent-access-items"&gt;Burst and adaptive capacity # Isolate frequently accessed items&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;small&gt;(blog)&lt;/small&gt; &lt;a class="external" href="https://aws.amazon.com/blogs/database/how-amazon-dynamodb-adaptive-capacity-accommodates-uneven-data-access-patterns-or-why-what-you-know-about-dynamodb-might-be-outdated/"&gt;How Amazon DynamoDB adaptive capacity accommodates uneven data access patterns&lt;/a&gt; (2018)&lt;/li&gt;
+&lt;li&gt;&lt;small&gt;(blog)&lt;/small&gt; &lt;a class="external" href="https://aws.amazon.com/blogs/database/part-1-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/"&gt;How partitions, hot keys, and split for heat impact performance&lt;/a&gt; (2023)&lt;/li&gt;
+&lt;li&gt;&lt;small&gt;(unofficial)&lt;/small&gt; &lt;a class="external" href="https://www.alexdebrie.com/posts/dynamodb-partitions"&gt;Everything you need to know about DynamoDB Partitions&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h2 id="limits"&gt;Limits&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#limits" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Part of DynamoDB's appeal is that
+it &lt;strong&gt;scales &amp;quot;infinitely&amp;quot;&lt;/strong&gt; for specific dimensions:
+there are no limits on table size or number of items.
+However, there are some hard, non-adjustable limits
+you will have to take into account when designing your application.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/CheatSheet.html#CheatSheet.ServiceBasics"&gt;Cheat sheet # Service quota basics&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ServiceQuotas.html"&gt;Quotas&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html"&gt;Constraints&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;small&gt;(unofficial)&lt;/small&gt; &lt;a class="external" href="https://www.alexdebrie.com/posts/dynamodb-limits/"&gt;The Three DynamoDB Limits You Need to Know&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h3 id="partition-throughput"&gt;Partition throughput&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#partition-throughput" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;The most important limit is that
+on partition throughput (aka &lt;em&gt;capacity&lt;/em&gt;) –
+how much data DynamoDB can read from or write
+to a &lt;a class="anchor" href="#physical-model-partitions"&gt;partition&lt;/a&gt;
+in a given amount of time:&lt;sup class="footnote-ref" id="fnref-9"&gt;&lt;a href="#fn-9"&gt;9&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;1 MB/s for writes&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;24 MB/s for reads&lt;/strong&gt;, &lt;a class="anchor" href="#eventual-consistency"&gt;eventually consistent&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;12 MB/s for reads, strongly consistent&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Throughput measures
+&lt;strong&gt;whole items DynamoDB has to access&lt;/strong&gt;,
+not the data that goes through the API.
+While you can touch single attributes and filter query results,
+the consumed capacity is always that
+of the &lt;em&gt;whole&lt;/em&gt; items DynamoDB had to read or write.&lt;sup class="footnote-ref" id="fnref-10"&gt;&lt;a href="#fn-10"&gt;10&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;Once you reach the limit,
+the operation is throttled,
+and you can try again later,
+ideally with exponential backoff
+(the AWS SDK usually takes care of this for you).&lt;/p&gt;
+&lt;p&gt;The best way to avoid throttling is
+to &lt;strong&gt;distribute the load uniformly across partitions&lt;/strong&gt;
+by using a &lt;strong&gt;high-cardinality partition key&lt;/strong&gt;.&lt;sup class="footnote-ref" id="fnref-11"&gt;&lt;a href="#fn-11"&gt;11&lt;/a&gt;&lt;/sup&gt;
+Uneven key distribution can create &lt;em&gt;hot partitions&lt;/em&gt;
+that suffer from persistent throttling.&lt;/p&gt;
+&lt;p&gt;Nowadays, this is less of a problem.
+For long-term imbalances,
+&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#isolate-frequent-access-items"&gt;partition splitting&lt;/a&gt;
+should rebalance things over time;
+you &amp;quot;might&amp;quot; even end up with a single popular item per partition.
+For short-term ones like traffic spikes,
+&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#burst-capacity"&gt;burst&lt;/a&gt; and &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#adaptive-capacity"&gt;adaptive capacity&lt;/a&gt;
+will, &lt;em&gt;on a best effort basis&lt;/em&gt;,
+&amp;quot;borrow&amp;quot; capacity above the table limit
+and between partitions.
+However,
+AWS is very non-committal
+about their behavior,
+and there's nothing you can do
+besides increasing traffic gradually,
+so &lt;strong&gt;good partition key design&lt;/strong&gt; remains key.&lt;/p&gt;
+&lt;p&gt;Of note, while the throughput is fixed,
+the other dimensions are not;
+this means that you have a trade-off between
+&lt;em&gt;how often you access items&lt;/em&gt;,
+the &lt;em&gt;number of items&lt;/em&gt;, and &lt;em&gt;item size&lt;/em&gt;;
+for example, you can split items into smaller ones
+based on how attributes are accessed, aka &lt;em&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-vertical-partitioning"&gt;vertical partitioning&lt;/a&gt;&lt;/em&gt;.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html"&gt;Read and write operations&lt;/a&gt; (capacity unit consumption)&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html"&gt;Partition key design&lt;/a&gt; and
+&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-uniform-load.html"&gt;Distributing workloads&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-sort-keys.html"&gt;Sort key design&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;small&gt;(blog)&lt;/small&gt; &lt;a class="external" href="https://aws.amazon.com/blogs/database/choosing-the-right-dynamodb-partition-key/"&gt;Choosing the Right DynamoDB Partition Key&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h3 id="item-size"&gt;Item size&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#item-size" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Second, &lt;strong&gt;the maximum item size is 400 KB&lt;/strong&gt;,
+which ought to be enough for anybody.
+You can work around this limit either by &lt;strong&gt;splitting items into parts&lt;/strong&gt;,
+or by &lt;strong&gt;putting the data somewhere else&lt;/strong&gt; entirely, like S3,
+and keeping only a reference in DynamoDB.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html#limits-items"&gt;Constraints # Items&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-use-s3-too.html"&gt;Large items&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h3 id="page-size"&gt;Page size&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#page-size" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Finally,
+&lt;strong&gt;the maximum response size for query and scan operations is 1 MB&lt;/strong&gt;
+(a &lt;em&gt;page&lt;/em&gt;).
+You can continue from the end of the previous page
+by passing the &lt;code&gt;LastEvaluatedKey&lt;/code&gt; response element to subsequent calls,
+which is essentially
+&lt;a class="internal" href="/query-builder-why#intermission-scrolling-window-queries"&gt;keyset pagination&lt;/a&gt;.
+One consequence of this is that,
+throughput limit aside,
+there's an implicit limit
+on how fast you can query the items in a collection,
+since the calls are sequentiall.&lt;sup class="footnote-ref" id="fnref-12"&gt;&lt;a href="#fn-12"&gt;12&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html#limits-api"&gt;Constraints # API-specific constraints&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.Pagination.html"&gt;Paginating query results&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h2 id="indexes"&gt;Indexes&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#indexes" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;As discussed in the &lt;a class="anchor" href="#logical-model-hash-table-of-b-trees"&gt;logical model&lt;/a&gt;,
+access not based on primary key is very inefficient.&lt;/p&gt;
+&lt;p&gt;Secondary indexes allow queries and scans that use &lt;strong&gt;alternative primary keys&lt;/strong&gt;,
+ones composed of different attributes than that of the base table.
+Unlike tables,
+index sort keys do not have to be unique for a given partition key.
+An item that is missing one of the index primary key attributes
+will not appear in the index.&lt;/p&gt;
+&lt;p&gt;Changes to the table are automatically propagated to any secondary indexes.
+Aside from the index and table primary key attributes,
+an index can include copies of other attributes
+(aka &lt;em&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.Projections"&gt;attribute projection&lt;/a&gt;&lt;/em&gt;),
+which allows the index to answer queries alone,
+without extra reads to the base table.&lt;sup class="footnote-ref" id="fnref-13"&gt;&lt;a href="#fn-13"&gt;13&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.SecondaryIndexes"&gt;Core components # Secondary indexes&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/SecondaryIndexes.html"&gt;Working with indexes&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h3 id="global-secondary-indexes"&gt;Global secondary indexes&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#global-secondary-indexes" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;A global secondary index allows using
+&lt;strong&gt;different partition &lt;em&gt;and&lt;/em&gt; sort key attributes&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;Conceptually,
+a global secondary index is &lt;strong&gt;just a table&lt;/strong&gt;:
+it has its own &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.ThroughputConsiderations"&gt;separate capacity&lt;/a&gt;,
+no limits on size or number of items,
+and the same &lt;a class="anchor" href="#partition-throughput"&gt;partition throughput&lt;/a&gt; limits apply.&lt;/p&gt;
+&lt;p&gt;Despite &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt;s being updated &lt;a class="anchor" href="#eventual-consistency"&gt;asynchronously&lt;/a&gt;,
+an index without enough capacity to process the updates
+will cause &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html"&gt;write throttling&lt;/a&gt;.
+To retrieve attributes not in the index,
+you have to get them yourself from the table
+(&lt;a class="anchor" href="#batch-operations"&gt;batch operations&lt;/a&gt; can speed this up).&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Example&lt;/p&gt;
+&lt;p&gt;&lt;small&gt;(from &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=query%20the%20data%20by%20Genre%20and%20Album"&gt;here&lt;/a&gt;)&lt;/small&gt;
+Continuing with the music example,
+a &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; with &lt;em&gt;Genre&lt;/em&gt; and &lt;em&gt;Album&lt;/em&gt; as partition and sort keys
+would allow you to &lt;em&gt;also&lt;/em&gt; efficiently:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;query songs by genre (and, with additional processing, albums by genre)&lt;/li&gt;
+&lt;li&gt;query songs by genre and album
+(but, since two albums can have the same genre and title,
+you might want to group by artist in application code)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="YAML"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# table Music (partition key: Artist, sort key: Song)&lt;/span&gt;
+&lt;span class="nt"&gt;Kyuss&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Demon Cleaner&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Album&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Welcome To Sky Valley&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="nt"&gt; Genre&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Rock&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Space Cadet&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Album&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Welcome To Sky Valley&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="nt"&gt; Genre&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Rock&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="nt"&gt;1000mods&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Claws&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Genre&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Rock&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c1"&gt;# has no Album!&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Vidage&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Album&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Super Van Vacation&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="nt"&gt; Genre&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Rock&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="nt"&gt;Solar Fields&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Air Song&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Album&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Leaving Home&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="nt"&gt; Genre&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Electronic&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="YAML"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# GSI Genres (partition key: Genre, sort key: Album)&lt;/span&gt;
+&lt;span class="nt"&gt;Rock&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Super Van Vacation&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Artist&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;1000mods&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="nt"&gt; Song&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Vidage&lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Welcome To Sky Valley&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Artist&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Kyuss&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="nt"&gt; Song&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Space Cadet&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Welcome To Sky Valley&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Artist&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Kyuss&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="nt"&gt; Song&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Demon Cleaner&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="nt"&gt;Electronic&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Leaving Home&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Artist&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Solar Fields&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="nt"&gt; Song&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Air Song&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/section&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html"&gt;Global secondary indexes&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes.html"&gt;Best practices for secondary indexes&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h3 id="local-secondary-indexes"&gt;Local secondary indexes&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#local-secondary-indexes" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;A local secondary index allows using a &lt;strong&gt;different sort key attribute&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;abbr title="Local Secondary Index"&gt;LSI&lt;/abbr&gt; data is stored together with partition data
+(the index is &lt;em&gt;local&lt;/em&gt; to the partition),
+so besides the table B‍-‍tree,
+each collection has one B‍-‍tree per &lt;abbr title="Local Secondary Index"&gt;LSI&lt;/abbr&gt;.&lt;/p&gt;
+&lt;p&gt;This allows strongly consistent reads
+and fetching non-projected attributes,
+but also &lt;strong&gt;limits collection size to 10 GB&lt;/strong&gt;
+and &lt;strong&gt;collection throughput to the &lt;a class="anchor" href="#partition-throughput"&gt;partition limit&lt;/a&gt;&lt;/strong&gt;,
+since it prevents further partition splitting
+(as each sort key would split the items in a different way).&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Example&lt;/p&gt;
+&lt;p&gt;A &lt;abbr title="Local Secondary Index"&gt;LSI&lt;/abbr&gt; with &lt;em&gt;Year&lt;/em&gt; as sort key
+would allow you to &lt;em&gt;also&lt;/em&gt; efficiently:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;query songs by artist, in chronological order&lt;/li&gt;
+&lt;li&gt;query songs by artist and year&lt;/li&gt;
+&lt;/ul&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="YAML"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# table Music (partition key: Artist, sort key: Song)&lt;/span&gt;
+&lt;span class="nt"&gt;1000mods&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Claws&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Year&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;2014&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Road To Burn&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Year&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;2011&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Vidage&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Year&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;2011&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="nt"&gt;Solar Fields&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Sombrero&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Year&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;2011&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="YAML"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# table Music (partition key: Artist, LSI sort key: Year)&lt;/span&gt;
+&lt;span class="nt"&gt;1000mods&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;2011&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Song&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Vidage&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;2011&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Song&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Road To Burn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;2014&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Song&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Claws&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="nt"&gt;Solar Fields&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;2011&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Song&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Sombrero&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/section&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LSI.html"&gt;Local secondary indexes&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes.html"&gt;Best practices for secondary indexes&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h2 id="features"&gt;Features&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#features" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Let's look at some of the things DynamoDB can do
+besides &lt;abbr title="create, read, update, and delete"&gt;CRUD&lt;/abbr&gt; operations.&lt;/p&gt;
+&lt;h3 id="eventual-consistency"&gt;Eventual consistency&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#eventual-consistency" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;So, remember I said partitions are backed by real computers?
+I didn't say &lt;em&gt;how many&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;To allow the high-availability magic to happen,
+a partition is backed by &lt;a class="external" href="https://aws.amazon.com/blogs/database/part-2-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/#:~:text=spread%20across%20three%20nodes%20for%20redundancy"&gt;three nodes&lt;/a&gt;
+in separate data centers:&lt;sup class="footnote-ref" id="fnref-14"&gt;&lt;a href="#fn-14"&gt;14&lt;/a&gt;&lt;/sup&gt;
+a leader that handles writes
+and two asynchronous replicas.&lt;/p&gt;
+&lt;p&gt;This explains why there are two kinds of reads:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;strongly consistent&lt;/strong&gt; reads go to the leader,
+so you always get the latest data&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;eventually consistent&lt;/strong&gt; reads go to &lt;em&gt;any&lt;/em&gt; node,
+so you may get slightly older data,
+but if you repeat the read later,
+you will &lt;em&gt;&lt;a class="external" href="https://en.wikipedia.org/wiki/Eventual_consistency"&gt;eventually&lt;/a&gt;&lt;/em&gt; get the latest data;
+because they use all the available nodes,
+they are more efficient, and thus cheaper&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Note that strongly consistent reads
+&lt;strong&gt;do not replace synchronization primitives&lt;/strong&gt;
+like &lt;a class="anchor" href="#conditional-writes"&gt;conditional writes&lt;/a&gt;
+and &lt;a class="anchor" href="#transactions"&gt;transactions&lt;/a&gt;,
+but they can be useful to lower the rate
+at which
+these operations fail
+for highly-contended items.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html"&gt;DynamoDB read consistency&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h3 id="conditional-writes"&gt;Conditional writes&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#conditional-writes" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Write operations can specify a &lt;strong&gt;condition expression&lt;/strong&gt;
+that must be true for the write to happen
+(e.g. an attribute has a specific value);
+if the expression is false,
+the write fails.
+Condition expressions can refer only to the item being modified.&lt;/p&gt;
+&lt;p&gt;Conditional writes are critical for data consistency
+and avoiding concurrency &lt;a class="external" href="https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use"&gt;bugs&lt;/a&gt;,
+since they are only the way to run logic server-side,
+while the item is being modified.
+You can use conditional writes
+to build higher level abstractions like
+optimistic locking, &lt;!-- TODO: link --&gt;
+&lt;a class="external" href="https://github.com/awslabs/amazon-dynamodb-lock-client"&gt;distributed locks&lt;/a&gt;,
+and atomic counters.&lt;sup class="footnote-ref" id="fnref-15"&gt;&lt;a href="#fn-15"&gt;15&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.ConditionalUpdate"&gt;Working with items # Conditional writes&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.OperatorsAndFunctions.html"&gt;Condition and filter expressions&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ConditionExpressions.html#Expressions.ConditionExpressions.ConditionalExamples"&gt;Conditional expressions examples&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;small&gt;(unofficial)&lt;/small&gt; &lt;a class="external" href="https://www.alexdebrie.com/posts/dynamodb-condition-expressions/"&gt;Understanding DynamoDB Condition Expressions&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h3 id="transactions"&gt;Transactions&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#transactions" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Transactions allow performing &lt;strong&gt;multiple writes&lt;/strong&gt;
+as &lt;strong&gt;a single atomic operation&lt;/strong&gt;,
+isolated from other operations;
+if two operations attempt to change an item at the same time,
+one of them fails.
+Transactions can target &lt;strong&gt;up to 100 distinct items&lt;/strong&gt;
+in one or more tables in the same region,
+and consume twice as much capacity.&lt;/p&gt;
+&lt;p&gt;You can use transactions with &lt;a class="anchor" href="#conditional-writes"&gt;condition expressions&lt;/a&gt;
+– if a condition fails for one item,
+none of the items are modified;
+you can also &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_ConditionCheck.html"&gt;check an item&lt;/a&gt; without modifying it.
+Like with single-item writes,
+an expression can refer only an individual item
+(you can't have a condition about another item in the transaction).&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transactions.html"&gt;Working with transactions&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h3 id="batch-operations"&gt;Batch operations&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#batch-operations" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Batch operations allow you to
+&lt;strong&gt;put/delete up to 25 items&lt;/strong&gt; or &lt;strong&gt;read up to 100 items&lt;/strong&gt;
+in a &lt;strong&gt;single request&lt;/strong&gt;, up to 16 MB in total,
+more efficiently than using single-item operations.
+Batch writes don't support updates or condition expressions.&lt;/p&gt;
+&lt;p&gt;The operations in a batch are independent from one another
+– some writes may fail, or only some of the read items may be returned
+(e.g. if &lt;a class="anchor" href="#partition-throughput"&gt;throughput limits&lt;/a&gt; are reached).&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.BatchOperations"&gt;Working with items # Batch operations&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchGetItem.html"&gt;BatchGetItem&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html"&gt;BatchWriteItem&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h3 id="streams"&gt;Streams&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#streams" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h3&gt;
+&lt;p&gt;Streams allow you to &lt;a class="external" href="https://en.wikipedia.org/wiki/Change_data_capture"&gt;capture&lt;/a&gt;
+changes to the items in a table in near-real time.
+There are two flavors of streams,
+&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html"&gt;DynamoDB Streams&lt;/a&gt;
+and &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/kds.html"&gt;Kinesis Data Streams&lt;/a&gt;,
+each with different features and integrations.&lt;/p&gt;
+&lt;p&gt;Notable applications of streams are
+&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.Lambda.html"&gt;Lambda triggers&lt;/a&gt;
+(similar to the ones in relational databases,
+except they run &lt;em&gt;after&lt;/em&gt; the change),
+replication to places like S3 or Redshift &lt;a class="external" href="https://docs.aws.amazon.com/firehose/latest/dev/basic-deliver.html"&gt;via Firehose&lt;/a&gt;,
+and automatic &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-ttl-archival"&gt;archival&lt;/a&gt;.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.Streams"&gt;Core components # DynamoDB Streams&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/streamsmain.html"&gt;Working with streams&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;small&gt;(unofficial)&lt;/small&gt; &lt;a class="external" href="https://www.alexdebrie.com/bites/dynamodb-streams/"&gt;What you should know about DynamoDB Streams&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;hr /&gt;
+&lt;p&gt;Anyway, that's it for now.&lt;/p&gt;
+&lt;p&gt;In the next article, we'll have a closer look at core DynamoDB &lt;strong&gt;design patterns&lt;/strong&gt;,
+including the fundamental &lt;strong&gt;single-table design&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Learned something new today?&lt;/strong&gt; Share it with others, it really helps! &lt;span class="text-large"&gt;
+&lt;span class="share-icons"&gt;
+&lt;a
+    class="share-icon pycoders color"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+&gt;PyCoder's Weekly&lt;/a&gt;
+&lt;a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/dynamodb-model&amp;t=DynamoDB%20crash%20course%3A%20part%202%20%E2%80%93%20data%20model"
+&gt;HN&lt;/a&gt;
+&lt;a
+    class="share-icon bluesky color"
+    href="https://bsky.%61%70%70/intent/compose?text=DynamoDB%20crash%20course%3A%20part%202%20%E2%80%93%20data%20model%20https%3A//death.andgravity.com/dynamodb-model"
+&gt;Bluesky&lt;/a&gt;
+&lt;!--
+&lt;a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/dynamodb-model&amp;title=DynamoDB%20crash%20course%3A%20part%202%20%E2%80%93%20data%20model"
+&gt;Reddit&lt;/a&gt;
+--&gt;
+&lt;a
+    class="share-icon linkedin color"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/dynamodb-model"
+&gt;linkedin&lt;/a&gt;
+&lt;a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=DynamoDB%20crash%20course%3A%20part%202%20%E2%80%93%20data%20model&amp;url=https%3A//death.andgravity.com/dynamodb-model&amp;via=_andgravity"
+&gt;Twitter&lt;/a&gt;
+&lt;/span&gt;
+&lt;/span&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;b&gt;
+Want to know when new articles come out?
+
+&lt;a href="#embedded-subscribe-form"&gt;Subscribe here&lt;/a&gt;
+to get new stuff straight to your inbox!
+
+&lt;/b&gt;&lt;/p&gt;
+&lt;!-- TODO: make this an aside or a bonus
+
+Depending on how you structure your data,
+a DynamoDB table can correspond to either a single table or a whole database
+in a relational database system.
+
+Partitions are somewhat analogous to [shards],
+but unlike with most relational databases,
+partitions are built *into* the database,
+rather than *on top* of it.
+
+A DynamoDB item usually corresponds to a row in a relational database system.
+
+A DynamoDB attribute corresponds to a field in a relational database system.
+
+[shards]: https://en.wikipedia.org/wiki/Shard_(database_architecture)
+
+--&gt;
+
+&lt;!-- TODO/IDEA: cheatsheet table a la big o cheatsheet
+
+(one for table / partition / item )
+(one for crud / batch / query/scan / transactions)
+
+like so
+
+| | read (ec) | read (sc) | write |
+|-|-|-|-|
+| units/s | 3,000 | 3,000 | 1,000 |
+| unit size | 4 KB/unit | 4 KB/unit | 1 KB/unit |
+| cost | 0.5 unit | 1 unit | 1 unit |
+| total | 24 MB/s | 12 MB/s | 1 MB/s |
+
+```
+throughput = units/s * unit size * cost
+```
+
+--&gt;
+
+&lt;section class="footnotes"&gt;
+&lt;ol&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;Here, &amp;quot;collection&amp;quot; just means a &amp;quot;group of things&amp;quot;. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-2"&gt;&lt;p&gt;Ignore the names for now, it'll make sense in a bit. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-3"&gt;&lt;p&gt;It is also possible to have
+a table with only a partition key and no sort key,
+but you can think of that like
+a degenerate case where the sort key is a constant value,
+and thus each partition key can have only one item. &lt;a href="#fnref-3" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-4"&gt;&lt;p&gt;Yes, an &lt;em&gt;item collection&lt;/em&gt; is different from a &amp;quot;collection of items&amp;quot;.
+Don't look at me, I didn't pick the names. ಠ_ಠ &lt;a href="#fnref-4" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-5"&gt;&lt;p&gt;&lt;a class="anchor" href="#indexes"&gt;Indexes&lt;/a&gt;, which we'll discuss later,
+offer an escape hatch to this. &lt;a href="#fnref-5" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-6"&gt;&lt;p&gt;A quick rant on naming.
+With a hash table,
+you would say &amp;quot;hash table key&amp;quot;,
+or maybe even &amp;quot;item key&amp;quot;;
+you would &lt;em&gt;not&lt;/em&gt; say &amp;quot;bucket key&amp;quot;,
+since that's a low level detail,
+and also a bucket can have &lt;em&gt;multiple&lt;/em&gt; keys.
+You know, like in DynamoDB.&lt;/p&gt;
+&lt;p&gt;THEN WHY IS IT CALLED A PARTITION KEY &lt;!-- ...partition*ing* key, maybe? --&gt; &lt;a href="#fnref-6" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-7"&gt;&lt;p&gt;You have to admit that this is a great explanation.
+Surely you'd find it in the docs,
+and not burried in a &lt;a class="external" href="https://aws.amazon.com/blogs/database/part-1-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/"&gt;random blog post&lt;/a&gt;
+published four years after the feature was announced,
+&lt;a class="external" href="https://aws.amazon.com/blogs/database/how-amazon-dynamodb-adaptive-capacity-accommodates-uneven-data-access-patterns-or-why-what-you-know-about-dynamodb-might-be-outdated/"&gt;also in a blog post&lt;/a&gt;,
+and which itself explains more
+than the official documentation does &lt;a class="external" href="https://web.archive.org/web/20260210084635/https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#isolate-frequent-access-items"&gt;to this day&lt;/a&gt;,
+seven years later! &lt;a href="#fnref-7" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-8"&gt;&lt;p&gt;Assuming the table has enough configured throughput. &lt;a href="#fnref-8" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-9"&gt;&lt;p&gt;Converted to normal people units for your convenience.
+DynamoDB uses its own &lt;em&gt;capacity units&lt;/em&gt;
+as a convoluted way of saying that for accounting purposes,
+item size is rounded up to 4 KB (1 &lt;abbr title="Read Capacity Units"&gt;RCU&lt;/abbr&gt;) for reads
+and 1 KB (1 &lt;abbr title="Write Capacity Units"&gt;WCU&lt;/abbr&gt;) for writes.
+This is presumably because the size of a capacity unit
+&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=4%20KB%20read%20capacity%20unit%20size"&gt;can increase&lt;/a&gt; over time. &lt;a href="#fnref-9" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-10"&gt;&lt;p&gt;Yes, this includes just counting them. &lt;a href="#fnref-10" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-11"&gt;&lt;p&gt;If there is no good natural partition key,
+you can make one by sharding a low-cardinality attribute, &lt;!-- TODO: link --&gt;
+which we'll cover in the next article. &lt;a href="#fnref-11" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-12"&gt;&lt;p&gt;You could make it twice as fast by querying from both ends,
+but probably no faster,
+since for &lt;a class="internal" href="/pwned#binary-skipping"&gt;binary search&lt;/a&gt;
+you'd need to jump in the middle of two sort keys.
+Unsurprisingly,
+we'll look at a potential solution in the next article. &lt;a href="#fnref-12" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-13"&gt;&lt;p&gt;This is the same as a &lt;a class="external" href="https://en.wikipedia.org/wiki/Database_index#Covering_index"&gt;covering index&lt;/a&gt; in relational databases. &lt;a href="#fnref-13" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-14"&gt;&lt;p&gt;Or better said, &lt;em&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html#ddb-intro-resilience"&gt;availability zones&lt;/a&gt;&lt;/em&gt;. &lt;a href="#fnref-14" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-15"&gt;&lt;p&gt;Although you can also use update expressions for &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.AtomicCounters"&gt;atomic counters&lt;/a&gt;. &lt;a href="#fnref-15" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+    <link href="https://death.andgravity.com/dynamodb-model" rel="alternate"/>
+    <summary>This is part two of a series covering core DynamoDB concepts, from philosophy all the way to single-table design. The goal is to get you to understand idiomatic usage and trade-offs in under an hour. Today, we're looking at the DynamoDB data model – what the main abstractions are, what you can do with them,  and how they scale.</summary>
+    <published>2026-02-10T10:35:00+00:00</published>
+  </entry>
   <entry xml:base="https://death.andgravity.com/dynamodb">
     <id>https://death.andgravity.com/dynamodb</id>
     <title>DynamoDB crash course: part 1 – philosophy</title>
