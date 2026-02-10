@@ -183,7 +183,8 @@ but can be deceptively simple,
 and leaves out two other equally important aspects:
 <strong>what you can do with it</strong> (the <em>logical model</em>)
 and <strong>how it scales</strong> (the <em>physical model</em>).</p>
-<p>Let's put it all together, starting from the top.</p>
+<p><a id="diagram"></a>
+Let's put it all together, starting from the top.</p>
 <figure class="figure">
 
 <svg xmlns='http://www.w3.org/2000/svg' style='font-size:initial;' class="pikchr" viewBox="0 0 655.2 371.098" data-pikchr-date="20260102012653">
@@ -269,11 +270,14 @@ and optionally narrowed down to a specific a range of sort keys</li>
 <p>Besides whole items,
 the API allows getting and updating specific attributes,
 as well as filtering query and scan results by expressions using them.</p>
-<!-- see also
-https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html
-https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html
--->
-
+<section class="admonition tip">
+<p class="admonition-title">See also</p>
+<ul>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html">Core components</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html">Working with items</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html">Supported data types and naming rules</a></li>
+</ul>
+</section>
 <h3 id="logical-model-hash-table-of-b-trees">Logical model: hash table of B‍-‍trees<span class="headerlink">&nbsp;<a href="#logical-model-hash-table-of-b-trees" title="permalink">#</a></span></h3>
 <p>The operations above may seem arbitrarily restrictive
 – for example, why can't I query items by sort key alone?
@@ -332,11 +336,10 @@ except there's one more level of indirection –
 instead of mapping to a single number,
 each partition maps to a range of numbers,
 which allows splitting a partition into two new ones
-by splitting its range.<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup>
+by splitting its range.
 Furthermore, an item collection
-(that is, items with the same partition key)
-can be split on multiple partitions too
-by using the sort key.</p>
+can be split on multiple partitions too,
+by using the sort key.<sup class="footnote-ref" id="fnref-7"><a href="#fn-7">7</a></sup></p>
 <p>And <em>that</em> is how the scaling magic happens:</p>
 <ul>
 <li>When you increase provisioned capacity,
@@ -346,7 +349,8 @@ it gets split.</li>
 <li>If the <em>throughput</em> to a partition or collection
 is high enough for long enough,
 it also gets split,<sup class="footnote-ref" id="fnref-8"><a href="#fn-8">8</a></sup>
-possibly with a bias towards keys with higher utilization.</li>
+possibly with a bias towards keys with higher utilization;
+this is a feature of <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#isolate-frequent-access-items">adaptive capacity</a>.</li>
 </ul>
 <p>Partition management is handled entirely by DynamoDB
 and is transparent to the user,
@@ -357,40 +361,13 @@ they do have a <a class="anchor" href="#partition-throughput">throughput limit</
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.PrimaryKey">Core components # Primary key</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html">Partitions and data distribution</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#isolate-frequent-access-items">Burst and adaptive capacity # Isolate frequently accessed items</a></li>
+<li><small>(blog)</small> <a class="external" href="https://aws.amazon.com/blogs/database/how-amazon-dynamodb-adaptive-capacity-accommodates-uneven-data-access-patterns-or-why-what-you-know-about-dynamodb-might-be-outdated/">How Amazon DynamoDB adaptive capacity accommodates uneven data access patterns</a> (2018)</li>
+<li><small>(blog)</small> <a class="external" href="https://aws.amazon.com/blogs/database/part-1-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/">How partitions, hot keys, and split for heat impact performance</a> (2023)</li>
 <li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-partitions">Everything you need to know about DynamoDB Partitions</a></li>
 </ul>
 </section>
-<!-- see also
-
-https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html
-https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html
-
-https://aws.amazon.com/blogs/database/part-1-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/
-https://aws.amazon.com/blogs/database/part-2-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/
-https://aws.amazon.com/blogs/database/part-3-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/
-
--->
-
-<!-- TODO: make this an aside or a bonus
-
-Depending on how you structure your data,
-a DynamoDB table can correspond to either a single table or a whole database
-in a relational database system.
-
-Partitions are somewhat analogous to [shards],
-but unlike with most relational databases,
-partitions are built *into* the database,
-rather than *on top* of it.
-
-A DynamoDB item usually corresponds to a row in a relational database system.
-
-A DynamoDB attribute corresponds to a field in a relational database system.
-
-[shards]: https://en.wikipedia.org/wiki/Shard_(database_architecture)
-
--->
-
 <h2 id="limits">Limits<span class="headerlink">&nbsp;<a href="#limits" title="permalink">#</a></span></h2>
 <p>Part of DynamoDB's appeal is that
 it <strong>scales &quot;infinitely&quot;</strong> for specific dimensions:
@@ -406,26 +383,6 @@ you will have to take into account when designing your application.</p>
 <li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-limits/">The Three DynamoDB Limits You Need to Know</a></li>
 </ul>
 </section>
-<!--
-TODO/IDEA: cheatsheet table a la big o cheatsheet
-(one for table / partition / item )
-(one for crud / batch / query/scan / transactions)
-
-like so
-
-| | read (ec) | read (sc) | write |
-|-|-|-|-|
-| units/s | 3,000 | 3,000 | 1,000 |
-| unit size | 4 KB/unit | 4 KB/unit | 1 KB/unit |
-| cost | 0.5 unit | 1 unit | 1 unit |
-| total | 24 MB/s | 12 MB/s | 1 MB/s |
-
-```
-throughput = units/s * unit size * cost
-```
-
--->
-
 <h3 id="partition-throughput">Partition throughput<span class="headerlink">&nbsp;<a href="#partition-throughput" title="permalink">#</a></span></h3>
 <p>The most important limit is that
 on partition throughput (aka <em>capacity</em>) –
@@ -453,8 +410,6 @@ to <strong>distribute the load uniformly across partitions</strong>
 by using a <strong>high-cardinality partition key</strong>.<sup class="footnote-ref" id="fnref-11"><a href="#fn-11">11</a></sup>
 Uneven key distribution can create <em>hot partitions</em>
 that suffer from persistent throttling.</p>
-<!-- TODO: should this be a footnote? -->
-
 <p>Nowadays, this is less of a problem.
 For long-term imbalances,
 <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#isolate-frequent-access-items">partition splitting</a>
@@ -481,19 +436,12 @@ based on how attributes are accessed, aka <em><a class="external" href="https://
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html">Partitions and data distribution</a></li>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html">Read and write operations</a> (capacity unit consumption)</li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html">Partition key design</a><ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-uniform-load.html">Distributing workloads</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-sharding.html">Write sharding</a></li>
-</ul>
-</li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html">Partition key design</a> and
+<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-uniform-load.html">Distributing workloads</a></li>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-sort-keys.html">Sort key design</a></li>
 <li><small>(blog)</small> <a class="external" href="https://aws.amazon.com/blogs/database/choosing-the-right-dynamodb-partition-key/">Choosing the Right DynamoDB Partition Key</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-vertical-partitioning">Data modeling building blocks # Vertical partitioning building block</a></li>
 </ul>
- <!-- https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-write-sharding -->
-
 </section>
 <h3 id="item-size">Item size<span class="headerlink">&nbsp;<a href="#item-size" title="permalink">#</a></span></h3>
 <p>Second, <strong>the maximum item size is 400 KB</strong>,
@@ -853,6 +801,45 @@ and automatic <a class="external" href="https://docs.aws.amazon.com/amazondynamo
     </div>
 
 </form>
+<!-- TODO: make this an aside or a bonus
+
+Depending on how you structure your data,
+a DynamoDB table can correspond to either a single table or a whole database
+in a relational database system.
+
+Partitions are somewhat analogous to [shards],
+but unlike with most relational databases,
+partitions are built *into* the database,
+rather than *on top* of it.
+
+A DynamoDB item usually corresponds to a row in a relational database system.
+
+A DynamoDB attribute corresponds to a field in a relational database system.
+
+[shards]: https://en.wikipedia.org/wiki/Shard_(database_architecture)
+
+-->
+
+<!-- TODO/IDEA: cheatsheet table a la big o cheatsheet
+
+(one for table / partition / item )
+(one for crud / batch / query/scan / transactions)
+
+like so
+
+| | read (ec) | read (sc) | write |
+|-|-|-|-|
+| units/s | 3,000 | 3,000 | 1,000 |
+| unit size | 4 KB/unit | 4 KB/unit | 1 KB/unit |
+| cost | 0.5 unit | 1 unit | 1 unit |
+| total | 24 MB/s | 12 MB/s | 1 MB/s |
+
+```
+throughput = units/s * unit size * cost
+```
+
+-->
+
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>Here, &quot;collection&quot; just means a &quot;group of things&quot;. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
@@ -876,10 +863,13 @@ and also a bucket can have <em>multiple</em> keys.
 You know, like in DynamoDB.</p>
 <p>THEN WHY IS IT CALLED A PARTITION KEY <!-- ...partition*ing* key, maybe? --> <a href="#fnref-6" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-7"><p>You have to admit that this is a great explanation.
-Surely you would expect to find it in the official documentation,
-and not burried in a <a class="external" href="https://aws.amazon.com/blogs/database/part-1-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/#:~:text=how%20data%20gets%20assigned%20to%20partitions">random blog post</a> published
-at least three years
-<a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=Adaptive%20capacity%20support%20for%20imbalanced%20workload">after the feature actually launched</a>. <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
+Surely you'd find it in the docs,
+and not burried in a <a class="external" href="https://aws.amazon.com/blogs/database/part-1-scaling-dynamodb-how-partitions-hot-keys-and-split-for-heat-impact-performance/">random blog post</a>
+published four years after the feature was announced,
+<a class="external" href="https://aws.amazon.com/blogs/database/how-amazon-dynamodb-adaptive-capacity-accommodates-uneven-data-access-patterns-or-why-what-you-know-about-dynamodb-might-be-outdated/">also in a blog post</a>,
+and which itself explains more
+than the official documentation does <a class="external" href="https://web.archive.org/web/20260210084635/https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/burst-adaptive-capacity.html#isolate-frequent-access-items">to this day</a>,
+seven years later! <a href="#fnref-7" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-8"><p>Assuming the table has enough configured throughput. <a href="#fnref-8" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-9"><p>Converted to normal people units for your convenience.
 DynamoDB uses its own <em>capacity units</em>
