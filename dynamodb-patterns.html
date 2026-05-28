@@ -151,18 +151,21 @@ documented pretty extensively in the official documentation.</p>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-schemas.html">Data modeling schemas</a> (worked examples)</li>
 </ul>
 </li>
+<li>TODO: youtube video</li>
 </ul>
 </section>
 <h2 id="composite-keys">Composite keys<span class="headerlink">&nbsp;<a href="#composite-keys" title="permalink">#</a></span></h2>
-<p>Composite (aka synthetic) keys are the pattern which underpins most other patterns.</p>
-<p>The idea is that <strong>keys don't have to be natural attributes</strong> of your data,
-but can instead be <strong>composed of multiple attributes</strong>,
-chosen to enable specific <strong>access patterns</strong>.
-This, like other patterns, works equally well with table and index keys.</p>
-<p>How do you compose attributes?
-By string concatenation, of course!
-Careful with numeric attributes though,
-they need padding to be useful in sort keys.</p>
+<p>Composite (aka synthetic) keys underpin most other patterns.</p>
+<p>The idea is simple:
+<strong>keys don't have to be natural attributes</strong> of your data,
+they can be <strong>composed of other attributes</strong>
+that enable specific <strong>access patterns</strong>.
+This works both with table and index keys.</p>
+<p>How do you compose keys?
+By string concatenation, of course
+– I did say low level!
+(Careful with numbers though,
+they need padding to be useful in sort keys.)</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
 <p>To sort lexicographically by more than one attribute,
@@ -172,23 +175,23 @@ you distinguish between item types
 by prefixing keys with the type,
 e.g. <code>album#{Album}</code>.</p>
 <p>Or, in <a class="anchor" href="#partition-key-sharding">partition key sharding</a>,
-you spread the load on a GSI partition by splitting one partition key
+you spread the load on a <abbr title="Global Secondary Index">GSI</abbr> partition by splitting one partition key
 into multiple ones, e.g. <code>{Genre}#{shard}</code>.</p>
 </section>
-<p>But denormalization has costs and trade-offs.
+<p>But denormalization has its trade-offs.
 For sort key <code>{Album}#{Song}</code>,
 should <em>Album</em> and <em>Song</em> also be separate attributes?
 If yes,
 you need to ensure they never change,
 but you can use them in indexes
-(e.g. a GSI with <em>Album</em> as primary key).
+(e.g. a <abbr title="Global Secondary Index">GSI</abbr> with <em>Album</em> as primary key).
 If no,
-the item can't become inconsistent,
+the item cannot become inconsistent,
 but you always need to parse the key.</p>
 <p>This was inconvenient enough
-that in 2025
-they finally added support for <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.MultiAttributeKeys">multi-attribute keys</a> to GSIs
-(but seeminly not bad enough to also add it to tables).</p>
+that DynamoDB finally
+added <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.MultiAttributeKeys">multi-attribute keys</a> support to <abbr title="Global Secondary Index">GSI</abbr>s in 2025
+(although not inconvenient enough to also add it to tables).</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -197,7 +200,7 @@ they finally added support for <a class="external" href="https://docs.aws.amazon
 </ul>
 </section>
 <h2 id="single-table-design">Single table design<span class="headerlink">&nbsp;<a href="#single-table-design" title="permalink">#</a></span></h2>
-<p>AWS <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html">recommends</a> using as few tables as possible:</p>
+<p>The AWS guidance <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html">guidance</a> is to use as few tables as possible:</p>
 <blockquote>
 <p>As a general rule,
 you should maintain as few tables as possible in a DynamoDB application.
@@ -208,20 +211,21 @@ required by your application.</p>
 </blockquote>
 <p>This culminates in single table design,
 where you put <strong>all entities in the same table</strong>,
-and distinguish between them based on the key format, usually using a prefix.
+and tell them apart based on the key format, usually using a prefix.
 With this pattern,
-a single DynamoDB table corresponds
+one DynamoDB table corresponds
 to a whole relational database.</p>
-<p>Simplest is to have
-<strong>all items related to a top-level entity
-on the same partition</strong>.
-This makes joins with the top entity trivial,
-and allows getting different entity types in a single query,
-which can be both faster (fewer queries)
-and cheaper (small items pack into fewer capacity units).</p>
+<p>The easiest way is to put
+<strong>items related to a top-level entity on the same partition</strong>.
+The main benefit is that
+joins with the top-level entity become trivial.
+A second one is that
+you can sometimes get different entity types in a single query,
+which can be both faster and cheaper
+(fewer queries; small items pack into fewer capacity units).</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
-<p>You could group items related to an <em>Artist</em> on the same partition,
+<p>You can group items related to an <em>Artist</em> on the same partition,
 with sort keys like
 <code>artist</code>, <code>album#{Album}</code>, and <code>song#{Album}#{Song}</code>.</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="c1"># table Music (partition key: Artist, sort key: sk)</span>
@@ -231,17 +235,19 @@ with sort keys like
 <span class="w">  </span><span class="s">&#39;song#Leaving</span><span class="nv"> </span><span class="s">Home#Air</span><span class="nv"> </span><span class="s">Song&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Duration</span><span class="p">:</span><span class="w"> </span><span class="nv">741</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">  </span><span class="s">&#39;song#Leaving</span><span class="nv"> </span><span class="s">Home#Monogram&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Duration</span><span class="p">:</span><span class="w"> </span><span class="nv">944</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
-<p>This allows interesting single queries like:</p>
-<ul>
-<li>get artist details and all their albums</li>
-<li>get album details and all the songs on that album</li>
-</ul>
+<p>Besides getting items of a single type,
+you can also <em>get artist details and albums</em> in a single query
+(<code>sk BETWEEN &quot;album#&quot; AND &quot;artist&quot;</code>).</p>
+<p>But choose wisely
+– queries can have only one sort key condition,
+so you can't also <em>get album details and songs</em>
+in a single query with this schema;
+sort keys <code>{Album}</code> and <code>{Album}#{Song}</code> would do it,
+at the expense of the first query.</p>
 </section>
-<p>However, it can be useful to put some
+<p>Sometimes, it can be useful to put some
 <strong>sub-entities on dedicated partitions</strong>,
-accepting that joins will have to be done in code
-(although this can be an advantage,
-since it allows querying multiple partitions in parallel).</p>
+accepting that joins will have to be done in code.</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
 <p>In the example above,
@@ -267,22 +273,22 @@ a popular artist with lots of songs can lead to:</p>
 which should fix throttling.</p>
 <p>The downside is that <em>list songs for artist</em>
 is now a two-step operation:
-first do one query for the albums,
-then do one query <em>per album</em> for the songs.
+first one query for the albums,
+then one query <em>per album</em> for the songs.
 The upside is that the per-album queries can be done in parallel,
 which wasn't possible before.</p>
 </section>
-<p>A consequence of single table design is that
-<strong>you need a GSI to list all items of a specific type</strong>
+<p>A consequence of this design is that
+<strong>you need a <abbr title="Global Secondary Index">GSI</abbr> to list items of a specific type</strong>
 (otherwise, you have to do a full table scan).
-Of note, exceeding GSI write limits
-will cause <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html">write throttling</a> of the main table;
-in the absence of a natural high-cardinality GSI partition key,
-a <a class="anchor" href="#composite-keys">composite key</a> or <a class="anchor" href="#partition-key-sharding">sharding</a> can help.</p>
-<p>A final advantage of using a single table is
+Of note, exceeding the <abbr title="Global Secondary Index">GSI</abbr> partition throughput limit
+will cause <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html">write throttling</a> on the main table;
+in the absence of a natural high-cardinality <abbr title="Global Secondary Index">GSI</abbr> partition key,
+<a class="anchor" href="#partition-key-sharding">sharding</a> or some other <a class="anchor" href="#composite-keys">composite key</a> can help.</p>
+<p>A final benefit of using a single table is
 <strong>better utilization with provisioned mode</strong>:
 usage gets averaged across entities and tends to be smoother,
-and traffic spikes can share the same spare capacity.</p>
+and spikes can share the same spare capacity.</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -293,20 +299,19 @@ and traffic spikes can share the same spare capacity.</p>
 <li><small>(unofficial)</small> <a class="external" href="https://www.alexdebrie.com/posts/dynamodb-single-table/">The What, Why, and When of Single-Table Design with DynamoDB</a></li>
 </ul>
 </section>
-<h2 id="gsi-overloading">GSI overloading<span class="headerlink">&nbsp;<a href="#gsi-overloading" title="permalink">#</a></span></h2>
-<p>Just like tables
-can have more than one type of item,
-so can GSIs –
-that is,
-you can put different things in the GSI partition/sort key attributes,
+<h2 id="gsi-overloading"><abbr title="Global Secondary Index">GSI</abbr> overloading<span class="headerlink">&nbsp;<a href="#gsi-overloading" title="permalink">#</a></span></h2>
+<p><abbr title="Global Secondary Index">GSI</abbr> overloading is just
+<strong><a class="anchor" href="#single-table-design">single table design</a> for indexes</strong>
+–
+you put different values in the <abbr title="Global Secondary Index">GSI</abbr> key attributes,
 depending on item type.
-This allows indexing more fields than the 20 GSIs per table quota,
-and may be cheaper too,
-since fewer GSIs can make better use of spare provisioned capacity.</p>
+This way you can index more attributes than the 20 <abbr title="Global Secondary Index">GSI</abbr>s per table quota,
+and it can be cheaper too,
+since fewer indexes make better use of spare provisioned capacity.</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
 <p>For a table that contains both artist and album items,
-a single GSI could be used for entirely different purposes:</p>
+a single <abbr title="Global Secondary Index">GSI</abbr> can be used for entirely different purposes:</p>
 <ul>
 <li>artist: partition key <code>artist#{Country}</code> – list artists by country</li>
 <li>album: partition key <code>album#{Genre}</code> – list albums by genre</li>
@@ -332,42 +337,46 @@ a single GSI could be used for entirely different purposes:</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-gsi-overloading.html">GSI overloading</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-gsi-overloading.html"><abbr title="Global Secondary Index">GSI</abbr> overloading</a></li>
 </ul>
 </section>
 <h2 id="partition-key-sharding">Partition key sharding<span class="headerlink">&nbsp;<a href="#partition-key-sharding" title="permalink">#</a></span></h2>
-<p>Sometimes, not even a partition key composed of multiple natural attributes
-is enough to spread the load evenly across partition;
-one way of dealing with this is to put items corresponding
-to a natural attribute on multiple partitions.</p>
-<p>The question is then, what should the partition key for an item be?
-One possibility is to use a <strong>random suffix</strong> from a known range;
-this still allows you to list items for a natural attribute
-by doing multipe queries, one for each suffix.</p>
+<p>Sometimes, a partition key composed of multiple natural attributes
+is not enough to
+<a class="internal" href="/dynamodb-model#spread-the-load">spread the load</a>
+evenly across partitions;
+you can deal with this by putting items
+with the <strong>same natural attributes</strong> on <strong>multiple partitions</strong>.</p>
+<p>But then what should the partition key be?
+One option is to use a <strong>random suffix</strong> from a known range;
+this still allows you to list items for a natural attribute value
+by doing multiple queries, one for each suffix.</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
-<p>For our table of songs,
-using the album as part of the partition key may not work,
-since not all songs are part of an album these days.
-Instead, we could use <code>{Artist}#{randrange(10)}</code> as partition key.
-Then, to list all the songs for an artist, we'd do:</p>
+<p>For a table of songs,
+using <em>Album</em> as the partition key won't work,
+since not all songs are released on an album;
+<em>Artist</em> always has a value,
+but some artists have hundreds or even thousands of songs,
+which can lead to throttling.</p>
+<p>Instead, we can use <code>{Artist}#{randrange(10)}</code> as partition key,
+which allows ten times as many items
+before we reach throughput limits.
+To list an artist's songs:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">for</span> <span class="n">shard</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
     <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">dynamodb</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">artist</span><span class="si">}</span><span class="s2">#</span><span class="si">{</span><span class="n">shard</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">):</span>
         <span class="k">yield</span> <span class="n">item</span>
 </code></pre></div>
-<p>Now we can have 10 times as many items
-before reaching throughput limits.</p>
 </section>
 <p>A downside of random suffixes is that you can't get a specific item,
-since you don't know what suffix you used for any given item.
-An alternative is to <strong>calculate the suffix</strong>
-from something that you do know,
-like the hash of an attribute modulo N.</p>
+because you don't know what its suffix is.
+A better option is to <strong>calculate the suffix</strong>
+from an attribute that you <em>do</em> know,
+for example using its hash modulo N.</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
-<p>Instead of a random number,
-we could use <code>{Artist}#{hash(Song) % 10)}</code>.
-Then, to get a song by artist and song title:</p>
+<p>With primary key <code>{Artist}#{hash(Song) % 10)}</code>,
+we can get a song like this:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">hash</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
     <span class="k">return</span> <span class="nb">int</span><span class="o">.</span><span class="n">from_bytes</span><span class="p">(</span><span class="n">sha256</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">digest</span><span class="p">())</span>
 
@@ -375,29 +384,29 @@ Then, to get a song by artist and song title:</p>
 <span class="n">dynamodb</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">artist</span><span class="si">}</span><span class="s2">#</span><span class="si">{</span><span class="n">shard</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">song_title</span><span class="p">)</span>
 </code></pre></div>
 </section>
-<p>Sharding may be even more important for GSIs,
-where a lot of times you want to list items by a low-cardinality attribute.</p>
+<p>A lot of times you need to <strong>list items by a low-cardinality attribute</strong>,
+so sharding may be even more important for <abbr title="Global Secondary Index">GSI</abbr>s.</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
-<p>Assuming you have dedicated album items,
-to list all the albums
-you could use a single GSI partition
-with partition key <code>albums</code> (literal string)
-and sort key <code>{Album}</code>,
-but this may overload the partition.</p>
-<p>To spread the load,
-you could use <code>album#{hash(Album} % 100}</code>
-as partition key
-if you don't care about them being sorted,
-or something like <code>album#{Album[0].lower()}</code>
-if you want them sorted alphabetically
-(but, careful about
-some first letters <a class="external" href="https://en.wikipedia.org/wiki/Letter_frequency#Relative_frequencies_of_the_first_letters_of_a_word_in_English_language">being more popular than others</a>,
-and some albums <a class="external" href="https://www.discogs.com/release/10506005--">not starting with a letter at all</a>).</p>
+<p>Assuming dedicated album items,
+you can list all the albums by putting them
+in a single <abbr title="Global Secondary Index">GSI</abbr> partition key called <code>albums</code>,
+but this will <em>definitely</em> cause throttling.</p>
+<p>To avoid it,
+you can use <abbr title="Global Secondary Index">GSI</abbr> partition key <code>album#{hash(Album} % 100}</code>
+if you don't care about the order,
+or something like <code>album#{Album[:2].lower()}</code> if you do
+(but likely more sophistication is needed –
+<code>th</code> will be a very common album title prefix,
+and some album titles <a class="external" href="https://www.discogs.com/release/10506005--">don't contain letters at all</a>).</p>
 </section>
-<p>One other benefit of sharding
-is that you can query them in parallel,
+<p>Even if throttling is not an issue
+(e.g. single infrequent reader),
+sharding allows you to
+<strong>query multiple partitions in parallel</strong>,
 which can speed up getting the entire result set.</p>
+<!-- FIXME: continue edit from here -->
+
 <hr />
 <p>The number of shards is a trade-off –
 too many shards means more queries,
@@ -425,7 +434,7 @@ or accept some downtime).</p>
 <p class="admonition-title">See also</p>
 <ul>
 <li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-sharding.html">Write sharding</a></li>
-<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes-gsi-sharding.html">GSI sharding</a></li>
+<li><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes-gsi-sharding.html"><abbr title="Global Secondary Index">GSI</abbr> sharding</a></li>
 </ul>
 </section>
 <h2 id="sparse-indexes">Sparse indexes<span class="headerlink">&nbsp;<a href="#sparse-indexes" title="permalink">#</a></span></h2>
@@ -441,15 +450,15 @@ or that are in a specific state.</p>
 <p class="admonition-title">Example</p>
 <p>Assuming you have dedicated album items,
 an alternative way to list all the albums
-is to have a GSI
+is to have a <abbr title="Global Secondary Index">GSI</abbr>
 with <code>{Album}</code> as partition key,
 and just scan the entire index
 (the primary key should be a dedicated attribute,
-say <em>AlbumsGSIPK</em>,
+say <em>Albums<abbr title="Global Secondary Index">GSI</abbr>PK</em>,
 so that only album items appear in the index;
 the sort key can be any other attribute).</p>
 <p>Or, to list only cover songs,
-you could have dedicated GSI
+you could have dedicated <abbr title="Global Secondary Index">GSI</abbr>
 with <em>CoverOfArtist</em> as primary key
 and <em>Song</em> as sort key.</p>
 </section>
@@ -464,7 +473,7 @@ and <em>Song</em> as sort key.</p>
 
 <p>In some cases, a global secondary index just doesn't cut it –
 maybe you want to model a many-to-one mapping
-(a GSI won't help here,
+(a <abbr title="Global Secondary Index">GSI</abbr> won't help here,
 since it can only map one attribute in the base table
 to another attribute in the index),
 or you want a strongly consistent index.</p>
