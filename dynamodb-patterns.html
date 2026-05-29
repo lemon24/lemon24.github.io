@@ -347,7 +347,7 @@ is not enough to
 evenly across partitions;
 you can deal with this by putting items
 with the <strong>same natural attributes</strong> on <strong>multiple partitions</strong>.</p>
-<p>But then what should the partition key be?
+<p>So, <strong>what partition key should you use?</strong>
 One option is to use a <strong>random suffix</strong> from a known range;
 this still allows you to list items for a natural attribute value
 by doing multiple queries, one for each suffix.</p>
@@ -405,31 +405,26 @@ and some album titles <a class="external" href="https://www.discogs.com/release/
 sharding allows you to
 <strong>query multiple partitions in parallel</strong>,
 which can speed up getting the entire result set.</p>
-<!-- FIXME: continue edit from here -->
-
 <hr />
-<p>The number of shards is a trade-off –
-too many shards means more queries,
-too few shards means you might still overload the partitions.</p>
-<p>Importantly, <strong>increasing the number of shards is non-trivial</strong>,
-so ideally you should avoid it if possible.</p>
-<p>One way to do it is
-to move to a new index (or just partition key prefix) entirely,
-which means you need to backfill existing items in the new index,
-and then switch to it.
-Alternatively, you could add new shards,
-and either keep old items on existing shards
-(e.g. by assigning them an &quot;epoch&quot; based on when they were created),
-or re-balance them
-(although this may not be possible
-without downtime / inconsistencies).</p>
-<p>Regardless of what you do,
-it requires support in application code,
-and careful orchestration when making the switch
-(for example,
-if you expose a <code>LastEvaluatedKey</code>-derived pagination token to users,
-you have either temporarily support both,
-or accept some downtime).</p>
+<p>So, <strong>how many shards should you have?</strong>
+That depends on the number, size, and how often you access the items,
+and is also a trade-off –
+too many shards means additional queries and latency,
+too few shards means you still overload the partitions sometimes.</p>
+<p>Importantly, <strong>increasing the number of shards is non-trivial</strong>.
+For tables, you usually need to rebalance the items in place.
+For indexes, it's cleaner to move to a new index,
+or if you just need to list items by type,
+you can put all new items on new shards.</p>
+<p>Regardless,
+you have to support it in code,
+do a backfill,
+and orchestrate the switch,
+which all become more complex
+if downtime and inconsistencies are not acceptable
+(e.g. if you expose a pagination token based on
+<a class="internal" href="/dynamodb-model#page-size">LastEvaluatedKey</a>,
+you may want to support both versions during the switch).</p>
 <section class="admonition tip">
 <p class="admonition-title">See also</p>
 <ul>
@@ -438,6 +433,8 @@ or accept some downtime).</p>
 </ul>
 </section>
 <h2 id="sparse-indexes">Sparse indexes<span class="headerlink">&nbsp;<a href="#sparse-indexes" title="permalink">#</a></span></h2>
+<!-- FIXME: continue edit from here -->
+
 <p>If an item doesn't have one of the attributes
 used as index partition/sort key,
 it won't appear in the index
