@@ -2,13 +2,484 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #article</title>
-  <updated>2026-04-16T09:00:00+00:00</updated>
+  <updated>2026-05-30T18:00:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
   </author>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index/_tags/article.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/dynamodb-patterns">
+    <id>https://death.andgravity.com/dynamodb-patterns</id>
+    <title>DynamoDB crash course: part 3 – design patterns</title>
+    <updated>2026-05-30T18:00:00+00:00</updated>
+    <content type="html">&lt;p&gt;This is the last part of a series
+covering core &lt;strong&gt;DynamoDB&lt;/strong&gt; concepts.
+The goal is to help you
+understand &lt;strong&gt;idiomatic usage&lt;/strong&gt; and &lt;strong&gt;trade-offs&lt;/strong&gt;
+in under an hour.&lt;/p&gt;
+&lt;p&gt;In the &lt;a class="internal" href="/dynamodb"&gt;first part&lt;/a&gt;,
+I summarized DynamoDB's main proposition to its users like so:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;data modeling complexity is always preferable to complexity coming from infrastructure maintenance, availability, and scalability&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Today, we're looking at the design patterns that help &lt;strong&gt;manage this complexity&lt;/strong&gt;,
+make the most of DynamoDB's &lt;a class="internal" href="/dynamodb-model"&gt;data model&lt;/a&gt; and &lt;a class="internal" href="/dynamodb-model#features"&gt;features&lt;/a&gt;,
+and work around its &lt;a class="internal" href="/dynamodb-model#limits"&gt;limits&lt;/a&gt;.&lt;/p&gt;
+&lt;details class="toc"&gt;
+&lt;summary&gt;Contents&lt;/summary&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#composite-keys"&gt;Composite keys&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#single-table-design"&gt;Single table design&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#gsi-overloading"&gt;GSI overloading&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#partition-key-sharding"&gt;Partition key sharding&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#sparse-indexes"&gt;Sparse indexes&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#base-table-indexes"&gt;Base table indexes&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#optimistic-locking"&gt;Optimistic locking&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/details&gt;
+&lt;h2 id="composite-keys"&gt;Composite keys&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#composite-keys" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Composite (aka synthetic) keys underpin most other patterns.&lt;/p&gt;
+&lt;p&gt;The idea is simple:
+&lt;strong&gt;keys don't have to be natural attributes&lt;/strong&gt; of your data,
+they can be &lt;strong&gt;composed of other attributes&lt;/strong&gt;
+that enable specific &lt;strong&gt;access patterns&lt;/strong&gt;.
+This works both with table and index keys.&lt;/p&gt;
+&lt;p&gt;How do you compose keys?
+By string concatenation, of course
+– I did say low level!
+(Careful with numbers though,
+they need padding to be useful in sort keys.)&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Example&lt;/p&gt;
+&lt;p&gt;To sort lexicographically by more than one attribute,
+you group them in a sort key, e.g. &lt;code&gt;{Album}#{Song}&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Or, in &lt;a class="anchor" href="#single-table-design"&gt;single table design&lt;/a&gt;,
+you distinguish between item types
+by prefixing keys with the type,
+e.g. &lt;code&gt;album#{Album}&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Or, in &lt;a class="anchor" href="#partition-key-sharding"&gt;partition key sharding&lt;/a&gt;,
+you spread the load on a &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; partition by splitting one partition key
+into multiple ones, e.g. &lt;code&gt;{Genre}#{shard}&lt;/code&gt;.&lt;/p&gt;
+&lt;/section&gt;
+&lt;p&gt;But denormalization has its trade-offs.
+For sort key &lt;code&gt;{Album}#{Song}&lt;/code&gt;,
+should &lt;em&gt;Album&lt;/em&gt; and &lt;em&gt;Song&lt;/em&gt; also be separate attributes?
+If yes,
+you need to ensure they never change,
+but you can use them in indexes
+(e.g. a &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; with &lt;em&gt;Album&lt;/em&gt; as primary key).
+If no,
+the item cannot become inconsistent,
+but you always need to parse the key.&lt;/p&gt;
+&lt;p&gt;This was inconvenient enough
+that DynamoDB finally
+added &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.MultiAttributeKeys"&gt;multi-attribute keys&lt;/a&gt; support to &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt;s in 2025
+(although not inconvenient enough to also add it to tables).&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-blocks.html#data-modeling-blocks-composite"&gt;Data modeling building blocks # Composite sort key&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.DesignPattern.MultiAttributeKeys.html"&gt;Multi-attribute keys pattern&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h2 id="single-table-design"&gt;Single table design&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#single-table-design" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;The AWS guidance &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html"&gt;guidance&lt;/a&gt; is to use as few tables as possible:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;As a general rule,
+you should maintain as few tables as possible in a DynamoDB application.
+[...]
+A single table with inverted indexes can usually enable simple queries
+to create and retrieve the complex hierarchical data structures
+required by your application.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;This culminates in single table design,
+where you put &lt;strong&gt;all entities in the same table&lt;/strong&gt;,
+and tell them apart based on the key format, usually using a prefix.
+With this pattern,
+one DynamoDB table corresponds
+to a whole relational database.&lt;/p&gt;
+&lt;p&gt;The easiest way is to put
+&lt;strong&gt;items related to a top-level entity on the same partition&lt;/strong&gt;.
+The main benefit is that
+joins with the top-level entity become trivial.
+A second one is that
+you can sometimes get different entity types in a single query,
+which can be both faster and cheaper
+(fewer queries; small items pack into fewer capacity units).&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Example&lt;/p&gt;
+&lt;p&gt;You can group items related to an &lt;em&gt;Artist&lt;/em&gt; on the same partition,
+with sort keys like
+&lt;code&gt;artist&lt;/code&gt;, &lt;code&gt;album#{Album}&lt;/code&gt;, and &lt;code&gt;song#{Album}#{Song}&lt;/code&gt;.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="YAML"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# table Music (partition key: Artist, sort key: sk)&lt;/span&gt;
+&lt;span class="nt"&gt;Solar Fields&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#Leaving&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Home&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Genre&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Electronic&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;artist&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Variations&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;[&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Solarfields&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;song#Leaving&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Home#Air&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Song&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Duration&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;741&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;song#Leaving&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Home#Monogram&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Duration&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;944&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Besides getting items of a single type,
+you can also &lt;em&gt;get artist details and albums&lt;/em&gt; in a single query
+(&lt;code&gt;sk BETWEEN &amp;quot;album#&amp;quot; AND &amp;quot;artist&amp;quot;&lt;/code&gt;).&lt;/p&gt;
+&lt;p&gt;But choose wisely
+– queries can have only one sort key condition,
+so you can't also &lt;em&gt;get album details and songs&lt;/em&gt;
+in a single query with this schema;
+sort keys &lt;code&gt;{Album}&lt;/code&gt; and &lt;code&gt;{Album}#{Song}&lt;/code&gt; would do it,
+at the expense of the first query.&lt;/p&gt;
+&lt;/section&gt;
+&lt;p&gt;&lt;a id="dedicated-partitions"&gt;&lt;/a&gt;
+Sometimes, it can be useful to put some
+&lt;strong&gt;sub-entities on dedicated partitions&lt;/strong&gt;,
+accepting that joins will have to be done in code.&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Example&lt;/p&gt;
+&lt;p&gt;In the example above,
+a popular artist with lots of songs can lead to:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;throttling due to &lt;a class="internal" href="/dynamodb-model#partition-throughput"&gt;partition throughput&lt;/a&gt; limits&lt;/li&gt;
+&lt;li&gt;slow &lt;em&gt;list songs for artist&lt;/em&gt; due to sequential &lt;a class="internal" href="/dynamodb-model#page-size"&gt;paginated queries&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Perhaps it's better to put songs in each album on separate partitions:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;partition key &lt;code&gt;artist#{Artist}&lt;/code&gt;, sort key &lt;code&gt;artist&lt;/code&gt; or &lt;code&gt;album#{Album}&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;partition key &lt;code&gt;song#{Artist}#{Album}&lt;/code&gt;, sort key &lt;code&gt;{Song}&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="YAML"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# table Music (partition key: pk, sort key: sk)&lt;/span&gt;
+&lt;span class="s"&gt;&amp;#39;artist#Solar&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Fields&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#Leaving&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Home&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Genre&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Electronic&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;artist&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Variations&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;[&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Solarfields&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="s"&gt;&amp;#39;song#Solar&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Fields#Leaving&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Home&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;Air&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Song&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Duration&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;741&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;Monogram&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Duration&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;944&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;This spreads the load onto multiple partitions,
+which should fix throttling.&lt;/p&gt;
+&lt;p&gt;The downside is that &lt;em&gt;list songs for artist&lt;/em&gt;
+is now a two-step operation:
+first one query for the albums,
+then one query &lt;em&gt;per album&lt;/em&gt; for the songs.
+The upside is that the per-album queries can be done in parallel,
+which wasn't possible before.&lt;/p&gt;
+&lt;/section&gt;
+&lt;p&gt;A consequence of this design is that
+&lt;strong&gt;you need a &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; to list items of a specific type&lt;/strong&gt;
+(otherwise, you have to do a full table scan).
+Of note, exceeding the &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; partition throughput limit
+will cause &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html"&gt;write throttling&lt;/a&gt; on the base table;
+in the absence of a natural high-cardinality &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; partition key,
+&lt;a class="anchor" href="#partition-key-sharding"&gt;sharding&lt;/a&gt; or some other &lt;a class="anchor" href="#composite-keys"&gt;composite key&lt;/a&gt; can help.&lt;/p&gt;
+&lt;p&gt;A final benefit of using a single table is
+&lt;strong&gt;better utilization with provisioned mode&lt;/strong&gt;:
+usage gets averaged across entities and tends to be smoother,
+and spikes can share the same spare capacity.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html"&gt;NoSQL design&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-foundations.html#data-modeling-foundations-single"&gt;Data modeling foundations # Single table design&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-relational-modeling.html#bp-relational-modeling-joins"&gt;Relational modeling # JOIN operations&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;small&gt;(blog)&lt;/small&gt; &lt;a class="external" href="https://aws.amazon.com/blogs/database/single-table-vs-multi-table-design-in-amazon-dynamodb/"&gt;Single-table vs. multi-table design in Amazon DynamoDB&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;small&gt;(unofficial)&lt;/small&gt; &lt;a class="external" href="https://www.alexdebrie.com/posts/dynamodb-single-table/"&gt;The What, Why, and When of Single-Table Design with DynamoDB&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h2 id="gsi-overloading"&gt;&lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; overloading&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#gsi-overloading" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; overloading is just
+&lt;strong&gt;&lt;a class="anchor" href="#single-table-design"&gt;single table design&lt;/a&gt; for indexes&lt;/strong&gt;
+–
+you put different values in the &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; key attributes,
+depending on item type.
+This way you can index more attributes than the 20 &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt;s per table quota,
+and it can be cheaper too,
+since fewer indexes make better use of spare provisioned capacity.&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Example&lt;/p&gt;
+&lt;p&gt;For a table that contains both artist and album items,
+a single &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; can be used for entirely different purposes:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;artist: partition key &lt;code&gt;artist#{Country}&lt;/code&gt; – list artists by country&lt;/li&gt;
+&lt;li&gt;album: partition key &lt;code&gt;album#{Genre}&lt;/code&gt; – list albums by genre&lt;/li&gt;
+&lt;/ul&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="YAML"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# table Music (partition key: Artist, sort key: sk)&lt;/span&gt;
+&lt;span class="nt"&gt;2 Bit Pie&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#2&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Pie&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Island&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; gsi1pk&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#Electronic&amp;#39;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;artist&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; gsi1pk&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;artist#United&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Kingdom&amp;#39;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="nt"&gt;Ishome&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#Confession&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; gsi1pk&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#Electronic&amp;#39;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;artist&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; gsi1pk&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;artist#Russia&amp;#39;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="YAML"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# GSI GSI1 (partition key: gsi1pk, sort key: Artist)&lt;/span&gt;
+&lt;span class="s"&gt;&amp;#39;artist#United&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Kingdom&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;2 Bit Pie&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; sk&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;artist&amp;#39;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="s"&gt;&amp;#39;artist#Russia&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Ishome&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; sk&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;artist&amp;#39;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="s"&gt;&amp;#39;album#Electronic&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;2 Bit Pie&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; sk&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#2&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Pie&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Island&amp;#39;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Ishome&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; sk&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#Confession&amp;#39;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/section&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-gsi-overloading.html"&gt;&lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; overloading&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h2 id="partition-key-sharding"&gt;Partition key sharding&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#partition-key-sharding" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Sometimes, a partition key composed of multiple natural attributes
+is not enough to
+&lt;a class="internal" href="/dynamodb-model#spread-the-load"&gt;spread the load&lt;/a&gt;
+evenly across partitions;
+you can deal with this by putting items
+with the &lt;strong&gt;same natural attributes&lt;/strong&gt; on &lt;strong&gt;multiple partitions&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;So, &lt;strong&gt;what partition key should you use?&lt;/strong&gt;
+One option is to use a &lt;strong&gt;random suffix&lt;/strong&gt; from a known range;
+this still allows you to list items for a natural attribute value
+by doing multiple queries, one for each suffix.&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Example&lt;/p&gt;
+&lt;p&gt;For a table of songs,
+using &lt;em&gt;Album&lt;/em&gt; as the partition key won't work,
+since not all songs are released on an album;
+&lt;em&gt;Artist&lt;/em&gt; always has a value,
+but some artists have hundreds or even thousands of songs,
+which can lead to throttling.&lt;/p&gt;
+&lt;p&gt;Instead, we can use &lt;code&gt;{Artist}#{randrange(10)}&lt;/code&gt; as partition key,
+which allows ten times as many items
+before we reach throughput limits.
+To list an artist's songs:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;shard&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="nb"&gt;range&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;dynamodb&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;artist&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;#&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;shard&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/section&gt;
+&lt;p&gt;A downside of random suffixes is that you can't get a specific item,
+because you don't know what its suffix is.
+A better option is to &lt;strong&gt;calculate the suffix&lt;/strong&gt;
+from an attribute that you &lt;em&gt;do&lt;/em&gt; know,
+for example using its hash modulo N.&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Example&lt;/p&gt;
+&lt;p&gt;With primary key &lt;code&gt;{Artist}#{hash(Song) % 10)}&lt;/code&gt;,
+we can get a song like this:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;hash&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;from_bytes&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sha256&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;encode&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;digest&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;
+
+&lt;span class="n"&gt;shard&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;hash&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;song_title&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="mi"&gt;10&lt;/span&gt;
+&lt;span class="n"&gt;dynamodb&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get_item&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;artist&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;#&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;shard&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;song_title&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/section&gt;
+&lt;p&gt;A lot of times you need to &lt;strong&gt;list items by a low-cardinality attribute&lt;/strong&gt;,
+so sharding may be even more important for &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt;s.&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Example&lt;/p&gt;
+&lt;p&gt;Assuming dedicated album items,
+you can list all the albums by putting them
+in a single &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; partition key called &lt;code&gt;albums&lt;/code&gt;,
+but this will &lt;em&gt;definitely&lt;/em&gt; cause throttling.&lt;/p&gt;
+&lt;p&gt;To avoid it,
+you can use &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; partition key &lt;code&gt;album#{hash(Album} % 100}&lt;/code&gt;
+if you don't care about the order,
+or something like &lt;code&gt;album#{Album[:2].lower()}&lt;/code&gt; if you do
+(but likely more sophistication is needed –
+&lt;code&gt;th&lt;/code&gt; will be a very common album title prefix,
+and some album titles &lt;a class="external" href="https://www.discogs.com/release/10506005--"&gt;don't contain letters at all&lt;/a&gt;).&lt;/p&gt;
+&lt;/section&gt;
+&lt;p&gt;Even if throttling is not an issue
+(e.g. single infrequent reader),
+sharding allows you to
+&lt;strong&gt;query multiple partitions in parallel&lt;/strong&gt;,
+which can speed up getting the entire result set.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;So, &lt;strong&gt;how many shards should you have?&lt;/strong&gt;
+That depends on the number, size, and how often you access the items,
+and is also a trade-off –
+too many shards means additional queries and latency,
+too few shards means you still overload the partitions sometimes.&lt;/p&gt;
+&lt;p&gt;Importantly, &lt;strong&gt;increasing the number of shards is non-trivial&lt;/strong&gt;.
+For tables, you usually need to rebalance the items in place.
+For indexes, it's cleaner to move to a new index,
+or if you just need to list items by type,
+you can put all new items on new shards.&lt;/p&gt;
+&lt;p&gt;Regardless,
+you have to support it in code,
+do a backfill,
+and orchestrate the migration,
+which all become more complex
+if downtime and inconsistencies are not acceptable
+(e.g. if you expose a pagination token based on
+&lt;a class="internal" href="/dynamodb-model#page-size"&gt;LastEvaluatedKey&lt;/a&gt;,
+you may want to support both versions during the switch).&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-sharding.html"&gt;Write sharding&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes-gsi-sharding.html"&gt;&lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; sharding&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h2 id="sparse-indexes"&gt;Sparse indexes&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#sparse-indexes" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;An item with missing index partition/sort key attributes
+&lt;strong&gt;won't appear in the index&lt;/strong&gt;,
+and you won't pay for it.
+This can be used deliberately to query a subset of the items in the table,
+like those of a specific type or in a specific state.&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Example&lt;/p&gt;
+&lt;p&gt;Assuming dedicated album items,
+an alternative way to list all the albums
+is to have a &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; with &lt;code&gt;{Album}&lt;/code&gt; as partition key,
+and just scan the entire index
+(the primary key has to be a dedicated attribute
+that only albums have,
+so that only album items appear in the index).&lt;/p&gt;
+&lt;p&gt;Or, you can use  a dedicated &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; with &lt;em&gt;CoverOf&lt;/em&gt; as primary key to list cover songs.&lt;/p&gt;
+&lt;/section&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-indexes-general-sparse-indexes.html"&gt;Sparse indexes&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h2 id="base-table-indexes"&gt;Base table indexes&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#base-table-indexes" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;!-- TODO: this is not from official docs, lmk if it has a standard name --&gt;
+
+&lt;p&gt;In some cases, &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt;s won't cut it –
+maybe you need a
+&lt;strong&gt;&lt;a class="internal" href="/dynamodb-model#gsi-eventual-consistency"&gt;strongly consistent&lt;/a&gt; index&lt;/strong&gt;,
+or need to model a &lt;strong&gt;many-to-one relationship&lt;/strong&gt;
+(indexes map &lt;em&gt;one&lt;/em&gt; item in the base table
+to &lt;em&gt;one&lt;/em&gt; item in the index).&lt;/p&gt;
+&lt;p&gt;Instead, you can maintain an &lt;strong&gt;index in the base table&lt;/strong&gt;
+by having additional index items associated with the main item;
+to guarantee atomic updates,
+use &lt;a class="internal" href="/dynamodb-model#transactions"&gt;transactions&lt;/a&gt;.
+You then go from the main item to the index items via a main item attribute,
+and from the index items to the main item via their partition key.&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Example&lt;/p&gt;
+&lt;p&gt;Songs have different identifiers in external systems,
+such as &lt;a class="external" href="https://en.wikipedia.org/wiki/International_Standard_Recording_Code"&gt;&lt;abbr title="International Standard Recording Code"&gt;ISRC&lt;/abbr&gt;&lt;/a&gt;, &lt;a class="external" href="https://en.wikipedia.org/wiki/International_Standard_Musical_Work_Code"&gt;&lt;abbr title="International Standard Musical Work Code"&gt;ISWC&lt;/abbr&gt;&lt;/a&gt;, or &lt;a class="external" href="https://musicbrainz.org/doc/MusicBrainz_Identifier"&gt;&lt;abbr title="MusicBrainz Identifier"&gt;MBID&lt;/abbr&gt;&lt;/a&gt;.
+To query songs by multiple external ids,
+you'd structure your database like this:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;song&lt;ul&gt;
+&lt;li&gt;partition key &lt;code&gt;song#{Artist}#{Album}&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;sort key &lt;code&gt;{Song}&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;external_{type}&lt;/code&gt;: &lt;code&gt;id&lt;/code&gt;, ...&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;external ids&lt;ul&gt;
+&lt;li&gt;partition key &lt;code&gt;external#{type}#{id}&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;sort key &lt;code&gt;song#{Artist}#{Album}#{Song}&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;(Alternatively, you &lt;em&gt;could&lt;/em&gt; have
+one &lt;a class="anchor" href="#sparse-indexes"&gt;sparse index&lt;/a&gt; per external id type,
+but then you lose strong consistency, and risk running out of &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt;s).&lt;/p&gt;
+&lt;/section&gt;
+&lt;p&gt;Note that modeling one-to-many relationships isn't this involved,
+since it fits neatly into the related-items-same-partition variant
+of &lt;a class="anchor" href="#single-table-design"&gt;single table design&lt;/a&gt;.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItemCollections.html"&gt;Working with item collections&lt;/a&gt; (modeling one-to-many relationships)&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-adjacency-graphs.html"&gt;Many-to-many relationships&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;h2 id="optimistic-locking"&gt;Optimistic locking&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#optimistic-locking" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;a class="external" href="https://en.wikipedia.org/wiki/Optimistic_concurrency_control"&gt;Optimistic locking&lt;/a&gt; is a concurrency control method
+useful when conflicts are rare,
+so instead of acquiring a lock to do changes,
+you check if someone else changed the data right before commiting,
+as part of an atomic operation.&lt;/p&gt;
+&lt;p&gt;In DynamoDB,
+that operation is a &lt;a class="internal" href="/dynamodb-model#conditional-writes"&gt;conditional write&lt;/a&gt;;
+items get an integer version attribute, and
+every time you want to update an item, you:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;read the item, including the version&lt;/li&gt;
+&lt;li&gt;increment the version and modify the item&lt;/li&gt;
+&lt;li&gt;update the item, using a condition expression to ensure the version matches&lt;ol&gt;
+&lt;li&gt;if successful, you're done&lt;/li&gt;
+&lt;li&gt;else, start over from the beginning&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;You can do also this in transactions
+to update groups of related items,
+like in the &lt;a class="anchor" href="#base-table-indexes"&gt;base table index&lt;/a&gt; pattern above,
+with only the main item needing a version.&lt;/p&gt;
+&lt;p&gt;The upside of optimistic locking is that
+it is &lt;strong&gt;faster on average&lt;/strong&gt;,
+since updates usually succeed on the first try;
+for fewer conflicts,
+use &lt;a class="internal" href="/dynamodb-model#eventual-consistency"&gt;strongly consistent reads&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;The downside is that it &lt;strong&gt;requires explicit support&lt;/strong&gt; –
+it must be possible to start over from the beginning,
+which complicates logic,
+especially if
+you need to interact with other systems
+besides updating the item
+(e.g. to send a notification).&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/BestPractices_ImplementingVersionControl.html"&gt;Implementing version control&lt;/a&gt; via optimistic locking (Python example)&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBMapper.OptimisticLocking.html"&gt;Optimistic locking with version number&lt;/a&gt; (Java example)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/section&gt;
+&lt;hr /&gt;
+&lt;p&gt;Anyway, that's it for now.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;See also&lt;/p&gt;
+&lt;p&gt;For mode details and examples, check out the official documentation:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling.html"&gt;Data modeling&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/data-modeling-schemas.html"&gt;Data modeling schemas&lt;/a&gt; (worked examples)&lt;/li&gt;
+&lt;/ul&gt;
+ &lt;!-- TODO: maybe also link to videos --&gt;
+
+&lt;/section&gt;
+&lt;p&gt;&lt;strong&gt;Learned something new today?&lt;/strong&gt; Share it with others, it really helps! &lt;span class="text-large"&gt;
+&lt;span class="share-icons"&gt;
+&lt;a
+    class="share-icon pycoders color"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+&gt;PyCoder's Weekly&lt;/a&gt;
+&lt;a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/dynamodb-patterns&amp;t=DynamoDB%20crash%20course%3A%20part%203%20%E2%80%93%20design%20patterns"
+&gt;HN&lt;/a&gt;
+&lt;a
+    class="share-icon bluesky color"
+    href="https://bsky.%61%70%70/intent/compose?text=DynamoDB%20crash%20course%3A%20part%203%20%E2%80%93%20design%20patterns%20https%3A//death.andgravity.com/dynamodb-patterns"
+&gt;Bluesky&lt;/a&gt;
+&lt;!--
+&lt;a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/dynamodb-patterns&amp;title=DynamoDB%20crash%20course%3A%20part%203%20%E2%80%93%20design%20patterns"
+&gt;Reddit&lt;/a&gt;
+--&gt;
+&lt;a
+    class="share-icon linkedin color"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/dynamodb-patterns"
+&gt;linkedin&lt;/a&gt;
+&lt;a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=DynamoDB%20crash%20course%3A%20part%203%20%E2%80%93%20design%20patterns&amp;url=https%3A//death.andgravity.com/dynamodb-patterns&amp;via=_andgravity"
+&gt;Twitter&lt;/a&gt;
+&lt;/span&gt;
+&lt;/span&gt;&lt;/p&gt;
+
+
+</content>
+    <link href="https://death.andgravity.com/dynamodb-patterns" rel="alternate"/>
+    <summary>This is the last part of a series covering core DynamoDB philosophy, concepts and patterns; the goal to help you understand idiomatic usage and trade-offs in under an hour. Today, we're looking at data modeling patterns – how to manage the complexity that arises from DynamoDB being so low level.</summary>
+    <published>2026-05-30T15:00:00+00:00</published>
+  </entry>
   <entry xml:base="https://death.andgravity.com/hettinger">
     <id>https://death.andgravity.com/hettinger</id>
     <title>Learn Python object-oriented programming with Raymond Hettinger</title>
@@ -267,9 +738,9 @@ you may only want substitutability in some places
     <content type="html">&lt;p&gt;This is part two of a series
 covering core &lt;strong&gt;DynamoDB&lt;/strong&gt; concepts,
 from &lt;a class="internal" href="/dynamodb"&gt;philosophy&lt;/a&gt;
-all the way to &lt;strong&gt;single-table design&lt;/strong&gt;.
-The goal is to get you
-to understand &lt;strong&gt;idiomatic usage&lt;/strong&gt; and &lt;strong&gt;trade-offs&lt;/strong&gt;
+all the way to &lt;a class="internal" href="/dynamodb-patterns"&gt;single-table design&lt;/a&gt;.
+The goal is to help you
+understand &lt;strong&gt;idiomatic usage&lt;/strong&gt; and &lt;strong&gt;trade-offs&lt;/strong&gt;
 in under an hour.&lt;/p&gt;
 &lt;p&gt;Today, we're looking at the DynamoDB data model –
 &lt;strong&gt;what the main abstractions are&lt;/strong&gt;,
@@ -648,12 +1119,18 @@ a global secondary index is &lt;strong&gt;just a table&lt;/strong&gt;:
 it has its own &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.ThroughputConsiderations"&gt;separate capacity&lt;/a&gt;,
 no limits on size or number of items,
 and the same &lt;a class="anchor" href="#partition-throughput"&gt;partition throughput&lt;/a&gt; limits apply.&lt;/p&gt;
-&lt;p&gt;Despite &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt;s being updated &lt;a class="anchor" href="#eventual-consistency"&gt;asynchronously&lt;/a&gt;,
-an index without enough capacity to process the updates
-will cause &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html"&gt;write throttling&lt;/a&gt;.
-To retrieve attributes not in the index,
+&lt;p&gt;&lt;a id="gsi-eventual-consistency"&gt;&lt;/a&gt;
+&lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt;s are updated asynchronously –
+that is, they are &lt;strong&gt;always &lt;a class="anchor" href="#eventual-consistency"&gt;eventually consistent&lt;/a&gt;&lt;/strong&gt;.
+Despite this,
+an index without enough capacity
+will cause base table &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html"&gt;write throttling&lt;/a&gt;.
+To retrieve attributes not projected in the index,
 you have to get them yourself from the table
-(&lt;a class="anchor" href="#batch-operations"&gt;batch operations&lt;/a&gt; can speed this up).&lt;/p&gt;
+(&lt;a class="anchor" href="#batch-operations"&gt;batch operations&lt;/a&gt; can speed this up).
+There is a quota of &lt;strong&gt;20 &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt;s per table&lt;/strong&gt;,
+and while you can ask for an increase,
+the docs hint needing more is a &lt;a class="internal" href="/dynamodb-patterns#gsi-overloading"&gt;design issue&lt;/a&gt;.&lt;/p&gt;
 &lt;section class="admonition note"&gt;
 &lt;p class="admonition-title"&gt;Example&lt;/p&gt;
 &lt;p&gt;&lt;small&gt;(from &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=query%20the%20data%20by%20Genre%20and%20Album"&gt;here&lt;/a&gt;)&lt;/small&gt;
@@ -785,7 +1262,7 @@ since they are &lt;strong&gt;only the way to run logic server-side&lt;/strong&gt
 while the item is being modified.
 You can use conditional writes
 to build higher level abstractions like
-optimistic locking, &lt;!-- TODO: link --&gt;
+&lt;a class="internal" href="/dynamodb-patterns#optimistic-locking"&gt;optimistic locking&lt;/a&gt;,
 &lt;a class="external" href="https://github.com/awslabs/amazon-dynamodb-lock-client"&gt;distributed locks&lt;/a&gt;,
 and atomic counters.&lt;sup class="footnote-ref" id="fnref-15"&gt;&lt;a href="#fn-15"&gt;15&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
 &lt;section class="admonition tip"&gt;
@@ -859,7 +1336,9 @@ and automatic &lt;a class="external" href="https://docs.aws.amazon.com/amazondyn
 &lt;/section&gt;
 &lt;hr /&gt;
 &lt;p&gt;Anyway, that's it for now.&lt;/p&gt;
-&lt;p&gt;In the next article, we'll have a closer look at core DynamoDB &lt;strong&gt;design patterns&lt;/strong&gt;,
+&lt;p&gt;In the next article,
+we'll have a closer look at
+&lt;a class="internal" href="/dynamodb-patterns"&gt;core DynamoDB &lt;strong&gt;design patterns&lt;/strong&gt;&lt;/a&gt;,
 including the fundamental &lt;strong&gt;single-table design&lt;/strong&gt;.&lt;/p&gt;
 &lt;p&gt;&lt;strong&gt;Learned something new today?&lt;/strong&gt; Share it with others, it really helps! &lt;span class="text-large"&gt;
 &lt;span class="share-icons"&gt;
@@ -973,14 +1452,17 @@ This is presumably because the size of a capacity unit
 &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=4%20KB%20read%20capacity%20unit%20size"&gt;can increase&lt;/a&gt; over time. &lt;a href="#fnref-9" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;li id="fn-10"&gt;&lt;p&gt;Yes, this includes just counting them. &lt;a href="#fnref-10" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;li id="fn-11"&gt;&lt;p&gt;If there is no good natural partition key,
-you can make one by sharding a low-cardinality attribute, &lt;!-- TODO: link --&gt;
+you can make one by &lt;a class="internal" href="/dynamodb-patterns#partition-key-sharding"&gt;sharding&lt;/a&gt; a low-cardinality attribute,
 which we'll cover in the next article. &lt;a href="#fnref-11" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;li id="fn-12"&gt;&lt;p&gt;You could make it twice as fast by querying from both ends,
 but probably no faster,
 since for &lt;a class="internal" href="/pwned#binary-skipping"&gt;binary search&lt;/a&gt;
 you'd need to jump in the middle of two sort keys.
 Unsurprisingly,
-we'll look at a potential solution in the next article. &lt;a href="#fnref-12" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+we'll look at
+&lt;a class="internal" href="/dynamodb-patterns#dedicated-partitions"&gt;potential&lt;/a&gt;
+&lt;a class="internal" href="/dynamodb-patterns#partition-key-sharding"&gt;solutions&lt;/a&gt;
+in the next article. &lt;a href="#fnref-12" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;li id="fn-13"&gt;&lt;p&gt;This is the same as a &lt;a class="external" href="https://en.wikipedia.org/wiki/Database_index#Covering_index"&gt;covering index&lt;/a&gt; in relational databases. &lt;a href="#fnref-13" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;li id="fn-14"&gt;&lt;p&gt;Or better said, &lt;em&gt;&lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html#ddb-intro-resilience"&gt;availability zones&lt;/a&gt;&lt;/em&gt;. &lt;a href="#fnref-14" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;li id="fn-15"&gt;&lt;p&gt;Although you can also use update expressions for &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.AtomicCounters"&gt;atomic counters&lt;/a&gt;. &lt;a href="#fnref-15" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
@@ -988,7 +1470,7 @@ we'll look at a potential solution in the next article. &lt;a href="#fnref-12" c
 &lt;/section&gt;
 </content>
     <link href="https://death.andgravity.com/dynamodb-model" rel="alternate"/>
-    <summary>This is part two of a series covering core DynamoDB concepts, from philosophy all the way to single-table design. The goal is to get you to understand idiomatic usage and trade-offs in under an hour. Today, we're looking at the DynamoDB data model – what the main abstractions are, what you can do with them, and how they scale.</summary>
+    <summary>This is part two of a series covering core DynamoDB philosophy, concepts and patterns; the goal to help you understand idiomatic usage and trade-offs in under an hour. Today, we're looking at the DynamoDB data model – what the main abstractions are, what you can do with them, and how they scale.</summary>
     <published>2026-02-10T10:35:00+00:00</published>
   </entry>
   <entry xml:base="https://death.andgravity.com/dynamodb">
@@ -997,9 +1479,10 @@ we'll look at a potential solution in the next article. &lt;a href="#fnref-12" c
     <updated>2026-01-27T17:00:00+00:00</updated>
     <content type="html">&lt;p&gt;This is part one of a series
 covering core &lt;strong&gt;DynamoDB&lt;/strong&gt; concepts and patterns,
-from the data model and features all the way up to &lt;strong&gt;single-table design&lt;/strong&gt;.&lt;/p&gt;
-&lt;p&gt;The goal is to get you
-to understand what &lt;strong&gt;idiomatic usage&lt;/strong&gt; looks like and
+from the &lt;a class="internal" href="/dynamodb-model"&gt;data model and features&lt;/a&gt;
+all the way to &lt;a class="internal" href="/dynamodb-patterns"&gt;single-table design&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;The goal is to help you
+understand what &lt;strong&gt;idiomatic usage&lt;/strong&gt; looks like and
 what the &lt;strong&gt;trade-offs&lt;/strong&gt; are
 in under an hour,
 providing entry points to detailed documentation.&lt;/p&gt;
@@ -1129,7 +1612,7 @@ is always preferable to complexity coming from
 infrastructure maintenance, availability, and scalability&lt;/strong&gt;
 (what &lt;abbr title="Amazon Web Services"&gt;AWS&lt;/abbr&gt; marketing calls &amp;quot;undifferentiated heavy lifting&amp;quot;).&lt;/p&gt;
 &lt;p&gt;To help manage this complexity,
-a number of design patterns have arisen,
+a number of &lt;a class="internal" href="/dynamodb-patterns"&gt;design patterns&lt;/a&gt; have arisen,
 covered extensively by the official documentation,
 and which we'll discuss in a future article.
 Even so, the toll can be heavy –
@@ -1245,7 +1728,7 @@ and you'll run out of money before &lt;abbr title="Amazon Web Services"&gt;AWS&l
 &lt;/section&gt;
 </content>
     <link href="https://death.andgravity.com/dynamodb" rel="alternate"/>
-    <summary>This is part one of a series covering core DynamoDB concepts and patterns, all the way up to single-table design; the goal is to get you to understand idiomatic usage and trade-offs in under an hour. Today, we're looking at what DynamoDB is and why it is that way.</summary>
+    <summary>This is part one of a series covering core DynamoDB philosophy, concepts and patterns; the goal to help you understand idiomatic usage and trade-offs in under an hour. Today, we're looking at what DynamoDB is and why it is that way.</summary>
     <published>2026-01-23T08:40:00+00:00</published>
   </entry>
   <entry xml:base="https://death.andgravity.com/over-composition">

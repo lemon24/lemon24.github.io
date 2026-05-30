@@ -31,14 +31,14 @@
 
 
 <title>DynamoDB crash course: part 2 – data model - death and gravity</title>
-<meta name="description" content="This is part two of a series covering core DynamoDB concepts, from philosophy all the way to single-table design. The goal is to get you to understand idiomatic usage and trade-offs in under an hour. Today, we&#39;re looking at the DynamoDB data model – what the main abstractions are, what you can do with them, and how they scale." />
+<meta name="description" content="This is part two of a series covering core DynamoDB philosophy, concepts and patterns; the goal to help you understand idiomatic usage and trade-offs in under an hour. Today, we&#39;re looking at the DynamoDB data model – what the main abstractions are, what you can do with them, and how they scale." />
 
 
 <meta property="og:title" content="DynamoDB crash course: part 2 – data model">
 <meta property="og:site_name" content="death and gravity">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://death.andgravity.com/dynamodb-model">
-<meta property="og:description" content="This is part two of a series covering core DynamoDB concepts, from philosophy all the way to single-table design. The goal is to get you to understand idiomatic usage and trade-offs in under an hour. Today, we&#39;re looking at the DynamoDB data model – what the main abstractions are, what you can do with them, and how they scale.">
+<meta property="og:description" content="This is part two of a series covering core DynamoDB philosophy, concepts and patterns; the goal to help you understand idiomatic usage and trade-offs in under an hour. Today, we&#39;re looking at the DynamoDB data model – what the main abstractions are, what you can do with them, and how they scale.">
 
 
 
@@ -137,9 +137,9 @@ window.addEventListener('resize', set_vh);
 <p>This is part two of a series
 covering core <strong>DynamoDB</strong> concepts,
 from <a class="internal" href="/dynamodb">philosophy</a>
-all the way to <strong>single-table design</strong>.
-The goal is to get you
-to understand <strong>idiomatic usage</strong> and <strong>trade-offs</strong>
+all the way to <a class="internal" href="/dynamodb-patterns">single-table design</a>.
+The goal is to help you
+understand <strong>idiomatic usage</strong> and <strong>trade-offs</strong>
 in under an hour.</p>
 <p>Today, we're looking at the DynamoDB data model –
 <strong>what the main abstractions are</strong>,
@@ -518,12 +518,18 @@ a global secondary index is <strong>just a table</strong>:
 it has its own <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.ThroughputConsiderations">separate capacity</a>,
 no limits on size or number of items,
 and the same <a class="anchor" href="#partition-throughput">partition throughput</a> limits apply.</p>
-<p>Despite <abbr title="Global Secondary Index">GSI</abbr>s being updated <a class="anchor" href="#eventual-consistency">asynchronously</a>,
-an index without enough capacity to process the updates
-will cause <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html">write throttling</a>.
-To retrieve attributes not in the index,
+<p><a id="gsi-eventual-consistency"></a>
+<abbr title="Global Secondary Index">GSI</abbr>s are updated asynchronously –
+that is, they are <strong>always <a class="anchor" href="#eventual-consistency">eventually consistent</a></strong>.
+Despite this,
+an index without enough capacity
+will cause base table <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html">write throttling</a>.
+To retrieve attributes not projected in the index,
 you have to get them yourself from the table
-(<a class="anchor" href="#batch-operations">batch operations</a> can speed this up).</p>
+(<a class="anchor" href="#batch-operations">batch operations</a> can speed this up).
+There is a quota of <strong>20 <abbr title="Global Secondary Index">GSI</abbr>s per table</strong>,
+and while you can ask for an increase,
+the docs hint needing more is a <a class="internal" href="/dynamodb-patterns#gsi-overloading">design issue</a>.</p>
 <section class="admonition note">
 <p class="admonition-title">Example</p>
 <p><small>(from <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#:~:text=query%20the%20data%20by%20Genre%20and%20Album">here</a>)</small>
@@ -655,7 +661,7 @@ since they are <strong>only the way to run logic server-side</strong>,
 while the item is being modified.
 You can use conditional writes
 to build higher level abstractions like
-optimistic locking, <!-- TODO: link -->
+<a class="internal" href="/dynamodb-patterns#optimistic-locking">optimistic locking</a>,
 <a class="external" href="https://github.com/awslabs/amazon-dynamodb-lock-client">distributed locks</a>,
 and atomic counters.<sup class="footnote-ref" id="fnref-15"><a href="#fn-15">15</a></sup></p>
 <section class="admonition tip">
@@ -729,7 +735,9 @@ and automatic <a class="external" href="https://docs.aws.amazon.com/amazondynamo
 </section>
 <hr />
 <p>Anyway, that's it for now.</p>
-<p>In the next article, we'll have a closer look at core DynamoDB <strong>design patterns</strong>,
+<p>In the next article,
+we'll have a closer look at
+<a class="internal" href="/dynamodb-patterns">core DynamoDB <strong>design patterns</strong></a>,
 including the fundamental <strong>single-table design</strong>.</p>
 <p><strong>Learned something new today?</strong> Share it with others, it really helps! <span class="text-large">
 <span class="share-icons">
@@ -911,14 +919,17 @@ This is presumably because the size of a capacity unit
 <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DocumentHistory.html#:~:text=4%20KB%20read%20capacity%20unit%20size">can increase</a> over time. <a href="#fnref-9" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-10"><p>Yes, this includes just counting them. <a href="#fnref-10" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-11"><p>If there is no good natural partition key,
-you can make one by sharding a low-cardinality attribute, <!-- TODO: link -->
+you can make one by <a class="internal" href="/dynamodb-patterns#partition-key-sharding">sharding</a> a low-cardinality attribute,
 which we'll cover in the next article. <a href="#fnref-11" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-12"><p>You could make it twice as fast by querying from both ends,
 but probably no faster,
 since for <a class="internal" href="/pwned#binary-skipping">binary search</a>
 you'd need to jump in the middle of two sort keys.
 Unsurprisingly,
-we'll look at a potential solution in the next article. <a href="#fnref-12" class="footnote"><sup>[return]</sup></a></p></li>
+we'll look at
+<a class="internal" href="/dynamodb-patterns#dedicated-partitions">potential</a>
+<a class="internal" href="/dynamodb-patterns#partition-key-sharding">solutions</a>
+in the next article. <a href="#fnref-12" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-13"><p>This is the same as a <a class="external" href="https://en.wikipedia.org/wiki/Database_index#Covering_index">covering index</a> in relational databases. <a href="#fnref-13" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-14"><p>Or better said, <em><a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html#ddb-intro-resilience">availability zones</a></em>. <a href="#fnref-14" class="footnote"><sup>[return]</sup></a></p></li>
 <li id="fn-15"><p>Although you can also use update expressions for <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.AtomicCounters">atomic counters</a>. <a href="#fnref-15" class="footnote"><sup>[return]</sup></a></p></li>
