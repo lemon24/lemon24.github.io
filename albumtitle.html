@@ -1,0 +1,450 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!doctype html>
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+<link rel="icon" href="/_static/xo-system-icon.svg">
+<link rel="apple-touch-icon" href="/_static/xo-system-icon.svg">
+
+
+
+
+
+
+
+<title>Sorted key sharding in DynamoDB - death and gravity</title>
+
+
+
+<meta property="og:title" content="Sorted key sharding in DynamoDB">
+<meta property="og:site_name" content="death and gravity">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://death.andgravity.com/albumtitle">
+
+
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1 class="heading-noindex">Sorted key sharding in DynamoDB</h1>
+
+<p class="text-gray text-nowrap">
+
+
+
+<small>
+<span class="tooltip" data-tooltip="published on 2026-06-06">June 2026</span>
+∙ six minute read
+∙
+</small><span class="share-icons">
+<a
+    class="share-icon pycoders"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+>PyCoder's Weekly</a>
+<a
+    class="share-icon hacker-news"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/albumtitle&t=Sorted%20key%20sharding%20in%20DynamoDB"
+>HN</a>
+<a
+    class="share-icon bluesky"
+    href="https://bsky.%61%70%70/intent/compose?text=Sorted%20key%20sharding%20in%20DynamoDB%20https%3A//death.andgravity.com/albumtitle"
+>Bluesky</a>
+<!--
+<a
+    class="share-icon reddit"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/albumtitle&title=Sorted%20key%20sharding%20in%20DynamoDB"
+>Reddit</a>
+-->
+<a
+    class="share-icon linkedin"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/albumtitle"
+>linkedin</a>
+<a
+    class="share-icon twitter"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Sorted%20key%20sharding%20in%20DynamoDB&url=https%3A//death.andgravity.com/albumtitle&via=_andgravity"
+>Twitter</a>
+</span>
+
+
+</p>
+
+
+
+
+
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<details class="toc" open>
+<summary>Contents</summary>
+<ul>
+<li><a href="#using-a-single-partition">Using a single partition</a></li>
+<li><a href="#but-a-single-partition-leads-to-throttling">But a single partition leads to throttling</a></li>
+<li><a href="#but-random-suffixes-are-random">But random suffixes are random</a></li>
+<li><a href="#but-hash-suffixes-are-not-sorted">But hash suffixes are not sorted</a></li>
+<li><a href="#but-there-are-a-lot-of-first-characters">But there are a lot of first characters</a></li>
+<li><a href="#but-some-first-bytes-need-multiple-shards">But some first bytes need multiple shards</a></li>
+</ul>
+</details>
+<p>Say you're using <a class="internal" href="/dynamodb-patterns#single-table-design">single table design</a>
+and have a table containing artists, albums, and songs,
+with sort keys <code>artist</code>, <code>album#{Album}</code>, and <code>song#{Album}#{Song}</code>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="c1"># table Music (partition key: Artist, sort key: sk)</span>
+<span class="nt">Solar Fields</span><span class="p">:</span><span class="w"> </span><span class="kt">!btree</span>
+<span class="w">  </span><span class="s">&#39;album#Leaving</span><span class="nv"> </span><span class="s">Home&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Genre</span><span class="p">:</span><span class="w"> </span><span class="nv">Electronic</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="s">&#39;artist&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="s">&#39;song#Leaving</span><span class="nv"> </span><span class="s">Home#Air</span><span class="nv"> </span><span class="s">Song&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="s">&#39;song#Leaving</span><span class="nv"> </span><span class="s">Home#Monogram&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<p>You'd like to be able to list albums without doing a table scan,
+so you use a GSI.</p>
+<p>Let's come up with some reasonable requirements; our GSI should support:</p>
+<ol>
+<li>items up 500 bytes (we project additional attributes besides the keys)</li>
+<li>10,000 queries / second, 100 items / query, preferably sorted alphabetically<ul>
+<li><em>list all albums</em></li>
+<li><em>list albums by album title</em></li>
+</ul>
+</li>
+<li>10,000 writes / second (to avoid base table throttling during imports)</li>
+</ol>
+<h2 id="using-a-single-partition">Using a single partition<span class="headerlink">&nbsp;<a href="#using-a-single-partition" title="permalink">#</a></span></h2>
+<p>Ideally we'd have a single <code>albums</code> partition key:</p>
+<div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="c1"># GSI GSI1 (partition key: gsi1pk, sort key: gsi1sk)</span>
+<span class="s">&#39;albums&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="kt">!btree</span>
+<span class="w">  </span><span class="nt">Leaving Home</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">Solar Fields</span><span class="p p-Indicator">,</span><span class="nt"> sk</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;album#Leaving</span><span class="nv"> </span><span class="s">Home&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+</code></pre></div>
+<p>This easily checks off &quot;sorted alphabetically&quot;,
+and there's no limit on the number of items on a partition.</p>
+<h2 id="but-a-single-partition-leads-to-throttling">But a single partition leads to throttling<span class="headerlink">&nbsp;<a href="#but-a-single-partition-leads-to-throttling" title="permalink">#</a></span></h2>
+<p>However, there's a per-partition limit of
+24 MB/s for reads and
+1 MB/s for writes.
+Let's see how they compare to our requirements:</p>
+<ul>
+<li>reads: 500 bytes/item * 10k queries/s * 100 items/query = 500 MB/s (<strong>~21x</strong>)</li>
+<li>writes: 500 bytes/item * 10k items/s = 5 MB/s (<strong>5x</strong>)</li>
+</ul>
+<p>Uh-oh, turns out we need 21 times the throughput one partition can deliver.</p>
+<p>We can spread the load across multiple partition keys
+by using <a class="internal" href="/dynamodb-patterns#partition-key-sharding">sharding</a>,
+that is, having multiple GSI partition keys of the form <code>album#{shard}</code>.
+A common option is to use a random number for the shard id, so <code>album#{randrange(21)}</code>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="c1"># GSI GSI1 (partition key: gsi1pk, sort key: gsi1sk)</span>
+<span class="s">&#39;album#1&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="kt">!btree</span>
+<span class="w">  </span><span class="nt">Leaving Home</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">Solar Fields</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="s">&#39;album#12&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="kt">!btree</span>
+<span class="w">  </span><span class="nt">Heavy Migration</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">Dday One</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<p>To list all the albums, query each shard in turn:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">for</span> <span class="n">shard</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">21</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">dynamodb</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;album#</span><span class="si">{</span><span class="n">shard</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">):</span>
+        <span class="k">yield</span> <span class="n">item</span>
+</code></pre></div>
+<h2 id="but-random-suffixes-are-random">But random suffixes are random<span class="headerlink">&nbsp;<a href="#but-random-suffixes-are-random" title="permalink">#</a></span></h2>
+<p>There's a problem –
+with random suffixes we can't <em>list albums by album title</em>,
+since we don't know what partition key they use,
+and it won't be the same one anyway.</p>
+<p>A better option is to calculate the shard id
+from the album title using a hash function:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">hash</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="o">.</span><span class="n">from_bytes</span><span class="p">(</span><span class="n">sha256</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">digest</span><span class="p">())</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">album_shard_id</span><span class="p">(</span><span class="n">album_title</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">hash</span><span class="p">(</span><span class="n">album_title</span><span class="p">)</span> <span class="o">%</span> <span class="mi">21</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="c1"># GSI GSI1 (partition key: gsi1pk, sort key: gsi1sk)</span>
+<span class="s">&#39;album#6&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="kt">!btree</span>
+<span class="w">  </span><span class="nt">Leaving Home</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">Solar Fields</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">Leaving Home</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">International Pony</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="s">&#39;album#8&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="kt">!btree</span>
+<span class="w">  </span><span class="nt">Heavy Migration</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">Dday One</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<p>To list albums by album title:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">dynamodb</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;album#</span><span class="si">{</span><span class="n">album_shard_id</span><span class="p">(</span><span class="n">album_title</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">sk</span><span class="o">=</span><span class="n">album_title</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="s1">&#39;GSI1&#39;</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="but-hash-suffixes-are-not-sorted">But hash suffixes are not sorted<span class="headerlink">&nbsp;<a href="#but-hash-suffixes-are-not-sorted" title="permalink">#</a></span></h2>
+<p>We forgot about results being sorted alphabetically, though.
+We can sort items within each shard using the sort key,
+but items are spread uniformly across partition keys,
+so there's no order <em>between shards</em>.</p>
+<hr />
+<p>Maybe we can use the first letter as shard id instead?</p>
+<p>Of course, we have to account for some first letters
+being <a class="external" href="https://en.wikipedia.org/wiki/Letter_frequency#Relative_frequencies_of_the_first_letters_of_a_word_in_the_English_language">more frequent</a> than others;
+In this case, we can approximate the actual distribution
+by using <a class="external" href="https://musicbrainz.org/doc/MusicBrainz_Database">MusicBrainz</a> data.</p>
+<p>There are 5.5 million albums:</p>
+<!-- (incidentally this gives us an idea of how many albums we can have, although we should figured this out already): -->
+
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">polars</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pl</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">titles</span> <span class="o">=</span> <span class="n">pl</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="s1">&#39;mbdump/release&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">has_header</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">separator</span><span class="o">=</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">quote_char</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">new_columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;title&#39;</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)[:,</span><span class="mi">0</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">titles</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+<span class="go">5535986</span>
+</code></pre></div>
+<p>...but only 3.3 million unique titles,
+partly due to different releases of the same album,
+partly due to some titles being more popular
+– a few of them, <em>really</em> popular:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">titles</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">sort</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="go">shape: (3_370_505, 2)</span>
+<span class="go"> title            count</span>
+<span class="go"> Greatest Hits    4638</span>
+<span class="go"> Demo             3140</span>
+<span class="go"> …                …</span>
+<span class="go"> Salsa salsa      1</span>
+<span class="go"> Glamour: Deluxe  1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">titles</span><span class="o">.</span><span class="n">unique_counts</span><span class="p">()</span><span class="o">.</span><span class="n">quantile</span><span class="p">([</span><span class="mf">.9</span><span class="p">,</span> <span class="mf">.99</span><span class="p">,</span> <span class="mf">.999</span><span class="p">,</span> <span class="mf">.9999</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+<span class="go">[2.0, 11.0, 58.0, 221.0, 4638.0]</span>
+</code></pre></div>
+<p>Let's look at first characters:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">normalized</span> <span class="o">=</span> <span class="n">titles</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">to_lowercase</span><span class="p">()</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="s1">&#39;NFKD&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">normalized</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">sort</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="go">shape: (5_402, 2)</span>
+<span class="go"> title  count</span>
+<span class="go"> t      584760</span>
+<span class="go"> s      509065</span>
+<span class="go"> a      317513</span>
+<span class="go"> l      298757</span>
+<span class="go"> …      …</span>
+<span class="go"> 🫀     1</span>
+<span class="go"> 🫂     1</span>
+<span class="go"> 🫧     1</span>
+<span class="go"> 󠀼       1</span>
+</code></pre></div>
+<h2 id="but-there-are-a-lot-of-first-characters">But there are a lot of first characters<span class="headerlink">&nbsp;<a href="#but-there-are-a-lot-of-first-characters" title="permalink">#</a></span></h2>
+<p>5,402 characters?!
+Indeed, there's more than the Latin alphabet:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">normalized</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
+<span class="go">[&#39;學&#39;, &#39;舒&#39;, &#39;і&#39;, &#39;进&#39;, &#39;੦&#39;, &#39;潮&#39;, &#39;向&#39;, &#39;妳&#39;, &#39;陳&#39;, &#39;🍅&#39;]</span>
+</code></pre></div>
+<p>And it's actually worse than that –
+there are five thousand characters <em>in our dataset</em>,
+but there are hundreds of thousands of <em>possible</em> Unicode characters.</p>
+<p>This is not a problem when adding the albums,
+but it is a problem when listing them,
+since we need to query all shards in a reasonable amount of time
+(most shards being empty doesn't help, either).</p>
+<hr />
+<p>As a very bad compromise,
+we could use the first byte of the UTF-8 encoding instead;
+this would cap the number of shard ids at 256,
+and at least Latin stuff would be sorted
+(I did say it's a bad compromise).</p>
+<p>There:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">firstbytes</span> <span class="o">=</span> <span class="n">normalized</span><span class="o">.</span><span class="n">map_elements</span><span class="p">(</span><span class="nb">str</span><span class="o">.</span><span class="n">encode</span><span class="p">)</span><span class="o">.</span><span class="n">bin</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">firstbytes</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">sort</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="go">shape: (136, 2)</span>
+<span class="go"> title    count</span>
+<span class="go"> b&quot;t&quot;     584760</span>
+<span class="go"> b&quot;s&quot;     509065</span>
+<span class="go"> b&quot;a&quot;     317513</span>
+<span class="go"> b&quot;l&quot;     298757</span>
+<span class="go"> …        …</span>
+<span class="go"> b&quot;\xd4&quot;  2</span>
+<span class="go"> b&quot;U&quot;     1</span>
+<span class="go"> b&quot;\xee&quot;  1</span>
+<span class="go"> b&quot;\xf3&quot;  1</span>
+</code></pre></div>
+<h2 id="but-some-first-bytes-need-multiple-shards">But some first bytes need multiple shards<span class="headerlink">&nbsp;<a href="#but-some-first-bytes-need-multiple-shards" title="permalink">#</a></span></h2>
+<p>We knew the distribution would be skewed,
+but it's so bad some prefixes don't even fit on a single shard
+(and it gets worse if we need more shards):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">shard_count</span> <span class="o">=</span> <span class="mi">21</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">firstbytes</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">sort</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">with_columns</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s1">&#39;count&#39;</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">firstbytes</span><span class="p">)</span> <span class="o">/</span> <span class="n">shard_count</span><span class="p">)</span>
+<span class="gp">... </span><span class="p">)</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+<span class="go">shape: (5, 2)</span>
+<span class="go"> title  count</span>
+<span class="go"> b&quot;t&quot;   2.218206</span>
+<span class="go"> b&quot;s&quot;   1.931068</span>
+<span class="go"> b&quot;a&quot;   1.204442</span>
+<span class="go"> b&quot;l&quot;   1.133294</span>
+<span class="go"> b&quot;b&quot;   1.106949</span>
+</code></pre></div>
+<p>We're back to square one: how do we sort shards with the same prefix?</p>
+<hr />
+<p>We don't – we find longer prefixes that fit in one shard.</p>
+<p>That sounds like the perfect job for a <a class="external" href="https://en.wikipedia.org/wiki/Trie">trie</a> (aka prefix tree).
+This would also allow us to go back to characters,
+and merge small prefixes into ranges
+until each range fits one shard.
+But that's complicated,
+and as often the case,
+there must be a better way.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
+<p>We're looking for contiguous prefix ranges,
+with each range of a certain size;
+tries are good for the <em>shortest</em> prefix,
+but we don't really care about that.
+Why not just split the sorted titles into N equal ranges instead?
+This takes care of the uneven distribution:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span> <span class="o">=</span> <span class="n">normalized</span><span class="o">.</span><span class="n">gather_every</span><span class="p">(</span><span class="mi">2000</span><span class="p">)</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">sort</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="go">shape: (2_103, 2)</span>
+<span class="go"> title     count</span>
+<span class="go"> the       161</span>
+<span class="go"> live      23</span>
+<span class="go"> …         …</span>
+<span class="go"> 風吹けは  1</span>
+<span class="go"> 魔法少女  1</span>
+</code></pre></div>
+<p>...provided a long enough prefix:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span> <span class="o">=</span> <span class="n">normalized</span><span class="o">.</span><span class="n">gather_every</span><span class="p">(</span><span class="mi">2000</span><span class="p">)</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">16</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">sort</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s1">&#39;count&#39;</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span>
+<span class="go">shape: (3, 2)</span>
+<span class="go"> title             count</span>
+<span class="go"> greatest hits     3</span>
+<span class="go"> demo              2</span>
+<span class="go"> the very best of  2</span>
+</code></pre></div>
+<p>...almost there:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span> <span class="o">=</span> <span class="n">normalized</span><span class="o">.</span><span class="n">gather_every</span><span class="p">(</span><span class="mi">2000</span><span class="p">)</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">20</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">sort</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s1">&#39;count&#39;</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span>
+<span class="go">shape: (2, 2)</span>
+<span class="go"> title          count</span>
+<span class="go"> greatest hits  3</span>
+<span class="go"> demo           2</span>
+</code></pre></div>
+<p>This shows a potential problem –
+if the shard size is too small,
+there may be more than a shard's worth of albums with identical titles;
+we can fix this by using another, random suffix
+(ordering doesn't matter here, since they have the same title).</p>
+<p>Thankfully, our shards are huge, so it's not a problem here:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">shard_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">normalized</span><span class="p">)</span> <span class="o">//</span> <span class="n">shard_count</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">shard_size</span>
+<span class="go">263618</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">normalized</span><span class="o">.</span><span class="n">gather_every</span><span class="p">(</span><span class="n">shard_size</span><span class="p">)</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">20</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="o">*</span><span class="nb">map</span><span class="p">(</span><span class="nb">repr</span><span class="p">,</span> <span class="n">boundaries</span><span class="p">),</span> <span class="n">sep</span><span class="o">=</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="go">&#39;&#39;</span>
+<span class="go">&#39;agartha&#39;</span>
+<span class="go">&#39;barstools &amp; lovefool&#39;</span>
+<span class="go">&#39;can you feel it&#39;</span>
+<span class="go">&#39;cyan noise&#39;</span>
+<span class="go">&#39;dreams still inspire&#39;</span>
+<span class="go">&#39;feuchte hosen&#39;</span>
+<span class="go">&#39;grave offerings&#39;</span>
+<span class="go">&#39;i listened&#39;</span>
+<span class="go">&#39;kannan en kadhalan&#39;</span>
+<span class="go">&#39;live in finland 1969&#39;</span>
+<span class="go">&#39;mir hams mein schreb&#39;</span>
+<span class="go">&#39;nothin’s on&#39;</span>
+<span class="go">&#39;platform1&#39;</span>
+<span class="go">&#39;rituals&#39;</span>
+<span class="go">&#39;skylla sig själv / &#39;</span>
+<span class="go">&#39;surta - a melody of &#39;</span>
+<span class="go">&#39;the human statues&#39;</span>
+<span class="go">&#39;tonton mayonnaise&#39;</span>
+<span class="go">&#39;walking around&#39;</span>
+<span class="go">&#39;голод&#39;</span>
+<span class="go">&#39;🫂&#39;</span>
+</code></pre></div>
+<p>So, how do you use it?
+Simple, the shard id is the index of the biggest boundary
+smaller than the album title:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">bisect</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">unicodedata</span>
+
+<span class="n">boundaries</span> <span class="o">=</span> <span class="p">[</span> <span class="o">...</span> <span class="p">]</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">album_shard_id</span><span class="p">(</span><span class="n">album_title</span><span class="p">):</span>
+    <span class="n">normalized</span> <span class="o">=</span> <span class="n">unicodedata</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="s1">&#39;NFKD&#39;</span><span class="p">,</span> <span class="n">album_title</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect</span><span class="p">(</span><span class="n">boundaries</span><span class="p">,</span> <span class="n">normalized</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+</code></pre></div>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">album_shard_id</span><span class="p">(</span><span class="s1">&#39;Leaving Home&#39;</span><span class="p">)</span>
+<span class="go">9</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">album_shard_id</span><span class="p">(</span><span class="s1">&#39;Heavy Migration&#39;</span><span class="p">)</span>
+<span class="go">7</span>
+</code></pre></div>
+<section class="footnotes">
+<ol>
+<li id="fn-1"><p>You're welcome to try, though,
+especially if you're preparing for an interview. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+</ol>
+</section>
+
+
+
+
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+
+
+
+</footer>
+
+
+</div>
