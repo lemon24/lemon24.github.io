@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2026-06-06">June 2026</span>
-∙ six minute read
+∙ seven minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -128,76 +128,115 @@ window.addEventListener('resize', set_vh);
 <details class="toc" open>
 <summary>Contents</summary>
 <ul>
-<li><a href="#using-a-single-partition">Using a single partition</a></li>
-<li><a href="#but-a-single-partition-leads-to-throttling">But a single partition leads to throttling</a></li>
+<li><a href="#requirements">Requirements</a></li>
+<li><a href="#a-sparse-index-is-almost-enough">A sparse index is almost enough</a></li>
+<li><a href="#but-scan-results-are-not-ordered">But scan results are not ordered</a></li>
+<li><a href="#but-a-single-partition-key-causes-throttling">But a single partition key causes throttling</a></li>
 <li><a href="#but-random-suffixes-are-random">But random suffixes are random</a></li>
-<li><a href="#but-hash-suffixes-are-not-sorted">But hash suffixes are not sorted</a></li>
+<li><a href="#but-hash-suffixes-are-not-ordered">But hash suffixes are not ordered</a></li>
 <li><a href="#but-there-are-a-lot-of-first-characters">But there are a lot of first characters</a></li>
 <li><a href="#but-some-first-bytes-need-multiple-shards">But some first bytes need multiple shards</a></li>
+<li><a href="#but-tries-and-prefix-ranges-are-complicated">But tries and prefix ranges are complicated</a></li>
 </ul>
 </details>
+<h2 id="requirements">Requirements<span class="headerlink">&nbsp;<a href="#requirements" title="permalink">#</a></span></h2>
 <p>Say you're using <a class="internal" href="/dynamodb-patterns#single-table-design">single table design</a>
-and have a table containing artists, albums, and songs,
-with sort keys <code>artist</code>, <code>album#{Album}</code>, and <code>song#{Album}#{Song}</code>:</p>
+with a table of artists, albums, and songs.</p>
+<p>You keep an artist's items in a single collection
+(aka same partition key),
+and use sort keys <code>artist</code>, <code>album#{Album}</code>, and <code>song#{Album}#{Song}</code>,
+depending on their type:</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="c1"># table Music (partition key: Artist, sort key: sk)</span>
 <span class="nt">Solar Fields</span><span class="p">:</span><span class="w"> </span><span class="kt">!btree</span>
-<span class="w">  </span><span class="s">&#39;album#Leaving</span><span class="nv"> </span><span class="s">Home&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Genre</span><span class="p">:</span><span class="w"> </span><span class="nv">Electronic</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="s">&#39;album#Leaving</span><span class="nv"> </span><span class="s">Home&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Album</span><span class="p">:</span><span class="w"> </span><span class="nv">Leaving Home</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">  </span><span class="s">&#39;artist&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">  </span><span class="s">&#39;song#Leaving</span><span class="nv"> </span><span class="s">Home#Air</span><span class="nv"> </span><span class="s">Song&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">  </span><span class="s">&#39;song#Leaving</span><span class="nv"> </span><span class="s">Home#Monogram&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
-<p>You'd like to be able to list albums without doing a table scan,
-so you use a GSI.</p>
-<p>Let's come up with some reasonable requirements; our GSI should support:</p>
+<p>To list albums without doing a full table scan,
+you need a <a class="internal" href="/dynamodb-model#global-secondary-indexes">global secondary index</a>.</p>
+<p>Let's come up with some reasonable requirements; the <abbr title="Global Secondary Index">GSI</abbr> should support:</p>
 <ol>
 <li>items up 500 bytes (we project additional attributes besides the keys)</li>
-<li>10,000 queries / second, 100 items / query, preferably sorted alphabetically<ul>
+<li>10,000 queries/second, max 100 items/query, <strong>sorted alphabetically</strong><ul>
 <li><em>list all albums</em></li>
-<li><em>list albums by album title</em></li>
+<li><em>list albums by title</em></li>
 </ul>
 </li>
-<li>10,000 writes / second (to avoid base table throttling during imports)</li>
+<li>10,000 writes/second (to avoid <a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html">write throttling</a> during imports)</li>
 </ol>
-<h2 id="using-a-single-partition">Using a single partition<span class="headerlink">&nbsp;<a href="#using-a-single-partition" title="permalink">#</a></span></h2>
-<p>Ideally we'd have a single <code>albums</code> partition key:</p>
+<h2 id="a-sparse-index-is-almost-enough">A sparse index is almost enough<span class="headerlink">&nbsp;<a href="#a-sparse-index-is-almost-enough" title="permalink">#</a></span></h2>
+<p>One way to do it is to use a <em>dedicated</em>
+<a class="internal" href="/dynamodb-patterns#sparse-indexes">sparse index</a>,
+taking advantage of the fact that
+items with missing index keys don't appear in the index.</p>
+<p>If only albums have an <em>Album</em> attribute, we just create a new <abbr title="Global Secondary Index">GSI</abbr>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="c1"># GSI Albums (partition key: Album, sort key: Artist)</span>
+<span class="nt">Leaving Home</span><span class="p">:</span><span class="w"> </span><span class="kt">!btree</span>
+<span class="w">  </span><span class="nt">International Pony</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> sk</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;album#Leaving</span><span class="nv"> </span><span class="s">Home&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">Solar Fields</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> sk</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;album#Leaving</span><span class="nv"> </span><span class="s">Home&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="nt">Heavy Migration</span><span class="p">:</span><span class="w"> </span><span class="kt">!btree</span>
+<span class="w">  </span><span class="nt">Dday One</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> sk</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;album#Heavy</span><span class="nv"> </span><span class="s">Migration&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<p>If songs have an <em>Album</em> too,
+we can add a dedicated <em>AlbumsPK</em> attribute instead.</p>
+<p>In many ways, this is the ideal solution.
+To <em>list all albums</em>, we scan the index.
+To <em>list albums by title</em>, we query an index partition key.
+We have lots of unique partition keys
+with items spread pretty evenly across them,
+which should prevent throttling.</p>
+<h2 id="but-scan-results-are-not-ordered">But scan results are not ordered<span class="headerlink">&nbsp;<a href="#but-scan-results-are-not-ordered" title="permalink">#</a></span></h2>
+<p>...except scan results are not ordered,
+so we're missing the <em>sorted alphabetically</em> part.</p>
+<p>What <em>is</em> ordered are sort keys,
+so we can use a single index collection instead:</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="c1"># GSI GSI1 (partition key: gsi1pk, sort key: gsi1sk)</span>
 <span class="s">&#39;albums&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="kt">!btree</span>
+<span class="w">  </span><span class="nt">Heavy Migration</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">Dday One</span><span class="p p-Indicator">,</span><span class="nt"> sk</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;album#Heavy</span><span class="nv"> </span><span class="s">Migration&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">  </span><span class="nt">Leaving Home</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">Solar Fields</span><span class="p p-Indicator">,</span><span class="nt"> sk</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;album#Leaving</span><span class="nv"> </span><span class="s">Home&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
-<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+<span class="w">  </span><span class="nt">Leaving Home</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">International Pony</span><span class="p p-Indicator">,</span><span class="nt"> sk</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;album#Leaving</span><span class="nv"> </span><span class="s">Home&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
-<p>This easily checks off &quot;sorted alphabetically&quot;,
-and there's no limit on the number of items on a partition.</p>
-<h2 id="but-a-single-partition-leads-to-throttling">But a single partition leads to throttling<span class="headerlink">&nbsp;<a href="#but-a-single-partition-leads-to-throttling" title="permalink">#</a></span></h2>
-<p>However, there's a per-partition limit of
+<p>This is also seemingly ideal.
+To <em>list all albums</em>, we query the entire index partition key.
+To <em>list albums by title</em>, we also use a sort key.
+The results are sorted as required,
+and there's no limit on the number of items in a collection.</p>
+<h2 id="but-a-single-partition-key-causes-throttling">But a single partition key causes throttling<span class="headerlink">&nbsp;<a href="#but-a-single-partition-key-causes-throttling" title="permalink">#</a></span></h2>
+<p>However, there are
+<a class="internal" href="/dynamodb-model#partition-throughput">per-partition limits</a> of
 24 MB/s for reads and
-1 MB/s for writes.
-Let's see how they compare to our requirements:</p>
+1 MB/s for writes.</p>
+<p>Let's see how they compare to our requirements:</p>
 <ul>
 <li>reads: 500 bytes/item * 10k queries/s * 100 items/query = 500 MB/s (<strong>~21x</strong>)</li>
 <li>writes: 500 bytes/item * 10k items/s = 5 MB/s (<strong>5x</strong>)</li>
 </ul>
-<p>Uh-oh, turns out we need 21 times the throughput one partition can deliver.</p>
-<p>We can spread the load across multiple partition keys
-by using <a class="internal" href="/dynamodb-patterns#partition-key-sharding">sharding</a>,
-that is, having multiple GSI partition keys of the form <code>album#{shard}</code>.
-A common option is to use a random number for the shard id, so <code>album#{randrange(21)}</code>:</p>
+<p>Uh-oh, turns out we need <strong>21 times</strong> the throughput one partition can deliver.</p>
+<p>One way to spread the load is
+<a class="internal" href="/dynamodb-patterns#partition-key-sharding">sharding</a>,
+that is, using synthetic partition keys of the form <code>album#{shard_id}</code>.
+A common option for the shard id is a <strong>random number</strong> from a known range,
+e.g. <code>album#{randrange(21)}</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="c1"># GSI GSI1 (partition key: gsi1pk, sort key: gsi1sk)</span>
 <span class="s">&#39;album#1&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="kt">!btree</span>
 <span class="w">  </span><span class="nt">Leaving Home</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">Solar Fields</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="s">&#39;album#12&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="kt">!btree</span>
 <span class="w">  </span><span class="nt">Heavy Migration</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">Dday One</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="s">&#39;album#20&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="kt">!btree</span>
+<span class="w">  </span><span class="nt">Leaving Home</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">International Pony</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
-<p>To list all the albums, query each shard in turn:</p>
+<p>To <em>list all albums</em>, query each shard in turn:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">for</span> <span class="n">shard</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">21</span><span class="p">):</span>
     <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">dynamodb</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;album#</span><span class="si">{</span><span class="n">shard</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">):</span>
         <span class="k">yield</span> <span class="n">item</span>
 </code></pre></div>
 <h2 id="but-random-suffixes-are-random">But random suffixes are random<span class="headerlink">&nbsp;<a href="#but-random-suffixes-are-random" title="permalink">#</a></span></h2>
 <p>There's a problem –
-with random suffixes we can't <em>list albums by album title</em>,
-since we don't know what partition key they use,
-and it won't be the same one anyway.</p>
-<p>A better option is to calculate the shard id
+with random shard ids we can't <em>list albums by title</em>,
+since we don't know what shard any given album is on
+(and it might be more than one anyway).</p>
+<p>A better option is to <strong>calculate</strong> the shard id
 from the album title using a hash function:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">hash</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
     <span class="k">return</span> <span class="nb">int</span><span class="o">.</span><span class="n">from_bytes</span><span class="p">(</span><span class="n">sha256</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">digest</span><span class="p">())</span>
@@ -212,18 +251,19 @@ from the album title using a hash function:</p>
 <span class="s">&#39;album#8&#39;</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="kt">!btree</span>
 <span class="w">  </span><span class="nt">Heavy Migration</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> Artist</span><span class="p">:</span><span class="w"> </span><span class="nv">Dday One</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
-<p>To list albums by album title:</p>
+<p>To <em>list albums by title</em>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">dynamodb</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;album#</span><span class="si">{</span><span class="n">album_shard_id</span><span class="p">(</span><span class="n">album_title</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">sk</span><span class="o">=</span><span class="n">album_title</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="s1">&#39;GSI1&#39;</span><span class="p">)</span>
 </code></pre></div>
-<h2 id="but-hash-suffixes-are-not-sorted">But hash suffixes are not sorted<span class="headerlink">&nbsp;<a href="#but-hash-suffixes-are-not-sorted" title="permalink">#</a></span></h2>
-<p>We forgot about results being sorted alphabetically, though.
+<h2 id="but-hash-suffixes-are-not-ordered">But hash suffixes are not ordered<span class="headerlink">&nbsp;<a href="#but-hash-suffixes-are-not-ordered" title="permalink">#</a></span></h2>
+<p>This takes care of throughput,
+but now results aren't <em>sorted alphabetically</em> anymore.
 We can sort items within each shard using the sort key,
-but items are spread uniformly across partition keys,
-so there's no order <em>between shards</em>.</p>
+but they are spread uniformly across shards,
+and there's no order <em>between shards</em>.</p>
 <hr />
-<p>Maybe we can use the first letter as shard id instead?</p>
+<p>Maybe we could use the <strong>first letter</strong> as shard id instead?</p>
 <p>Of course, we have to account for some first letters
-being <a class="external" href="https://en.wikipedia.org/wiki/Letter_frequency#Relative_frequencies_of_the_first_letters_of_a_word_in_the_English_language">more frequent</a> than others;
+being <a class="external" href="https://en.wikipedia.org/wiki/Letter_frequency#Relative_frequencies_of_the_first_letters_of_a_word_in_the_English_language">more frequent</a> than others.
 In this case, we can approximate the actual distribution
 by using <a class="external" href="https://musicbrainz.org/doc/MusicBrainz_Database">MusicBrainz</a> data.</p>
 <p>There are 5.5 million albums:</p>
@@ -272,7 +312,7 @@ partly due to some titles being more popular
 <span class="go"> 󠀼       1</span>
 </code></pre></div>
 <h2 id="but-there-are-a-lot-of-first-characters">But there are a lot of first characters<span class="headerlink">&nbsp;<a href="#but-there-are-a-lot-of-first-characters" title="permalink">#</a></span></h2>
-<p>5,402 characters?!
+<p>5402?!
 Indeed, there's more than the Latin alphabet:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">normalized</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
 <span class="go">[&#39;學&#39;, &#39;舒&#39;, &#39;і&#39;, &#39;进&#39;, &#39;੦&#39;, &#39;潮&#39;, &#39;向&#39;, &#39;妳&#39;, &#39;陳&#39;, &#39;🍅&#39;]</span>
@@ -282,15 +322,15 @@ there are five thousand characters <em>in our dataset</em>,
 but there are hundreds of thousands of <em>possible</em> Unicode characters.</p>
 <p>This is not a problem when adding the albums,
 but it is a problem when listing them,
-since we need to query all shards in a reasonable amount of time
-(most shards being empty doesn't help, either).</p>
+since we need to enumerate all the shards in a reasonable amount of time
+(and most shards being empty doesn't help, either).</p>
 <hr />
 <p>As a very bad compromise,
-we could use the first byte of the UTF-8 encoding instead;
-this would cap the number of shard ids at 256,
-and at least Latin stuff would be sorted
-(I did say it's a bad compromise).</p>
-<p>There:</p>
+we could use the <strong>first byte</strong> of the UTF-8 encoding instead;
+this caps the number of shard ids at 256,
+and at least Latin titles would be sorted
+(I did say it's a bad compromise).
+There:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">firstbytes</span> <span class="o">=</span> <span class="n">normalized</span><span class="o">.</span><span class="n">map_elements</span><span class="p">(</span><span class="nb">str</span><span class="o">.</span><span class="n">encode</span><span class="p">)</span><span class="o">.</span><span class="n">bin</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">firstbytes</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">sort</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="go">shape: (136, 2)</span>
@@ -306,9 +346,9 @@ and at least Latin stuff would be sorted
 <span class="go"> b&quot;\xf3&quot;  1</span>
 </code></pre></div>
 <h2 id="but-some-first-bytes-need-multiple-shards">But some first bytes need multiple shards<span class="headerlink">&nbsp;<a href="#but-some-first-bytes-need-multiple-shards" title="permalink">#</a></span></h2>
-<p>We knew the distribution would be skewed,
-but it's so bad some prefixes don't even fit on a single shard
-(and it gets worse if we need more shards):</p>
+<p>We knew the first byte distribution would be skewed,
+but some of them don't even fit on a single shard
+(and it gets worse the more shards we need):</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">shard_count</span> <span class="o">=</span> <span class="mi">21</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">firstbytes</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">sort</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">with_columns</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s1">&#39;count&#39;</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">firstbytes</span><span class="p">)</span> <span class="o">/</span> <span class="n">shard_count</span><span class="p">)</span>
@@ -321,9 +361,10 @@ but it's so bad some prefixes don't even fit on a single shard
 <span class="go"> b&quot;l&quot;   1.133294</span>
 <span class="go"> b&quot;b&quot;   1.106949</span>
 </code></pre></div>
-<p>We're back to square one: how do we sort shards with the same prefix?</p>
+<p>We're back to where we started:
+how do we sort between shards with the same prefix?</p>
 <hr />
-<p>We don't – we find longer prefixes that fit in one shard.</p>
+<p>We don't – we find <strong>longer prefixes</strong> that fit in one shard.</p>
 <p>That sounds like the perfect job for a <a class="external" href="https://en.wikipedia.org/wiki/Trie">trie</a> (aka prefix tree).
 This would also allow us to go back to characters,
 and merge small prefixes into ranges
@@ -331,12 +372,13 @@ until each range fits one shard.
 But that's complicated,
 and as often the case,
 there must be a better way.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
+<h2 id="but-tries-and-prefix-ranges-are-complicated">But tries and prefix ranges are complicated<span class="headerlink">&nbsp;<a href="#but-tries-and-prefix-ranges-are-complicated" title="permalink">#</a></span></h2>
 <p>We're looking for contiguous prefix ranges,
-with each range of a certain size;
-tries are good for the <em>shortest</em> prefix,
-but we don't really care about that.
-Why not just split the sorted titles into N equal ranges instead?
-This takes care of the uneven distribution:</p>
+each of a certain size.
+Tries are good for finding the <em>shortest</em> prefix,
+but we don't really care about prefix length.</p>
+<p>Why not just split the sorted titles into N <strong>equal ranges</strong> instead?</p>
+<p>This takes care of the uneven distribution:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span> <span class="o">=</span> <span class="n">normalized</span><span class="o">.</span><span class="n">gather_every</span><span class="p">(</span><span class="mi">2000</span><span class="p">)</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">sort</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="go">shape: (2_103, 2)</span>
@@ -364,12 +406,12 @@ This takes care of the uneven distribution:</p>
 <span class="go"> greatest hits  3</span>
 <span class="go"> demo           2</span>
 </code></pre></div>
-<p>This shows a potential problem –
+<p>This highlights another problem –
 if the shard size is too small,
 there may be more than a shard's worth of albums with identical titles;
 we can fix this by using another, random suffix
-(ordering doesn't matter here, since they have the same title).</p>
-<p>Thankfully, our shards are huge, so it's not a problem here:</p>
+(ordering doesn't matter anymore, since they have the same title).</p>
+<p>Thankfully, our shards are huge, so it's not an issue:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">shard_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">normalized</span><span class="p">)</span> <span class="o">//</span> <span class="n">shard_count</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">shard_size</span>
 <span class="go">263618</span>
