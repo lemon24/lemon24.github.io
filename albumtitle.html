@@ -31,14 +31,14 @@
 
 
 <title>Ordered key sharding in DynamoDB - death and gravity</title>
-<meta name="description" content="...in which we find out how to make a sorted index that doesn&#39;t fit on a single DynamoDB partition." />
+<meta name="description" content="...in which we find out how to make a sorted index when the data doesn&#39;t fit on a single DynamoDB partition." />
 
 
 <meta property="og:title" content="Ordered key sharding in DynamoDB">
 <meta property="og:site_name" content="death and gravity">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://death.andgravity.com/albumtitle">
-<meta property="og:description" content="...in which we find out how to make a sorted index that doesn&#39;t fit on a single DynamoDB partition.">
+<meta property="og:description" content="...in which we find out how to make a sorted index when the data doesn&#39;t fit on a single DynamoDB partition.">
 
 
 
@@ -88,7 +88,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2026-06-08">June 2026</span>
-∙ seven minute read
+∙ eight minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -156,11 +156,12 @@ do the math, and find out which is best.</p>
 <li><a href="#but-there-are-a-lot-of-first-characters">But there are a lot of first characters</a></li>
 <li><a href="#but-some-first-bytes-need-multiple-shards">But some first bytes need multiple shards</a></li>
 <li><a href="#but-tries-and-prefix-ranges-are-complicated">But tries and prefix ranges are complicated</a></li>
+<li><a href="#but-the-prefix-distribution-can-change">But the prefix distribution can change</a></li>
 </ul>
 </details>
 <h2 id="requirements">Requirements<span class="headerlink">&nbsp;<a href="#requirements" title="permalink">#</a></span></h2>
 <p>Say you're using <a class="internal" href="/dynamodb-patterns#single-table-design">single table design</a>
-with a table of artists, albums, and songs.</p>
+with a table of artists, albums, and songs.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
 <p>You keep an artist's items in a single collection
 (aka same partition key),
 and use sort keys <code>artist</code>, <code>album#{Album}</code>, and <code>song#{Album}#{Song}</code>,
@@ -283,7 +284,7 @@ and there's no order <em>between shards</em>.</p>
 <p>Of course, we have to account for some first letters
 being <a class="external" href="https://en.wikipedia.org/wiki/Letter_frequency#Relative_frequencies_of_the_first_letters_of_a_word_in_the_English_language">more frequent</a> than others.
 In this case, we can approximate the actual distribution
-by using <a class="external" href="https://musicbrainz.org/doc/MusicBrainz_Database">MusicBrainz</a> data.</p>
+by using <a class="external" href="https://musicbrainz.org/doc/MusicBrainz_Database#Download">MusicBrainz data</a>.</p>
 <p>There are 5.5 million albums:</p>
 <!-- (incidentally this gives us an idea of how many albums we can have, although we should figured this out already): -->
 
@@ -389,7 +390,7 @@ and merge small prefixes into ranges
 until each range fits one shard.
 But that's complicated,
 and as often the case,
-there must be a better way.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
+there must be a better way.<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup></p>
 <h2 id="but-tries-and-prefix-ranges-are-complicated">But tries and prefix ranges are complicated<span class="headerlink">&nbsp;<a href="#but-tries-and-prefix-ranges-are-complicated" title="permalink">#</a></span></h2>
 <p>We're looking for contiguous ranges,
 each of a certain size.
@@ -478,16 +479,21 @@ and find the index of the biggest boundary smaller than a given album title:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">album_shard_id</span><span class="p">(</span><span class="s1">&#39;Space Cadet&#39;</span><span class="p">)</span>
 <span class="go">15</span>
 </code></pre></div>
-<!-- TODO
-
-# But the prefix distribution changed
-
-plan ahead, 10x shards
-
-migrate to new index, link to patterns section
-
--->
-
+<h2 id="but-the-prefix-distribution-can-change">But the prefix distribution can change<span class="headerlink">&nbsp;<a href="#but-the-prefix-distribution-can-change" title="permalink">#</a></span></h2>
+<p>We were lucky to have data on the prefix distribution,
+but that's not always the case,
+and even if it is, the distribution can change over time.</p>
+<p>For example, the last of the 21 shards above
+starts in the Cyrillic <a class="external" href="https://en.wikipedia.org/wiki/Unicode_block#List_of_blocks">Unicode block</a>,
+which means most existing scripts go into a single shard.
+What if we import 1 million Chinese and Japanese albums at some point?</p>
+<p>One way to deal with this is to give more weight to known gaps in the data.
+Another is to have more shards from the start to account for unknown gaps –
+210 shards instead of 21 sounds pretty reasonable.</p>
+<p>If all else fails,
+you can move to a new index with more shards,
+but that comes with its own <a class="internal" href="/dynamodb-patterns#more-shards">complications</a>,
+so it's best to get it roughly right from the start.</p>
 <hr />
 <p>Anyway, that's it for now.</p>
 <p><strong>Learned something new today?</strong> Share it with others, it really helps! <span class="text-large">
@@ -593,8 +599,11 @@ migrate to new index, link to patterns section
 </form>
 <section class="footnotes">
 <ol>
-<li id="fn-1"><p>You're welcome to try, though,
-especially if you're preparing for an interview. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-1"><p>This is a simplified example;
+as the <a class="external" href="https://musicbrainz.org/doc/MusicBrainz_Database/Schema">MusicBrainz database</a> shows,
+the schema for this kind of thing would be way more complicated in practice. <a href="#fnref-1" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-2"><p>You're welcome to try, though,
+especially if you're preparing for an interview. <a href="#fnref-2" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 

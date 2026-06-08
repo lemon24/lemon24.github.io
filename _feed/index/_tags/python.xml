@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #python</title>
-  <updated>2026-06-08T08:00:00+00:00</updated>
+  <updated>2026-06-08T18:00:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
@@ -12,7 +12,7 @@
   <entry xml:base="https://death.andgravity.com/albumtitle">
     <id>https://death.andgravity.com/albumtitle</id>
     <title>Ordered key sharding in DynamoDB</title>
-    <updated>2026-06-08T08:00:00+00:00</updated>
+    <updated>2026-06-08T18:00:00+00:00</updated>
     <content type="html">&lt;p&gt;So, you want to keep a &lt;strong&gt;sorted index&lt;/strong&gt; in DynamoDB,
 but for whatever reason
 – usually &lt;a class="internal" href="/dynamodb-model#partition-throughput"&gt;throughput-related&lt;/a&gt; –
@@ -35,11 +35,12 @@ do the math, and find out which is best.&lt;/p&gt;
 &lt;li&gt;&lt;a href="#but-there-are-a-lot-of-first-characters"&gt;But there are a lot of first characters&lt;/a&gt;&lt;/li&gt;
 &lt;li&gt;&lt;a href="#but-some-first-bytes-need-multiple-shards"&gt;But some first bytes need multiple shards&lt;/a&gt;&lt;/li&gt;
 &lt;li&gt;&lt;a href="#but-tries-and-prefix-ranges-are-complicated"&gt;But tries and prefix ranges are complicated&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#but-the-prefix-distribution-can-change"&gt;But the prefix distribution can change&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 &lt;/details&gt;
 &lt;h2 id="requirements"&gt;Requirements&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#requirements" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
 &lt;p&gt;Say you're using &lt;a class="internal" href="/dynamodb-patterns#single-table-design"&gt;single table design&lt;/a&gt;
-with a table of artists, albums, and songs.&lt;/p&gt;
+with a table of artists, albums, and songs.&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
 &lt;p&gt;You keep an artist's items in a single collection
 (aka same partition key),
 and use sort keys &lt;code&gt;artist&lt;/code&gt;, &lt;code&gt;album#{Album}&lt;/code&gt;, and &lt;code&gt;song#{Album}#{Song}&lt;/code&gt;,
@@ -162,7 +163,7 @@ and there's no order &lt;em&gt;between shards&lt;/em&gt;.&lt;/p&gt;
 &lt;p&gt;Of course, we have to account for some first letters
 being &lt;a class="external" href="https://en.wikipedia.org/wiki/Letter_frequency#Relative_frequencies_of_the_first_letters_of_a_word_in_the_English_language"&gt;more frequent&lt;/a&gt; than others.
 In this case, we can approximate the actual distribution
-by using &lt;a class="external" href="https://musicbrainz.org/doc/MusicBrainz_Database"&gt;MusicBrainz&lt;/a&gt; data.&lt;/p&gt;
+by using &lt;a class="external" href="https://musicbrainz.org/doc/MusicBrainz_Database#Download"&gt;MusicBrainz data&lt;/a&gt;.&lt;/p&gt;
 &lt;p&gt;There are 5.5 million albums:&lt;/p&gt;
 &lt;!-- (incidentally this gives us an idea of how many albums we can have, although we should figured this out already): --&gt;
 
@@ -268,7 +269,7 @@ and merge small prefixes into ranges
 until each range fits one shard.
 But that's complicated,
 and as often the case,
-there must be a better way.&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+there must be a better way.&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
 &lt;h2 id="but-tries-and-prefix-ranges-are-complicated"&gt;But tries and prefix ranges are complicated&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#but-tries-and-prefix-ranges-are-complicated" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
 &lt;p&gt;We're looking for contiguous ranges,
 each of a certain size.
@@ -357,16 +358,21 @@ and find the index of the biggest boundary smaller than a given album title:&lt;
 &lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;album_shard_id&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;Space Cadet&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;span class="go"&gt;15&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;!-- TODO
-
-# But the prefix distribution changed
-
-plan ahead, 10x shards
-
-migrate to new index, link to patterns section
-
---&gt;
-
+&lt;h2 id="but-the-prefix-distribution-can-change"&gt;But the prefix distribution can change&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#but-the-prefix-distribution-can-change" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;We were lucky to have data on the prefix distribution,
+but that's not always the case,
+and even if it is, the distribution can change over time.&lt;/p&gt;
+&lt;p&gt;For example, the last of the 21 shards above
+starts in the Cyrillic &lt;a class="external" href="https://en.wikipedia.org/wiki/Unicode_block#List_of_blocks"&gt;Unicode block&lt;/a&gt;,
+which means most existing scripts go into a single shard.
+What if we import 1 million Chinese and Japanese albums at some point?&lt;/p&gt;
+&lt;p&gt;One way to deal with this is to give more weight to known gaps in the data.
+Another is to have more shards from the start to account for unknown gaps –
+210 shards instead of 21 sounds pretty reasonable.&lt;/p&gt;
+&lt;p&gt;If all else fails,
+you can move to a new index with more shards,
+but that comes with its own &lt;a class="internal" href="/dynamodb-patterns#more-shards"&gt;complications&lt;/a&gt;,
+so it's best to get it roughly right from the start.&lt;/p&gt;
 &lt;hr /&gt;
 &lt;p&gt;Anyway, that's it for now.&lt;/p&gt;
 &lt;p&gt;&lt;strong&gt;Learned something new today?&lt;/strong&gt; Share it with others, it really helps! &lt;span class="text-large"&gt;
@@ -410,13 +416,16 @@ to get new stuff straight to your inbox!
 &lt;/b&gt;&lt;/p&gt;
 &lt;section class="footnotes"&gt;
 &lt;ol&gt;
-&lt;li id="fn-1"&gt;&lt;p&gt;You're welcome to try, though,
-especially if you're preparing for an interview. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;This is a simplified example;
+as the &lt;a class="external" href="https://musicbrainz.org/doc/MusicBrainz_Database/Schema"&gt;MusicBrainz database&lt;/a&gt; shows,
+the schema for this kind of thing would be way more complicated in practice. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-2"&gt;&lt;p&gt;You're welcome to try, though,
+especially if you're preparing for an interview. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;/ol&gt;
 &lt;/section&gt;
 </content>
     <link href="https://death.andgravity.com/albumtitle" rel="alternate"/>
-    <summary>...in which we find out how to make a sorted index that doesn't fit on a single DynamoDB partition.</summary>
+    <summary>...in which we find out how to make a sorted index when the data doesn't fit on a single DynamoDB partition.</summary>
     <published>2026-06-08T08:00:00+00:00</published>
   </entry>
   <entry xml:base="https://death.andgravity.com/dynamodb-patterns">
@@ -694,7 +703,7 @@ but this will &lt;em&gt;definitely&lt;/em&gt; cause throttling.&lt;/p&gt;
 you can use &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; partition key &lt;code&gt;album#{hash(Album} % 100}&lt;/code&gt;
 if you don't care about the order,
 or something like &lt;code&gt;album#{Album[:2].lower()}&lt;/code&gt; if you do
-(but likely &lt;a class="internal" href="/albumtitle"&gt;more sophistication is needed&lt;/a&gt; –
+(but likely &lt;a class="internal" href="/albumtitle"&gt;more sophistication&lt;/a&gt; is needed –
 &lt;code&gt;th&lt;/code&gt; will be a very common album title prefix,
 and some album titles &lt;a class="external" href="https://www.discogs.com/release/10506005--"&gt;don't contain letters at all&lt;/a&gt;).&lt;/p&gt;
 &lt;/section&gt;
@@ -709,7 +718,8 @@ That depends on the number, size, and how often you access the items,
 and is also a trade-off –
 too many shards means additional queries and latency,
 too few shards means you still overload the partitions sometimes.&lt;/p&gt;
-&lt;p&gt;Importantly, &lt;strong&gt;increasing the number of shards is non-trivial&lt;/strong&gt;.
+&lt;p&gt;&lt;a id="more-shards"&gt;&lt;/a&gt;
+Importantly, &lt;strong&gt;increasing the number of shards is non-trivial&lt;/strong&gt;.
 For tables, you usually need to rebalance the items in place.
 For indexes, it's cleaner to move to a new index,
 or if you just need to list items by type,
@@ -7765,7 +7775,7 @@ you can use a module instead:&lt;/p&gt;
 this is a valid retriever,
 since it has all the expected methods and attributes.
 So much so, that it's also compatible with &lt;a class="anchor" href="#protocols"&gt;protocols&lt;/a&gt;:&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;module&lt;/span&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;module&lt;/span&gt;
 
 &lt;span class="n"&gt;mount_retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;mod&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;module&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
@@ -9030,7 +9040,7 @@ and stop along the way to point out how we're doing things.&lt;/p&gt;
 that gets data from an API
 and saves it in a CSV file.
 It might look something like this:&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;csv&lt;/span&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;csv&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;time&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;click&lt;/span&gt;
 
@@ -9089,7 +9099,7 @@ you've &lt;em&gt;decoupled&lt;/em&gt; it.&lt;sup class="footnote-ref" id="fnref-
 &lt;p&gt;As a result,
 &lt;code&gt;write_csv()&lt;/code&gt; doesn't need to change when adding new arguments to &lt;code&gt;get_data()&lt;/code&gt;,
 and we can test it without monkeypatching &lt;code&gt;get_data()&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;seasons&lt;/span&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;seasons&lt;/span&gt;
 
 &lt;span class="n"&gt;DATA&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;
     &lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;name&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;one&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;short_name&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;1&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;
@@ -11701,7 +11711,7 @@ we start with &lt;a class="external" href="https://wiki.c2.com/?DoTheSimplestThi
 &lt;span class="normal"&gt;2&lt;/span&gt;
 &lt;span class="normal"&gt;3&lt;/span&gt;
 &lt;span class="normal"&gt;4&lt;/span&gt;
-&lt;span class="normal"&gt;5&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;os&lt;/span&gt;
+&lt;span class="normal"&gt;5&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;os&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;sys&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;time&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;getpass&lt;/span&gt;
@@ -12405,7 +12415,7 @@ But, less code!&lt;/li&gt;
 &lt;span class="normal"&gt;12&lt;/span&gt;
 &lt;span class="normal"&gt;13&lt;/span&gt;
 &lt;span class="normal"&gt;14&lt;/span&gt;
-&lt;span class="normal"&gt;15&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;os&lt;/span&gt;&lt;span class="o"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;sys&lt;/span&gt;
+&lt;span class="normal"&gt;15&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;os&lt;/span&gt;&lt;span class="o"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;sys&lt;/span&gt;
 
 &lt;span class="n"&gt;file&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;sys&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;stdin&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;buffer&lt;/span&gt;
 &lt;span class="n"&gt;outf&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;sys&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;stdout&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;buffer&lt;/span&gt;
@@ -12575,7 +12585,7 @@ The whole skeleton, if you want to see it:
 &lt;span class="normal"&gt;49&lt;/span&gt;
 &lt;span class="normal"&gt;50&lt;/span&gt;
 &lt;span class="normal"&gt;51&lt;/span&gt;
-&lt;span class="normal"&gt;52&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;os&lt;/span&gt;
+&lt;span class="normal"&gt;52&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;os&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;sys&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;time&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;bisect&lt;/span&gt;
@@ -19763,7 +19773,7 @@ There's this example from the beginning of the &lt;a class="external" href="http
 &lt;p&gt;That is, use any type you want. If you're not using a static type checker, no one is going to care what type you use.&lt;/p&gt;
 &lt;/blockquote&gt;
 &lt;p&gt;Really,&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
 &lt;span class="k"&gt;class&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nc"&gt;Literally&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
     &lt;span class="n"&gt;anything&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;can go&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;in here&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
     &lt;span class="n"&gt;as_long_as&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="k"&gt;lambda&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;it can be evaluated&amp;quot;&lt;/span&gt;
