@@ -2,13 +2,417 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #article</title>
-  <updated>2026-06-01T15:00:00+00:00</updated>
+  <updated>2026-06-08T08:00:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
   </author>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index/_tags/article.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/albumtitle">
+    <id>https://death.andgravity.com/albumtitle</id>
+    <title>Ordered key sharding in DynamoDB</title>
+    <updated>2026-06-08T08:00:00+00:00</updated>
+    <content type="html">&lt;p&gt;So, you want to keep a &lt;strong&gt;sorted index&lt;/strong&gt; in DynamoDB,
+but for whatever reason
+– usually &lt;a class="internal" href="/dynamodb-model#partition-throughput"&gt;throughput-related&lt;/a&gt; –
+it &lt;strong&gt;won't fit on a single partition&lt;/strong&gt;. What do you do?&lt;/p&gt;
+&lt;p&gt;Today, we look at the available solutions,
+do the math, and figure out which is best.&lt;/p&gt;
+&lt;section class="admonition tip"&gt;
+&lt;p class="admonition-title"&gt;Tip&lt;/p&gt;
+&lt;p&gt;This worked example is part of my &lt;a class="internal" href="/dynamodb"&gt;DynamoDB crash course&lt;/a&gt; series.&lt;/p&gt;
+&lt;/section&gt;
+&lt;details class="toc" open&gt;
+&lt;summary&gt;Contents&lt;/summary&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#requirements"&gt;Requirements&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#a-sparse-index-is-almost-enough"&gt;A sparse index is almost enough&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#but-scan-results-are-not-ordered"&gt;But scan results are not ordered&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#but-a-single-partition-key-causes-throttling"&gt;But a single partition key causes throttling&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#but-random-suffixes-are-random"&gt;But random suffixes are random&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#but-hash-suffixes-are-not-ordered"&gt;But hash suffixes are not ordered&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#but-there-are-a-lot-of-first-characters"&gt;But there are a lot of first characters&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#but-some-first-bytes-need-multiple-shards"&gt;But some first bytes need multiple shards&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#but-tries-and-prefix-ranges-are-complicated"&gt;But tries and prefix ranges are complicated&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/details&gt;
+&lt;h2 id="requirements"&gt;Requirements&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#requirements" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Say you're using &lt;a class="internal" href="/dynamodb-patterns#single-table-design"&gt;single table design&lt;/a&gt;
+with a table of artists, albums, and songs.&lt;/p&gt;
+&lt;p&gt;You keep an artist's items in a single collection
+(aka same partition key),
+and use sort keys &lt;code&gt;artist&lt;/code&gt;, &lt;code&gt;album#{Album}&lt;/code&gt;, and &lt;code&gt;song#{Album}#{Song}&lt;/code&gt;,
+depending on their type:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="YAML"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# table Music (partition key: Artist, sort key: sk)&lt;/span&gt;
+&lt;span class="nt"&gt;Solar Fields&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#Leaving&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Home&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Album&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Leaving Home&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;artist&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;song#Leaving&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Home#Air&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Song&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;song#Leaving&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Home#Monogram&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;To list albums without doing a full table scan,
+you need a &lt;a class="internal" href="/dynamodb-model#global-secondary-indexes"&gt;global secondary index&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Let's come up with some reasonable requirements; the &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; should support:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;items up 500 bytes (we project additional attributes besides the keys)&lt;/li&gt;
+&lt;li&gt;10,000 queries/second, max 100 items/query, &lt;strong&gt;sorted alphabetically&lt;/strong&gt;&lt;ul&gt;
+&lt;li&gt;&lt;em&gt;list all albums&lt;/em&gt;&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;list albums by title&lt;/em&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;10,000 writes/second (to avoid &lt;a class="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html"&gt;write throttling&lt;/a&gt; during imports)&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id="a-sparse-index-is-almost-enough"&gt;A sparse index is almost enough&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#a-sparse-index-is-almost-enough" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;One way to do it is to use a &lt;em&gt;dedicated&lt;/em&gt;
+&lt;a class="internal" href="/dynamodb-patterns#sparse-indexes"&gt;sparse index&lt;/a&gt;,
+taking advantage of the fact that
+items with missing index keys don't appear in the index.&lt;/p&gt;
+&lt;p&gt;If only albums have an &lt;em&gt;Album&lt;/em&gt; attribute, we just create a new &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="YAML"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# GSI Albums (partition key: Album, sort key: Artist)&lt;/span&gt;
+&lt;span class="nt"&gt;Leaving Home&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;International Pony&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; sk&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#Leaving&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Home&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Solar Fields&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; sk&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#Leaving&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Home&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="nt"&gt;Heavy Migration&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Dday One&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; sk&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#Heavy&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Migration&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;If songs have an &lt;em&gt;Album&lt;/em&gt; too,
+we add a dedicated &lt;em&gt;AlbumsPK&lt;/em&gt; attribute instead.&lt;/p&gt;
+&lt;p&gt;In many ways, this is the ideal solution.
+To &lt;em&gt;list all albums&lt;/em&gt;, we scan the index.
+To &lt;em&gt;list albums by title&lt;/em&gt;, we query an index partition key.
+We have lots of unique partition keys
+with items spread pretty evenly across them,
+which should prevent throttling.&lt;/p&gt;
+&lt;h2 id="but-scan-results-are-not-ordered"&gt;But scan results are not ordered&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#but-scan-results-are-not-ordered" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;...except scan results are not ordered,
+so we're missing the &lt;em&gt;sorted alphabetically&lt;/em&gt; part.&lt;/p&gt;
+&lt;p&gt;What &lt;em&gt;is&lt;/em&gt; ordered are sort keys,
+so we can use a single index collection instead:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="YAML"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# GSI GSI1 (partition key: gsi1pk, sort key: gsi1sk)&lt;/span&gt;
+&lt;span class="s"&gt;&amp;#39;albums&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Heavy Migration&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Artist&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Dday One&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="nt"&gt; sk&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#Heavy&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Migration&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Leaving Home&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Artist&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Solar Fields&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="nt"&gt; sk&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#Leaving&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Home&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Leaving Home&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Artist&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;International Pony&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="nt"&gt; sk&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#39;album#Leaving&lt;/span&gt;&lt;span class="nv"&gt; &lt;/span&gt;&lt;span class="s"&gt;Home&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;This is also seemingly ideal.
+To &lt;em&gt;list all albums&lt;/em&gt;, we query the entire index partition key.
+To &lt;em&gt;list albums by title&lt;/em&gt;, we use a sort key.
+The results are sorted as required,
+and there's no limit on the number of items in a collection.&lt;/p&gt;
+&lt;h2 id="but-a-single-partition-key-causes-throttling"&gt;But a single partition key causes throttling&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#but-a-single-partition-key-causes-throttling" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;However, there are
+&lt;a class="internal" href="/dynamodb-model#partition-throughput"&gt;per-partition limits&lt;/a&gt; of
+24 MB/s for reads and
+1 MB/s for writes.&lt;/p&gt;
+&lt;p&gt;Let's see how they compare to our requirements:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;reads: 500 bytes/item * 10k queries/s * 100 items/query = 500 MB/s (&lt;strong&gt;~21x&lt;/strong&gt;)&lt;/li&gt;
+&lt;li&gt;writes: 500 bytes/item * 10k items/s = 5 MB/s (&lt;strong&gt;5x&lt;/strong&gt;)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Uh-oh, turns out we need &lt;strong&gt;21 times&lt;/strong&gt; the throughput one partition can deliver.&lt;/p&gt;
+&lt;p&gt;One way to spread the load is
+&lt;a class="internal" href="/dynamodb-patterns#partition-key-sharding"&gt;sharding&lt;/a&gt;,
+using multiple synthetic partition keys of the form &lt;code&gt;album#{shard_id}&lt;/code&gt;.
+A common option for the shard id is a &lt;strong&gt;random number&lt;/strong&gt; from a known range,
+e.g. &lt;code&gt;album#{randrange(21)}&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="YAML"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# GSI GSI1 (partition key: gsi1pk, sort key: gsi1sk)&lt;/span&gt;
+&lt;span class="s"&gt;&amp;#39;album#1&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Leaving Home&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Artist&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Solar Fields&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="s"&gt;&amp;#39;album#12&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Heavy Migration&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Artist&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Dday One&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="s"&gt;&amp;#39;album#20&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Leaving Home&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Artist&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;International Pony&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;To &lt;em&gt;list all albums&lt;/em&gt;, query each shard in turn:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;shard&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="nb"&gt;range&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;21&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;dynamodb&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;album#&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;shard&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id="but-random-suffixes-are-random"&gt;But random suffixes are random&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#but-random-suffixes-are-random" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;There's a problem, though –
+with random shard ids we can't easily &lt;em&gt;list albums by title&lt;/em&gt;,
+since albums with the same title may end up on any shard.&lt;/p&gt;
+&lt;p&gt;A better option is to &lt;strong&gt;calculate&lt;/strong&gt; the shard id
+from the album title using a hash function:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;hash&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;from_bytes&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sha256&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;encode&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;digest&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;album_shard_id&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;album_title&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;hash&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;album_title&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="mi"&gt;21&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="YAML"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# GSI GSI1 (partition key: gsi1pk, sort key: gsi1sk)&lt;/span&gt;
+&lt;span class="s"&gt;&amp;#39;album#6&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Leaving Home&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Artist&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Solar Fields&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Leaving Home&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Artist&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;International Pony&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;span class="s"&gt;&amp;#39;album#8&amp;#39;&lt;/span&gt;&lt;span class="p p-Indicator"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;!btree&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nt"&gt;Heavy Migration&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;{&lt;/span&gt;&lt;span class="nt"&gt; Artist&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;Dday One&lt;/span&gt;&lt;span class="p p-Indicator"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p p-Indicator"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;To &lt;em&gt;list albums by title&lt;/em&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;dynamodb&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;query&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;album#&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;album_shard_id&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;album_title&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;sk&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;album_title&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;index&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;GSI1&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id="but-hash-suffixes-are-not-ordered"&gt;But hash suffixes are not ordered&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#but-hash-suffixes-are-not-ordered" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;That takes care of throughput,
+but now results aren't &lt;em&gt;sorted alphabetically&lt;/em&gt; anymore.
+We can sort items within each shard using the sort key,
+but they are spread uniformly across shards,
+and there's no order &lt;em&gt;between shards&lt;/em&gt;.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;Maybe we could use the &lt;strong&gt;first letter&lt;/strong&gt; as shard id instead?&lt;/p&gt;
+&lt;p&gt;Of course, we have to account for some first letters
+being &lt;a class="external" href="https://en.wikipedia.org/wiki/Letter_frequency#Relative_frequencies_of_the_first_letters_of_a_word_in_the_English_language"&gt;more frequent&lt;/a&gt; than others.
+In this case, we can approximate the actual distribution
+by using &lt;a class="external" href="https://musicbrainz.org/doc/MusicBrainz_Database"&gt;MusicBrainz&lt;/a&gt; data.&lt;/p&gt;
+&lt;p&gt;There are 5.5 million albums:&lt;/p&gt;
+&lt;!-- (incidentally this gives us an idea of how many albums we can have, although we should figured this out already): --&gt;
+
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;polars&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;as&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;pl&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;titles&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;pl&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;read_csv&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="s1"&gt;&amp;#39;mbdump/release&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;has_header&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;False&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;separator&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&lt;/span&gt;&lt;span class="se"&gt;\t&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;quote_char&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;columns&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;new_columns&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;title&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="p"&gt;)[:,&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;titles&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;count&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="go"&gt;5535986&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;...but only 3.3 million unique titles,
+partly due to different releases of the same album,
+partly due to some titles being more popular
+– a few of them, &lt;em&gt;really&lt;/em&gt; popular:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;titles&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;value_counts&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sort&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;shape: (3_370_505, 2)&lt;/span&gt;
+&lt;span class="go"&gt; title            count&lt;/span&gt;
+&lt;span class="go"&gt; Greatest Hits    4638&lt;/span&gt;
+&lt;span class="go"&gt; Demo             3140&lt;/span&gt;
+&lt;span class="go"&gt; …                …&lt;/span&gt;
+&lt;span class="go"&gt; Salsa salsa      1&lt;/span&gt;
+&lt;span class="go"&gt; Glamour: Deluxe  1&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;titles&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unique_counts&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;quantile&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="mf"&gt;.9&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mf"&gt;.99&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mf"&gt;.999&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mf"&gt;.9999&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+&lt;span class="go"&gt;[2.0, 11.0, 58.0, 221.0, 4638.0]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Let's look at first characters:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;normalized&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;titles&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;str&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_lowercase&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;str&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;normalize&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;NFKD&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sort&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;normalized&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;str&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;value_counts&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sort&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;shape: (5_402, 2)&lt;/span&gt;
+&lt;span class="go"&gt; title  count&lt;/span&gt;
+&lt;span class="go"&gt; t      584760&lt;/span&gt;
+&lt;span class="go"&gt; s      509065&lt;/span&gt;
+&lt;span class="go"&gt; a      317513&lt;/span&gt;
+&lt;span class="go"&gt; l      298757&lt;/span&gt;
+&lt;span class="go"&gt; …      …&lt;/span&gt;
+&lt;span class="go"&gt; 🫀     1&lt;/span&gt;
+&lt;span class="go"&gt; 🫂     1&lt;/span&gt;
+&lt;span class="go"&gt; 🫧     1&lt;/span&gt;
+&lt;span class="go"&gt; 󠀼       1&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id="but-there-are-a-lot-of-first-characters"&gt;But there are a lot of first characters&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#but-there-are-a-lot-of-first-characters" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;5402?!
+Indeed, there's more to Unicode than the Latin alphabet:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;normalized&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;str&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unique&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sample&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_list&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="go"&gt;[&amp;#39;學&amp;#39;, &amp;#39;舒&amp;#39;, &amp;#39;і&amp;#39;, &amp;#39;进&amp;#39;, &amp;#39;੦&amp;#39;, &amp;#39;潮&amp;#39;, &amp;#39;向&amp;#39;, &amp;#39;妳&amp;#39;, &amp;#39;陳&amp;#39;, &amp;#39;🍅&amp;#39;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;And it's actually worse than that –
+there are five thousand characters &lt;em&gt;in our dataset&lt;/em&gt;,
+but there are hundreds of thousands of &lt;em&gt;possible&lt;/em&gt; Unicode characters.&lt;/p&gt;
+&lt;p&gt;This is not a problem when adding the albums,
+but it is a problem when listing them,
+since we need to enumerate all the shards in a reasonable amount of time
+(and most shards being empty doesn't help, either).&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;As a very bad compromise,
+we could use the &lt;strong&gt;first byte&lt;/strong&gt; of the UTF-8 encoding instead;
+this caps the number of shard ids at 256,
+and at least Latin titles would be sorted
+(I did say it's a bad compromise).
+There:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;firstbytes&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;normalized&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;map_elements&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;encode&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;bin&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;firstbytes&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;value_counts&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sort&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;shape: (136, 2)&lt;/span&gt;
+&lt;span class="go"&gt; title    count&lt;/span&gt;
+&lt;span class="go"&gt; b&amp;quot;t&amp;quot;     584760&lt;/span&gt;
+&lt;span class="go"&gt; b&amp;quot;s&amp;quot;     509065&lt;/span&gt;
+&lt;span class="go"&gt; b&amp;quot;a&amp;quot;     317513&lt;/span&gt;
+&lt;span class="go"&gt; b&amp;quot;l&amp;quot;     298757&lt;/span&gt;
+&lt;span class="go"&gt; …        …&lt;/span&gt;
+&lt;span class="go"&gt; b&amp;quot;\xd4&amp;quot;  2&lt;/span&gt;
+&lt;span class="go"&gt; b&amp;quot;U&amp;quot;     1&lt;/span&gt;
+&lt;span class="go"&gt; b&amp;quot;\xee&amp;quot;  1&lt;/span&gt;
+&lt;span class="go"&gt; b&amp;quot;\xf3&amp;quot;  1&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id="but-some-first-bytes-need-multiple-shards"&gt;But some first bytes need multiple shards&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#but-some-first-bytes-need-multiple-shards" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;We knew the first byte distribution would be skewed,
+but some of them don't even fit on a single shard
+(and it gets worse the more shards we need):&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;shard_count&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;21&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;firstbytes&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;value_counts&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sort&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;with_columns&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;    &lt;span class="n"&gt;pl&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;col&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;count&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;firstbytes&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt; &lt;span class="n"&gt;shard_count&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gp"&gt;... &lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;head&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="go"&gt;shape: (5, 2)&lt;/span&gt;
+&lt;span class="go"&gt; title  count&lt;/span&gt;
+&lt;span class="go"&gt; b&amp;quot;t&amp;quot;   2.218206&lt;/span&gt;
+&lt;span class="go"&gt; b&amp;quot;s&amp;quot;   1.931068&lt;/span&gt;
+&lt;span class="go"&gt; b&amp;quot;a&amp;quot;   1.204442&lt;/span&gt;
+&lt;span class="go"&gt; b&amp;quot;l&amp;quot;   1.133294&lt;/span&gt;
+&lt;span class="go"&gt; b&amp;quot;b&amp;quot;   1.106949&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;We're back to where we started:
+how do we sort between shards with the same prefix?&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;We don't – we find &lt;strong&gt;longer prefixes&lt;/strong&gt; that fit in one shard.&lt;/p&gt;
+&lt;p&gt;That sounds like the perfect job for a &lt;a class="external" href="https://en.wikipedia.org/wiki/Trie"&gt;trie&lt;/a&gt; (aka prefix tree).
+This would also allow us to switch back to characters,
+and merge small prefixes into ranges
+until each range fits one shard.
+But that's complicated,
+and as often the case,
+there must be a better way.&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;h2 id="but-tries-and-prefix-ranges-are-complicated"&gt;But tries and prefix ranges are complicated&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#but-tries-and-prefix-ranges-are-complicated" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;We're looking for contiguous ranges,
+each of a certain size.
+Tries are good for finding the &lt;em&gt;shortest&lt;/em&gt; prefix,
+but we don't really care about prefix length.&lt;/p&gt;
+&lt;p&gt;Why not just split the sorted titles into N &lt;strong&gt;equal ranges&lt;/strong&gt; instead?
+This takes care of the uneven distribution:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;boundaries&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;normalized&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;gather_every&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;2000&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;str&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;4&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;boundaries&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;value_counts&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sort&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;shape: (2_103, 2)&lt;/span&gt;
+&lt;span class="go"&gt; title     count&lt;/span&gt;
+&lt;span class="go"&gt; the       161&lt;/span&gt;
+&lt;span class="go"&gt; live      23&lt;/span&gt;
+&lt;span class="go"&gt; …         …&lt;/span&gt;
+&lt;span class="go"&gt; 風吹けは  1&lt;/span&gt;
+&lt;span class="go"&gt; 魔法少女  1&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;...provided a long enough prefix:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;boundaries&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;normalized&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;gather_every&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;2000&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;str&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;boundaries&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;value_counts&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sort&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;pl&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;col&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;count&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;shape: (3, 2)&lt;/span&gt;
+&lt;span class="go"&gt; title             count&lt;/span&gt;
+&lt;span class="go"&gt; greatest hits     3&lt;/span&gt;
+&lt;span class="go"&gt; demo              2&lt;/span&gt;
+&lt;span class="go"&gt; the very best of  2&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;...almost there:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;boundaries&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;normalized&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;gather_every&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;2000&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;str&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;20&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;boundaries&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;value_counts&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sort&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;pl&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;col&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;count&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;shape: (2, 2)&lt;/span&gt;
+&lt;span class="go"&gt; title          count&lt;/span&gt;
+&lt;span class="go"&gt; greatest hits  3&lt;/span&gt;
+&lt;span class="go"&gt; demo           2&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;This highlights another problem –
+if the shard size is too small,
+there may be more than a shard's worth of albums with identical titles;
+we can fix this by using another, random suffix
+(ordering doesn't matter anymore, since they have the same title).&lt;/p&gt;
+&lt;p&gt;Thankfully, our shards are huge, so it's not an issue:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;shard_size&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;math&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ceil&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;normalized&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt; &lt;span class="n"&gt;shard_count&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;shard_size&lt;/span&gt;
+&lt;span class="go"&gt;263619&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;boundaries&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;normalized&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;gather_every&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;shard_size&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;str&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;20&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;To use this,
+save the list of boundaries in code,
+and find the index of the biggest boundary smaller than a given album title:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;bisect&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;unicodedata&lt;/span&gt;
+
+&lt;span class="n"&gt;ALBUM_TITLE_BOUNDARIES&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;  &lt;span class="c1"&gt;# replaced with the smallest possible string&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;agartha&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;barstow / crazy&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;can you feel it&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;cyan rot&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;dreams take over eve&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;feud semiotics (rb. &amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;grave poetry&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;i live&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;kannaval&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;live in florence&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s2"&gt;&amp;quot;mir ist&amp;#39;s gleich / i&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;notice&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;platforms ep&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;rituals&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;skylten&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;surtr / absorbed&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;the human touch&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;tonttujen jouluyö: &amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;walking away&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="s1"&gt;&amp;#39;голос&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="p"&gt;]&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;album_shard_id&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;album_title&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;normalized&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;unicodedata&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;normalize&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;NFKD&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;album_title&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;lower&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;bisect&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;bisect&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ALBUM_TITLE_BOUNDARIES&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;normalized&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python console session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;album_shard_id&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;2 Pie Island&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;0&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;album_shard_id&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;Heavy Migration&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;7&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;album_shard_id&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;Leaving Home&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;9&lt;/span&gt;
+&lt;span class="gp"&gt;&amp;gt;&amp;gt;&amp;gt; &lt;/span&gt;&lt;span class="n"&gt;album_shard_id&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;Space Cadet&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="go"&gt;15&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;!-- TODO
+
+# But the prefix distribution changed
+
+plan ahead, 10x shards
+
+migrate to new index, link to patterns section
+
+--&gt;
+
+&lt;hr /&gt;
+&lt;p&gt;Anyway, that's it for now.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Learned something new today?&lt;/strong&gt; Share it with others, it really helps! &lt;span class="text-large"&gt;
+&lt;span class="share-icons"&gt;
+&lt;a
+    class="share-icon pycoders color"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+&gt;PyCoder's Weekly&lt;/a&gt;
+&lt;a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/albumtitle&amp;t=Ordered%20key%20sharding%20in%20DynamoDB"
+&gt;HN&lt;/a&gt;
+&lt;a
+    class="share-icon bluesky color"
+    href="https://bsky.%61%70%70/intent/compose?text=Ordered%20key%20sharding%20in%20DynamoDB%20https%3A//death.andgravity.com/albumtitle"
+&gt;Bluesky&lt;/a&gt;
+&lt;!--
+&lt;a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/albumtitle&amp;title=Ordered%20key%20sharding%20in%20DynamoDB"
+&gt;Reddit&lt;/a&gt;
+--&gt;
+&lt;a
+    class="share-icon linkedin color"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/albumtitle"
+&gt;linkedin&lt;/a&gt;
+&lt;a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Ordered%20key%20sharding%20in%20DynamoDB&amp;url=https%3A//death.andgravity.com/albumtitle&amp;via=_andgravity"
+&gt;Twitter&lt;/a&gt;
+&lt;/span&gt;
+&lt;/span&gt;&lt;/p&gt;
+
+
+&lt;section class="footnotes"&gt;
+&lt;ol&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;You're welcome to try, though,
+especially if you're preparing for an interview. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+    <link href="https://death.andgravity.com/albumtitle" rel="alternate"/>
+    <summary>...in which we figure out a sorted index larger than a single DynamoDB partition.</summary>
+    <published>2026-06-08T08:00:00+00:00</published>
+  </entry>
   <entry xml:base="https://death.andgravity.com/dynamodb-patterns">
     <id>https://death.andgravity.com/dynamodb-patterns</id>
     <title>DynamoDB crash course: part 3 – design patterns</title>
@@ -284,7 +688,7 @@ but this will &lt;em&gt;definitely&lt;/em&gt; cause throttling.&lt;/p&gt;
 you can use &lt;abbr title="Global Secondary Index"&gt;GSI&lt;/abbr&gt; partition key &lt;code&gt;album#{hash(Album} % 100}&lt;/code&gt;
 if you don't care about the order,
 or something like &lt;code&gt;album#{Album[:2].lower()}&lt;/code&gt; if you do
-(but likely more sophistication is needed –
+(but likely &lt;a class="internal" href="/albumtitle"&gt;more sophistication is needed&lt;/a&gt; –
 &lt;code&gt;th&lt;/code&gt; will be a very common album title prefix,
 and some album titles &lt;a class="external" href="https://www.discogs.com/release/10506005--"&gt;don't contain letters at all&lt;/a&gt;).&lt;/p&gt;
 &lt;/section&gt;
@@ -5479,7 +5883,7 @@ you can use a module instead:&lt;/p&gt;
 this is a valid retriever,
 since it has all the expected methods and attributes.
 So much so, that it's also compatible with &lt;a class="anchor" href="#protocols"&gt;protocols&lt;/a&gt;:&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;module&lt;/span&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;module&lt;/span&gt;
 
 &lt;span class="n"&gt;mount_retriever&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;mod&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;module&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
@@ -6428,7 +6832,7 @@ and stop along the way to point out how we're doing things.&lt;/p&gt;
 that gets data from an API
 and saves it in a CSV file.
 It might look something like this:&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;csv&lt;/span&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;csv&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;time&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;click&lt;/span&gt;
 
@@ -6487,7 +6891,7 @@ you've &lt;em&gt;decoupled&lt;/em&gt; it.&lt;sup class="footnote-ref" id="fnref-
 &lt;p&gt;As a result,
 &lt;code&gt;write_csv()&lt;/code&gt; doesn't need to change when adding new arguments to &lt;code&gt;get_data()&lt;/code&gt;,
 and we can test it without monkeypatching &lt;code&gt;get_data()&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;seasons&lt;/span&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;seasons&lt;/span&gt;
 
 &lt;span class="n"&gt;DATA&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;
     &lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;name&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;one&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;short_name&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;1&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;
@@ -8443,7 +8847,7 @@ we start with &lt;a class="external" href="https://wiki.c2.com/?DoTheSimplestThi
 &lt;span class="normal"&gt;2&lt;/span&gt;
 &lt;span class="normal"&gt;3&lt;/span&gt;
 &lt;span class="normal"&gt;4&lt;/span&gt;
-&lt;span class="normal"&gt;5&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;os&lt;/span&gt;
+&lt;span class="normal"&gt;5&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;os&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;sys&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;time&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;getpass&lt;/span&gt;
@@ -9141,7 +9545,7 @@ But, less code!&lt;/li&gt;
 &lt;span class="normal"&gt;12&lt;/span&gt;
 &lt;span class="normal"&gt;13&lt;/span&gt;
 &lt;span class="normal"&gt;14&lt;/span&gt;
-&lt;span class="normal"&gt;15&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;os&lt;/span&gt;&lt;span class="o"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;sys&lt;/span&gt;
+&lt;span class="normal"&gt;15&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;os&lt;/span&gt;&lt;span class="o"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;sys&lt;/span&gt;
 
 &lt;span class="n"&gt;file&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;sys&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;stdin&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;buffer&lt;/span&gt;
 &lt;span class="n"&gt;outf&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;sys&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;stdout&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;buffer&lt;/span&gt;
@@ -9311,7 +9715,7 @@ The whole skeleton, if you want to see it:
 &lt;span class="normal"&gt;49&lt;/span&gt;
 &lt;span class="normal"&gt;50&lt;/span&gt;
 &lt;span class="normal"&gt;51&lt;/span&gt;
-&lt;span class="normal"&gt;52&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;os&lt;/span&gt;
+&lt;span class="normal"&gt;52&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;os&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;sys&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;time&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;bisect&lt;/span&gt;
@@ -15696,7 +16100,7 @@ There's this example from the beginning of the &lt;a class="external" href="http
 &lt;p&gt;That is, use any type you want. If you're not using a static type checker, no one is going to care what type you use.&lt;/p&gt;
 &lt;/blockquote&gt;
 &lt;p&gt;Really,&lt;/p&gt;
-&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="IPython"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@dataclass&lt;/span&gt;
 &lt;span class="k"&gt;class&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nc"&gt;Literally&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
     &lt;span class="n"&gt;anything&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;can go&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;in here&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
     &lt;span class="n"&gt;as_long_as&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="k"&gt;lambda&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;it can be evaluated&amp;quot;&lt;/span&gt;

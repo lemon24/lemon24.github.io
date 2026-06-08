@@ -30,15 +30,15 @@
 
 
 
-<title>Sorted key sharding in DynamoDB - death and gravity</title>
+<title>Ordered key sharding in DynamoDB - death and gravity</title>
+<meta name="description" content="...in which we figure out a sorted index larger than a single DynamoDB partition." />
 
 
-
-<meta property="og:title" content="Sorted key sharding in DynamoDB">
+<meta property="og:title" content="Ordered key sharding in DynamoDB">
 <meta property="og:site_name" content="death and gravity">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://death.andgravity.com/albumtitle">
-
+<meta property="og:description" content="...in which we figure out a sorted index larger than a single DynamoDB partition.">
 
 
 
@@ -54,6 +54,15 @@ window.addEventListener('resize', set_vh);
 </script>
 
 
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4RY2QR580X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', "G-4RY2QR580X");
+</script>
 
 
 
@@ -71,14 +80,14 @@ window.addEventListener('resize', set_vh);
 </ul>
 </nav>
 
-<h1 class="heading-noindex">Sorted key sharding in DynamoDB</h1>
+<h1 class="heading-noindex">Ordered key sharding in DynamoDB</h1>
 
 <p class="text-gray text-nowrap">
 
 
 
 <small>
-<span class="tooltip" data-tooltip="published on 2026-06-06">June 2026</span>
+<span class="tooltip" data-tooltip="published on 2026-06-08">June 2026</span>
 ∙ seven minute read
 ∙
 </small><span class="share-icons">
@@ -89,16 +98,16 @@ window.addEventListener('resize', set_vh);
 >PyCoder's Weekly</a>
 <a
     class="share-icon hacker-news"
-    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/albumtitle&t=Sorted%20key%20sharding%20in%20DynamoDB"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/albumtitle&t=Ordered%20key%20sharding%20in%20DynamoDB"
 >HN</a>
 <a
     class="share-icon bluesky"
-    href="https://bsky.%61%70%70/intent/compose?text=Sorted%20key%20sharding%20in%20DynamoDB%20https%3A//death.andgravity.com/albumtitle"
+    href="https://bsky.%61%70%70/intent/compose?text=Ordered%20key%20sharding%20in%20DynamoDB%20https%3A//death.andgravity.com/albumtitle"
 >Bluesky</a>
 <!--
 <a
     class="share-icon reddit"
-    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/albumtitle&title=Sorted%20key%20sharding%20in%20DynamoDB"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/albumtitle&title=Ordered%20key%20sharding%20in%20DynamoDB"
 >Reddit</a>
 -->
 <a
@@ -107,7 +116,7 @@ window.addEventListener('resize', set_vh);
 >linkedin</a>
 <a
     class="share-icon twitter"
-    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Sorted%20key%20sharding%20in%20DynamoDB&url=https%3A//death.andgravity.com/albumtitle&via=_andgravity"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Ordered%20key%20sharding%20in%20DynamoDB&url=https%3A//death.andgravity.com/albumtitle&via=_andgravity"
 >Twitter</a>
 </span>
 
@@ -125,6 +134,16 @@ window.addEventListener('resize', set_vh);
 <main class="content columns">
 <div class="column col-sm-12 col-md-10 col-8">
 
+<p>So, you want to keep a <strong>sorted index</strong> in DynamoDB,
+but for whatever reason
+– usually <a class="internal" href="/dynamodb-model#partition-throughput">throughput-related</a> –
+it <strong>won't fit on a single partition</strong>. What do you do?</p>
+<p>Today, we look at the available solutions,
+do the math, and figure out which is best.</p>
+<section class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>This worked example is part of my <a class="internal" href="/dynamodb">DynamoDB crash course</a> series.</p>
+</section>
 <details class="toc" open>
 <summary>Contents</summary>
 <ul>
@@ -179,7 +198,7 @@ items with missing index keys don't appear in the index.</p>
 <span class="w">  </span><span class="nt">Dday One</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> sk</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;album#Heavy</span><span class="nv"> </span><span class="s">Migration&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">...</span><span class="p p-Indicator">}</span>
 </code></pre></div>
 <p>If songs have an <em>Album</em> too,
-we can add a dedicated <em>AlbumsPK</em> attribute instead.</p>
+we add a dedicated <em>AlbumsPK</em> attribute instead.</p>
 <p>In many ways, this is the ideal solution.
 To <em>list all albums</em>, we scan the index.
 To <em>list albums by title</em>, we query an index partition key.
@@ -199,7 +218,7 @@ so we can use a single index collection instead:</p>
 </code></pre></div>
 <p>This is also seemingly ideal.
 To <em>list all albums</em>, we query the entire index partition key.
-To <em>list albums by title</em>, we also use a sort key.
+To <em>list albums by title</em>, we use a sort key.
 The results are sorted as required,
 and there's no limit on the number of items in a collection.</p>
 <h2 id="but-a-single-partition-key-causes-throttling">But a single partition key causes throttling<span class="headerlink">&nbsp;<a href="#but-a-single-partition-key-causes-throttling" title="permalink">#</a></span></h2>
@@ -215,7 +234,7 @@ and there's no limit on the number of items in a collection.</p>
 <p>Uh-oh, turns out we need <strong>21 times</strong> the throughput one partition can deliver.</p>
 <p>One way to spread the load is
 <a class="internal" href="/dynamodb-patterns#partition-key-sharding">sharding</a>,
-that is, using synthetic partition keys of the form <code>album#{shard_id}</code>.
+using multiple synthetic partition keys of the form <code>album#{shard_id}</code>.
 A common option for the shard id is a <strong>random number</strong> from a known range,
 e.g. <code>album#{randrange(21)}</code>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="YAML"><span></span><code><span class="c1"># GSI GSI1 (partition key: gsi1pk, sort key: gsi1sk)</span>
@@ -232,10 +251,9 @@ e.g. <code>album#{randrange(21)}</code>:</p>
         <span class="k">yield</span> <span class="n">item</span>
 </code></pre></div>
 <h2 id="but-random-suffixes-are-random">But random suffixes are random<span class="headerlink">&nbsp;<a href="#but-random-suffixes-are-random" title="permalink">#</a></span></h2>
-<p>There's a problem –
-with random shard ids we can't <em>list albums by title</em>,
-since we don't know what shard any given album is on
-(and it might be more than one anyway).</p>
+<p>There's a problem, though –
+with random shard ids we can't easily <em>list albums by title</em>,
+since albums with the same title may end up on any shard.</p>
 <p>A better option is to <strong>calculate</strong> the shard id
 from the album title using a hash function:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">hash</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
@@ -255,7 +273,7 @@ from the album title using a hash function:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">dynamodb</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;album#</span><span class="si">{</span><span class="n">album_shard_id</span><span class="p">(</span><span class="n">album_title</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">sk</span><span class="o">=</span><span class="n">album_title</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="s1">&#39;GSI1&#39;</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="but-hash-suffixes-are-not-ordered">But hash suffixes are not ordered<span class="headerlink">&nbsp;<a href="#but-hash-suffixes-are-not-ordered" title="permalink">#</a></span></h2>
-<p>This takes care of throughput,
+<p>That takes care of throughput,
 but now results aren't <em>sorted alphabetically</em> anymore.
 We can sort items within each shard using the sort key,
 but they are spread uniformly across shards,
@@ -313,7 +331,7 @@ partly due to some titles being more popular
 </code></pre></div>
 <h2 id="but-there-are-a-lot-of-first-characters">But there are a lot of first characters<span class="headerlink">&nbsp;<a href="#but-there-are-a-lot-of-first-characters" title="permalink">#</a></span></h2>
 <p>5402?!
-Indeed, there's more than the Latin alphabet:</p>
+Indeed, there's more to Unicode than the Latin alphabet:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">normalized</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
 <span class="go">[&#39;學&#39;, &#39;舒&#39;, &#39;і&#39;, &#39;进&#39;, &#39;੦&#39;, &#39;潮&#39;, &#39;向&#39;, &#39;妳&#39;, &#39;陳&#39;, &#39;🍅&#39;]</span>
 </code></pre></div>
@@ -366,19 +384,19 @@ how do we sort between shards with the same prefix?</p>
 <hr />
 <p>We don't – we find <strong>longer prefixes</strong> that fit in one shard.</p>
 <p>That sounds like the perfect job for a <a class="external" href="https://en.wikipedia.org/wiki/Trie">trie</a> (aka prefix tree).
-This would also allow us to go back to characters,
+This would also allow us to switch back to characters,
 and merge small prefixes into ranges
 until each range fits one shard.
 But that's complicated,
 and as often the case,
 there must be a better way.<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup></p>
 <h2 id="but-tries-and-prefix-ranges-are-complicated">But tries and prefix ranges are complicated<span class="headerlink">&nbsp;<a href="#but-tries-and-prefix-ranges-are-complicated" title="permalink">#</a></span></h2>
-<p>We're looking for contiguous prefix ranges,
+<p>We're looking for contiguous ranges,
 each of a certain size.
 Tries are good for finding the <em>shortest</em> prefix,
 but we don't really care about prefix length.</p>
-<p>Why not just split the sorted titles into N <strong>equal ranges</strong> instead?</p>
-<p>This takes care of the uneven distribution:</p>
+<p>Why not just split the sorted titles into N <strong>equal ranges</strong> instead?
+This takes care of the uneven distribution:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span> <span class="o">=</span> <span class="n">normalized</span><span class="o">.</span><span class="n">gather_every</span><span class="p">(</span><span class="mi">2000</span><span class="p">)</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">sort</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="go">shape: (2_103, 2)</span>
@@ -412,52 +430,167 @@ there may be more than a shard's worth of albums with identical titles;
 we can fix this by using another, random suffix
 (ordering doesn't matter anymore, since they have the same title).</p>
 <p>Thankfully, our shards are huge, so it's not an issue:</p>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">shard_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">normalized</span><span class="p">)</span> <span class="o">//</span> <span class="n">shard_count</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">shard_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">normalized</span><span class="p">)</span> <span class="o">/</span> <span class="n">shard_count</span><span class="p">))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">shard_size</span>
-<span class="go">263618</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">normalized</span><span class="o">.</span><span class="n">gather_every</span><span class="p">(</span><span class="n">shard_size</span><span class="p">)</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">20</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="o">*</span><span class="nb">map</span><span class="p">(</span><span class="nb">repr</span><span class="p">,</span> <span class="n">boundaries</span><span class="p">),</span> <span class="n">sep</span><span class="o">=</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
-<span class="go">&#39;&#39;</span>
-<span class="go">&#39;agartha&#39;</span>
-<span class="go">&#39;barstools &amp; lovefool&#39;</span>
-<span class="go">&#39;can you feel it&#39;</span>
-<span class="go">&#39;cyan noise&#39;</span>
-<span class="go">&#39;dreams still inspire&#39;</span>
-<span class="go">&#39;feuchte hosen&#39;</span>
-<span class="go">&#39;grave offerings&#39;</span>
-<span class="go">&#39;i listened&#39;</span>
-<span class="go">&#39;kannan en kadhalan&#39;</span>
-<span class="go">&#39;live in finland 1969&#39;</span>
-<span class="go">&#39;mir hams mein schreb&#39;</span>
-<span class="go">&#39;nothin’s on&#39;</span>
-<span class="go">&#39;platform1&#39;</span>
-<span class="go">&#39;rituals&#39;</span>
-<span class="go">&#39;skylla sig själv / &#39;</span>
-<span class="go">&#39;surta - a melody of &#39;</span>
-<span class="go">&#39;the human statues&#39;</span>
-<span class="go">&#39;tonton mayonnaise&#39;</span>
-<span class="go">&#39;walking around&#39;</span>
-<span class="go">&#39;голод&#39;</span>
-<span class="go">&#39;🫂&#39;</span>
+<span class="go">263619</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">boundaries</span> <span class="o">=</span> <span class="n">normalized</span><span class="o">.</span><span class="n">gather_every</span><span class="p">(</span><span class="n">shard_size</span><span class="p">)</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">20</span><span class="p">)</span>
 </code></pre></div>
-<p>So, how do you use it?
-Simple, the shard id is the index of the biggest boundary
-smaller than the album title:</p>
+<p>To use this,
+save the list of boundaries in code,
+and find the index of the biggest boundary smaller than a given album title:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">bisect</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">unicodedata</span>
 
-<span class="n">boundaries</span> <span class="o">=</span> <span class="p">[</span> <span class="o">...</span> <span class="p">]</span>
+<span class="n">ALBUM_TITLE_BOUNDARIES</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;&#39;</span><span class="p">,</span>  <span class="c1"># replaced with the smallest possible string</span>
+    <span class="s1">&#39;agartha&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;barstow / crazy&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;can you feel it&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;cyan rot&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;dreams take over eve&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;feud semiotics (rb. &#39;</span><span class="p">,</span>
+    <span class="s1">&#39;grave poetry&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;i live&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;kannaval&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;live in florence&#39;</span><span class="p">,</span>
+    <span class="s2">&quot;mir ist&#39;s gleich / i&quot;</span><span class="p">,</span>
+    <span class="s1">&#39;notice&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;platforms ep&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;rituals&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;skylten&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;surtr / absorbed&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;the human touch&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;tonttujen jouluyö: &#39;</span><span class="p">,</span>
+    <span class="s1">&#39;walking away&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;голос&#39;</span><span class="p">,</span>
+<span class="p">]</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">album_shard_id</span><span class="p">(</span><span class="n">album_title</span><span class="p">):</span>
     <span class="n">normalized</span> <span class="o">=</span> <span class="n">unicodedata</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="s1">&#39;NFKD&#39;</span><span class="p">,</span> <span class="n">album_title</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
-    <span class="k">return</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect</span><span class="p">(</span><span class="n">boundaries</span><span class="p">,</span> <span class="n">normalized</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect</span><span class="p">(</span><span class="n">ALBUM_TITLE_BOUNDARIES</span><span class="p">,</span> <span class="n">normalized</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
 </code></pre></div>
-<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">album_shard_id</span><span class="p">(</span><span class="s1">&#39;Leaving Home&#39;</span><span class="p">)</span>
-<span class="go">9</span>
+<div class="highlight code-container"><pre class="code" data-lang="Python console session"><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">album_shard_id</span><span class="p">(</span><span class="s1">&#39;2 Pie Island&#39;</span><span class="p">)</span>
+<span class="go">0</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">album_shard_id</span><span class="p">(</span><span class="s1">&#39;Heavy Migration&#39;</span><span class="p">)</span>
 <span class="go">7</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">album_shard_id</span><span class="p">(</span><span class="s1">&#39;Leaving Home&#39;</span><span class="p">)</span>
+<span class="go">9</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">album_shard_id</span><span class="p">(</span><span class="s1">&#39;Space Cadet&#39;</span><span class="p">)</span>
+<span class="go">15</span>
 </code></pre></div>
+<!-- TODO
+
+# But the prefix distribution changed
+
+plan ahead, 10x shards
+
+migrate to new index, link to patterns section
+
+-->
+
+<hr />
+<p>Anyway, that's it for now.</p>
+<p><strong>Learned something new today?</strong> Share it with others, it really helps! <span class="text-large">
+<span class="share-icons">
+<a
+    class="share-icon pycoders color"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+>PyCoder's Weekly</a>
+<a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/albumtitle&t=Ordered%20key%20sharding%20in%20DynamoDB"
+>HN</a>
+<a
+    class="share-icon bluesky color"
+    href="https://bsky.%61%70%70/intent/compose?text=Ordered%20key%20sharding%20in%20DynamoDB%20https%3A//death.andgravity.com/albumtitle"
+>Bluesky</a>
+<!--
+<a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/albumtitle&title=Ordered%20key%20sharding%20in%20DynamoDB"
+>Reddit</a>
+-->
+<a
+    class="share-icon linkedin color"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/albumtitle"
+>linkedin</a>
+<a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=Ordered%20key%20sharding%20in%20DynamoDB&url=https%3A//death.andgravity.com/albumtitle&via=_andgravity"
+>Twitter</a>
+</span>
+</span></p>
+
+<form
+    action="https://6ba267e4.sibforms.com/serve/MUIFAGu4R8WjFiaXyeAMcB1EXpGTKhw1mbcs_tA9jM0-pfF6uQd1ptbm34aEw1OALdkHN2FR2897ahvFbSjd-jm3eJVlMYc6DH0nTmupV7n2RlUwn1zgwvqfxsZPXrK5zA0hhKDJOigBKGw-P15t4DCzB-K-DkJszgQLJfKimaCqzu4KZMWNj7W5elZdFdMErDJ6SOc25emGnq0UDA=="
+    method="post"
+    target="_blank"
+    novalidate
+    class="panel subscribe-form"
+>
+    <div class="panel-header text-large">
+
+        Want to know when new articles come out?
+
+    </div>
+    <div class="panel-body">
+
+        <p>Drop your email in the box below and I'll send new stuff straight to your inbox!</p>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input
+            type="text"
+            name="FIRSTNAME"
+            class="form-input input-lg"
+            placeholder="Your first name"
+            maxlength="200"
+        >
+        </div>
+
+        <div class="form-group col-6 col-xs-12 col-md-9">
+        <input
+            type="email"
+            name="EMAIL"
+            class="form-input input-lg"
+            placeholder="Your email address"
+        >
+        </div>
+
+        <!-- bot prevention-->
+        <div style="position: absolute; left: -5000px;" aria-hidden="true">
+        <input
+            type="text"
+            name="email_address_check"
+            tabindex="-1"
+            value=""
+        >
+        </div>
+
+        <input type="hidden" name="SIGNUP" value="albumtitle">
+        <input type="hidden" name="locale" value="en">
+        <input type="hidden" name="html_type" value="simple">
+
+    </div>
+    <div class="panel-footer">
+
+        <div class="form-group">
+        <input
+            type="submit"
+            name="subscribe"
+            class="btn btn-primary btn-lg"
+            value="Subscribe"
+        >
+        </div>
+
+        <p class="text-muted text-small mb-0">
+            (No spam or selling your data, ever. Unsubscribe at any time.)
+        </p>
+
+
+    </div>
+
+</form>
 <section class="footnotes">
 <ol>
 <li id="fn-1"><p>You're welcome to try, though,
@@ -467,6 +600,39 @@ especially if you're preparing for an interview. <a href="#fnref-1" class="footn
 
 
 
+
+
+
+
+
+
+
+<hr>
+<p>This is part of a series:</p>
+
+<ul>
+
+
+<li>
+    <a href="/dynamodb">DynamoDB crash course: part 1 – philosophy</a>
+
+
+
+<li>
+    <a href="/dynamodb-model">DynamoDB crash course: part 2 – data model</a>
+
+
+
+<li>
+    <a href="/dynamodb-patterns">DynamoDB crash course: part 3 – design patterns</a>
+
+
+
+<li>
+    <a href="/albumtitle">Ordered key sharding in DynamoDB</a> <small class="text-gray">(this article)</small>
+
+
+</ul>
 
 
 
