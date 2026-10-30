@@ -1,0 +1,243 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!doctype html>
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<link rel="stylesheet" href="/_static/spectre.css">
+<link rel="stylesheet" href="/_static/pygments.css">
+<link rel="stylesheet" href="/_static/style.css">
+
+<link rel="alternate" type="application/atom+xml" title="Atom feed" href="/_feed/index.xml" />
+
+<link rel="icon" href="/_static/xo-system-icon.svg">
+<link rel="apple-touch-icon" href="/_static/xo-system-icon.svg">
+
+
+
+
+
+
+
+<title>pyinfra – simple infrastructure automation in Python - death and gravity</title>
+<meta name="description" content="... in which we live demo pyinfra, an infrastructure automation tool." />
+
+
+<meta property="og:title" content="pyinfra – simple infrastructure automation in Python">
+<meta property="og:site_name" content="death and gravity">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://death.andgravity.com/pyinfra">
+<meta property="og:description" content="... in which we live demo pyinfra, an infrastructure automation tool.">
+
+
+
+<script>
+/* https://css-tricks.com/the-trick-to-viewport-units-on-mobile/ */
+function set_vh() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+/* we do it once, now, *and* on every resize */
+set_vh();
+window.addEventListener('resize', set_vh);
+</script>
+
+
+
+
+
+<div class="main container grid-lg">
+
+
+<header>
+<nav>
+<ul class="breadcrumb">
+
+<li class="breadcrumb-item">
+    <a href="/">death and gravity</a>
+</li>
+
+</ul>
+</nav>
+
+<h1 class="heading-noindex">pyinfra – simple infrastructure automation in Python</h1>
+
+<p class="text-gray text-nowrap">
+
+
+
+<small>
+<span class="tooltip" data-tooltip="published on 2026-11-01">November 2026</span>
+∙ two minute read
+∙
+</small><span class="share-icons">
+<a
+    class="share-icon pycoders"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+>PyCoder's Weekly</a>
+<a
+    class="share-icon hacker-news"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/pyinfra&t=pyinfra%20%E2%80%93%20simple%20infrastructure%20automation%20in%20Python"
+>HN</a>
+<a
+    class="share-icon bluesky"
+    href="https://bsky.%61%70%70/intent/compose?text=pyinfra%20%E2%80%93%20simple%20infrastructure%20automation%20in%20Python%20https%3A//death.andgravity.com/pyinfra"
+>Bluesky</a>
+<!--
+<a
+    class="share-icon reddit"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/pyinfra&title=pyinfra%20%E2%80%93%20simple%20infrastructure%20automation%20in%20Python"
+>Reddit</a>
+-->
+<a
+    class="share-icon linkedin"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/pyinfra"
+>linkedin</a>
+<a
+    class="share-icon twitter"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=pyinfra%20%E2%80%93%20simple%20infrastructure%20automation%20in%20Python&url=https%3A//death.andgravity.com/pyinfra&via=_andgravity"
+>Twitter</a>
+</span>
+
+
+</p>
+
+
+
+
+
+
+</header>
+
+
+<main class="content columns">
+<div class="column col-sm-12 col-md-10 col-8">
+
+<section class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This is the edited transcript of
+a talk I gave at a local DevOps meet-up;
+part of the live aspect gets lost in writing,
+but you are welcome to follow along at home.</p>
+</section>
+<p>Hi, I'm Adrian,
+and today I will live demo <strong><a class="external" href="https://pyinfra.com/">pyinfra</a></strong>,
+an infrastructure automation tool.</p>
+<details class="toc">
+<summary>Contents</summary>
+<ul>
+<li><a href="#about-me">About me</a></li>
+<li><a href="#what-is-pyinfra">What is pyinfra?</a></li>
+<li><a href="#why-use-pyinfra">Why use pyinfra?</a></li>
+</ul>
+</details>
+<h2 id="about-me">About me<span class="headerlink">&nbsp;<a href="#about-me" title="permalink">#</a></span></h2>
+<p>Before we talk about pyinfra, I should <a class="internal" href="/about">introduce myself</a>.</p>
+<p>I worked at a Fortune 10 company for most of my career,
+where I did site reliability engineering
+for the reverse proxy behind a bunch of really big websites
+and over 2000 smaller ones,
+and where I built a data-lake-plus-feature-store
+for an ML organization.</p>
+<p>In my spare time,
+I write about Python on <a class="internal" href="/">this website</a>,
+and I maintain the creatively named <em><a class="external" href="https://github.com/lemon24/reader">reader</a></em>,
+a Python feed reader library and web app.
+Lately I've been working on a
+<a class="internal" href="/reader-3-23#hosted-reader-status-update">hosted version of <em>reader</em></a>,
+which is how I ended up using pyinfra.</p>
+<h2 id="what-is-pyinfra">What is pyinfra?<span class="headerlink">&nbsp;<a href="#what-is-pyinfra" title="permalink">#</a></span></h2>
+<p><a class="external" href="https://pyinfra.com/">pyinfra</a> is a command-line tool that
+turns Python code into shell commands
+and runs them on your servers over SSH, in parallel.
+Think Ansible, but simpler.</p>
+<div class="highlight code-container"><span class="filename">deploy.py</span><pre class="code" data-lang="Python"><span></span><code><span class="k">for</span> <span class="n">user</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">'admin'</span><span class="p">,</span> <span class="s1">'alice'</span><span class="p">,</span> <span class="s1">'bob'</span><span class="p">]:</span>
+    <span class="n">server</span><span class="o">.</span><span class="n">user</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+
+<span class="n">files</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="s1">'files/hello.txt'</span><span class="p">,</span> <span class="s1">'/etc/motd'</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="n">host</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'install_postgres'</span><span class="p">):</span>
+    <span class="n">apt</span><span class="o">.</span><span class="n">install</span><span class="p">(</span><span class="s1">'postgresql'</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="why-use-pyinfra">Why use pyinfra?<span class="headerlink">&nbsp;<a href="#why-use-pyinfra" title="permalink">#</a></span></h2>
+<p>In short:</p>
+<ul>
+<li>declarative and idempotent</li>
+<li>infrastructure as actual code, not YAML</li>
+<li>custom operations in 10 lines</li>
+<li>works on any host you can SSH into</li>
+<li>concurrent, &quot;6× faster than Ansible&quot;</li>
+<li>scales to &quot;thousands of servers&quot;</li>
+</ul>
+<p>I chose pyinfra over <a class="external" href="https://en.wikipedia.org/wiki/Ansible_(software)">Ansible</a> because it has most of the latter's good parts,
+most importantly that it is <em>declarative</em>
+– you describe what a server should look like, and pyinfra makes it so.
+Like Ansible, it's also <em>imperative</em>
+– if a server is already in the desired state,
+nothing happens when you run it again.</p>
+<p>Unlike Ansible, there's no YAML – <em>deploys</em> (playbooks) are written in Python,
+which means you can do anything you can do in Python:
+you can have <code>for</code>s and <code>if</code>s,
+you can have code completion and type checking,
+and can even import libraries.</p>
+<p>Of interest to people using Ansible at larger scales,
+pyinfra is also faster.
+In my limited, small-scale experience,
+it was even faster than Ansible with the <a class="external" href="https://mitogen.networkgenomics.com/ansible_detailed.html">Mitogen</a> plugin.</p>
+<p>In fairness to Ansible,
+while pyinfra has been around for 10 years,
+it has fewer built-in operations (modules) and a smaller ecosystem,
+although that's partially offset by how simple it is.</p>
+<!--
+
+# When to use pyinfra?
+# The demo
+# Operations and facts
+# Where are the commands?
+# Initial nginx setup
+# Static website
+# Python web app
+# Handling secrets
+# HTTPS using certbot
+# Questions?
+
+-->
+
+
+
+
+
+
+
+
+
+</div>
+</main>
+
+
+<footer class="footer">
+<p class="text-gray">
+<a href="/">home</a>
+∙ <a href="/_feed/index.xml">feed</a>
+∙ <a href="/about">about</a>
+
+∙ © 2021 lemon24
+
+
+
+</footer>
+
+
+</div>
