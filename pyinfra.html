@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2026-11-01">November 2026</span>
-∙ five minute read
+∙ eight minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -144,6 +144,8 @@ an infrastructure automation tool.</p>
 <li><a href="#when-to-use-pyinfra">When to use pyinfra?</a></li>
 <li><a href="#the-demo">The demo</a></li>
 <li><a href="#operations-and-facts">Operations and facts</a></li>
+<li><a href="#where-are-the-commands">Where are the commands?</a></li>
+<li><a href="#initial-nginx-setup">Initial nginx setup</a></li>
 </ul>
 </details>
 <h2 id="about-me">About me<span class="headerlink">&nbsp;<a href="#about-me" title="permalink">#</a></span></h2>
@@ -297,8 +299,8 @@ Here's a sneak peek of the final deploy:
 </details>
 
 <h2 id="operations-and-facts">Operations and facts<span class="headerlink">&nbsp;<a href="#operations-and-facts" title="permalink">#</a></span></h2>
-<p>Before the serious stuff,
-we should get familiar with some basic pyinfra concepts.</p>
+<p>First,
+we should get familiar with two basic pyinfra concepts.</p>
 <hr />
 <p><strong>Operations</strong> change the server;
 most operations are declarative and idempotent,
@@ -329,12 +331,7 @@ and are asked to approve them:</p>
 <span class="go">    Operation                              Change       Conditional Change</span>
 <span class="go">    files.file (hello.txt, present=True)   1 (@local)   -</span>
 
-<span class="go">    Detected changes may not include every change pyinfra will execute.</span>
-<span class="go">    Hidden side effects of operations may alter behaviour of future operations,</span>
-<span class="go">    this will be shown in the results. The remote state will always be updated</span>
-<span class="go">    to reflect the state defined by the input operations.</span>
-
-<span class="go">    Detected changes displayed above, skip this step with -y</span>
+<span class="go">    ...</span>
 <span class="go">    Press enter to execute...</span>
 </code></pre></div>
 <p>If we do approve, we see the operations running and their outcomes:</p>
@@ -386,7 +383,9 @@ but on Debian-based distributions it is called <code>apache2</code>;
 we use the <a class="external" href="https://docs.pyinfra.com/en/3.x/facts/server.html#server-LinuxName">LinuxName</a> fact to detect where we are
 and pass the appropriate name to the <a class="external" href="https://docs.pyinfra.com/en/3.x/operations/server.html#server-packages">server.packages</a> operation.</p>
 <p>Since my local machine is a Mac,
-we see the <code>httpd</code> branch is chosen:</p>
+we see the <code>httpd</code> branch is chosen
+(deploy code runs once per host,
+so you could have different branches on different hosts):</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pyinfra<span class="w"> </span>@local<span class="w"> </span>examples/install_apache.py<span class="w"> </span>--dry
 <span class="go">...</span>
 <span class="go">--&gt; Detected changes:</span>
@@ -394,12 +393,182 @@ we see the <code>httpd</code> branch is chosen:</p>
 <span class="go">    server.packages (httpd)   1 (@local)   -</span>
 <span class="go">...</span>
 </code></pre></div>
-<p>It's worth noting that deploy code runs once per host,
-so you can have different branches on different hosts.</p>
+<h2 id="where-are-the-commands">Where are the commands?<span class="headerlink">&nbsp;<a href="#where-are-the-commands" title="permalink">#</a></span></h2>
+<p>So, where are the shell commands?</p>
+<p>Before we look at debug output,
+let's look at how pyinfra operations are implemented.</p>
+<p>Here's a simplified version of the file <a class="external" href="https://github.com/pyinfra-dev/pyinfra/blob/v3.10.0/src/pyinfra/operations/files.py#L1663-L1762">implementation</a>:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@operation</span><span class="p">()</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">file</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">present</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+    <span class="n">info</span> <span class="o">=</span> <span class="n">host</span><span class="o">.</span><span class="n">get_fact</span><span class="p">(</span><span class="n">File</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">info</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">present</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="sa">f</span><span class="s2">"touch </span><span class="si">{</span><span class="n">quote</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+
+    <span class="k">elif</span> <span class="n">info</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">present</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="sa">f</span><span class="s2">"rm -f </span><span class="si">{</span><span class="n">quote</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+</code></pre></div>
+<p>The structure is similar for all operations:
+read the current host state using facts,
+diff it against the desired state,
+and return commands to reach the desired state, <em>if needed</em>.</p>
+<hr />
+<p>Here's another deploy
+that says &quot;I want <code>hello.txt</code> to <em>not</em> exist&quot;:</p>
+<div class="highlight code-container"><span class="filename">examples/delete_file.py</span><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">pyinfra.operations</span><span class="w"> </span><span class="kn">import</span> <span class="n">files</span>
+
+<span class="n">files</span><span class="o">.</span><span class="n">file</span><span class="p">(</span><span class="s1">'hello.txt'</span><span class="p">,</span> <span class="n">present</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</code></pre></div>
+
+<p>With <code>--debug</code>,
+we can observe the commands being run
+during each execution phase.</p>
+<p>During the <em>prepare</em> phase (before approval),
+pyinfra runs the deploy code <em>once per host</em> to load operations,
+and then runs each operation to see if it returns commands,
+<em>without running the commands themselves</em>
+(this is how &quot;detected changes&quot; works).
+Running operations also runs facts,
+which results in read-only commands being run:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pyinfra<span class="w"> </span>@local<span class="w"> </span>examples/delete_file.py<span class="w"> </span>--debug
+<span class="go">...</span>
+<span class="go">--&gt; Preparing operation files...</span>
+<span class="go">    Loading: examples/delete_file.py</span>
+<span class="go">    [pyinfra.api.operation] Adding operation, {'files.file'}, ...</span>
+<span class="go">    [pyinfra.api.facts] Getting fact: files.File (path=hello.txt)</span>
+<span class="hll"><span class="go">[pyinfra.connectors.local] --&gt; Running command on localhost: sh -c '! (test -e hello.txt || test -L hello.txt ) || ( stat -c '"'"'user=%U group=%G mode=%A atime=%X mtime=%Y ctime=%Z size=%s %N'"'"' hello.txt 2&gt; /dev/null || stat -f '"'"'user=%Su group=%Sg mode=%Sp atime=%a mtime=%m ctime=%c size=%z %N%SY'"'"' hello.txt || ls -ld hello.txt )'</span>
+</span><span class="go">    [pyinfra.api.facts] [@local] Loaded fact files.File (path=hello.txt)</span>
+<span class="go">    [@local] Ready: examples/delete_file.py</span>
+
+<span class="go">--&gt; Detected changes:</span>
+<span class="go">    Operation                               Change       Conditional Change</span>
+<span class="go">    files.file (hello.txt, present=False)   1 (@local)   -</span>
+
+<span class="go">    ...</span>
+<span class="go">    Press enter to execute...</span>
+</code></pre></div>
+<p>During the <em>execute</em> phase,
+pyinfra runs the loaded operations <em>again</em>,
+but this time it also runs the commands returned by the operations:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="go">    Press enter to execute... [Enter]</span>
+<span class="go">--&gt; Beginning operation run...</span>
+<span class="go">--&gt; Starting operation: files.file (hello.txt, present=False)</span>
+<span class="go">    [pyinfra.api.facts] Getting fact: files.File (path=hello.txt)</span>
+<span class="hll"><span class="go">[pyinfra.connectors.local] --&gt; Running command on localhost: sh -c '! (test -e hello.txt || test -L hello.txt ) || ( stat -c '"'"'user=%U group=%G mode=%A atime=%X mtime=%Y ctime=%Z size=%s %N'"'"' hello.txt 2&gt; /dev/null || stat -f '"'"'user=%Su group=%Sg mode=%Sp atime=%a mtime=%m ctime=%c size=%z %N%SY'"'"' hello.txt || ls -ld hello.txt )'</span>
+</span><span class="go">    [pyinfra.api.facts] [@local] Loaded fact files.File (path=hello.txt)</span>
+<span class="hll"><span class="go">[pyinfra.connectors.local] --&gt; Running command on localhost: sh -c 'rm -f hello.txt'</span>
+</span><span class="go">    [@local] Success</span>
+<span class="go">...</span>
+</code></pre></div>
+<h2 id="initial-nginx-setup">Initial nginx setup<span class="headerlink">&nbsp;<a href="#initial-nginx-setup" title="permalink">#</a></span></h2>
+<p>OK, now we know enough to <a class="external" href="https://www.youtube.com/shorts/DuP84ULLy74">become dangerous</a>.</p>
+<hr />
+<p>So far we've been using my local machine as a target,
+but we want beta to be as similar to prod as possible,
+so I've set up an Ubuntu 26.04 virtual machine <a class="external" href="https://github.com/lemon24/pyinfra-demo/blob/main/infra/Vagrantfile">using Vagrant</a>.</p>
+<p>We've also used pyinfra with a single host,
+but typically you will use
+an <strong>inventory</strong> file containing groups of hosts instead.
+For our demo, we need just one group:</p>
+<!-- FIXME: @vagrant footnote -->
+
+<div class="highlight code-container"><span class="filename">infra/inventories/beta.py</span><pre class="code" data-lang="Python"><span></span><code><span class="c1"># group_name = [host1, host2, ...]</span>
+
+<span class="n">my_hosts</span> <span class="o">=</span> <span class="p">[</span><span class="s1">'pyinfra.local'</span><span class="p">]</span>
+
+<span class="c1"># you can have more groups:</span>
+<span class="c1">#</span>
+<span class="c1"># db_servers = ['db-1.net', 'db-2.net']</span>
+<span class="c1"># web_servers = [i.hostname for i in aws.ec2.list_instances(asg='my-asg')]</span>
+</code></pre></div>
+
+<p>Since the inventory is a Python file,
+groups don't have to be static lists –
+you could, for example, import a library and
+list the instances in an cloud autoscaling group.</p>
+<p>Here's how you run an arbitrary command against an inventory:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pyinfra<span class="w"> </span>inventories/beta.py<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>--<span class="w"> </span>lsb_release<span class="w"> </span>-d
+<span class="go">...</span>
+<span class="go">--&gt; Beginning operation run...</span>
+<span class="go">--&gt; Starting operation: server.shell (lsb_release -d)</span>
+<span class="go">[pyinfra.local] Description: Ubuntu 26.04.1 LTS</span>
+<span class="go">    [pyinfra.local] Success</span>
+<span class="go">...</span>
+</code></pre></div>
+<hr />
+<p>We will use nginx to serve our websites,
+which means we need to install it first.</p>
+<p>Here's what the main deploy looks like:</p>
+<div class="highlight code-container"><span class="filename">infra/deploy.py</span><pre class="code" data-lang="Python"><span></span><code><span class="n">apt</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"apt update"</span><span class="p">,</span> <span class="n">cache_time</span><span class="o">=</span><span class="mi">24</span> <span class="o">*</span> <span class="mi">3600</span><span class="p">)</span>
+
+<span class="n">apt</span><span class="o">.</span><span class="n">packages</span><span class="p">(</span><span class="s1">'nginx'</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"install nginx"</span><span class="p">)</span>
+
+<span class="n">disable_default</span> <span class="o">=</span> <span class="n">files</span><span class="o">.</span><span class="n">link</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"disable default site"</span><span class="p">,</span>
+    <span class="n">path</span><span class="o">=</span><span class="s1">'/etc/nginx/sites-enabled/default'</span><span class="p">,</span>
+    <span class="n">present</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">server</span><span class="o">.</span><span class="n">service</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"reload nginx"</span><span class="p">,</span>
+    <span class="n">service</span><span class="o">=</span><span class="s1">'nginx'</span><span class="p">,</span>
+    <span class="n">reloaded</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">_if</span><span class="o">=</span><span class="n">disable_default</span><span class="o">.</span><span class="n">did_change</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>After we update the package cache,
+we install nginx,
+we disable the default &quot;Welcome to nginx!&quot; site,
+and then we reload the nginx config.
+To avoid unnecessary reloads after the first run,
+we use the <code>_if</code> global argument
+to reload only if the previous operation <a class="external" href="https://docs.pyinfra.com/en/3.x/deploy-process.html#checking-operation-changes">actually ran</a>.
+In theory,
+we could use a fact to gate the last two operations instead:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">apt</span><span class="o">.</span><span class="n">packages</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">host</span><span class="o">.</span><span class="n">get_fact</span><span class="p">(</span><span class="n">Link</span><span class="p">,</span> <span class="s1">'/etc/nginx/sites-enabled/default'</span><span class="p">):</span>
+    <span class="n">files</span><span class="o">.</span><span class="n">link</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+    <span class="n">server</span><span class="o">.</span><span class="n">service</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</code></pre></div>
+<p>...but that <code>if</code> happens in the <em>prepare</em> phase,
+when nginx hasn't been installed yet,
+so those operations will simply be skipped.</p>
+<!--
+FIXME: footnote
+which is why you should use only immutable facts in deploy code,
+and simply use declarative operations instead
+-->
+
+<p>If we run the deploy,
+no change is detected for &quot;disable default site&quot; (no symlink yet):</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pyinfra<span class="w"> </span>inventories/beta.py<span class="w"> </span>deploy.py
+<span class="go">...</span>
+<span class="go">--&gt; Detected changes:</span>
+<span class="go">    Operation              Change              Conditional Change</span>
+<span class="go">    apt update             1 (pyinfra.local)   -</span>
+<span class="go">    install nginx          1 (pyinfra.local)   -</span>
+<span class="go">    disable default site   -                   -</span>
+<span class="go">    reload nginx           -                   1 (pyinfra.local)</span>
+
+<span class="go">    Detected changes may not include every change pyinfra will execute.</span>
+<span class="go">    Hidden side effects of operations may alter behaviour of future operations,</span>
+<span class="go">    this will be shown in the results. The remote state will always be updated</span>
+<span class="go">    to reflect the state defined by the input operations.</span>
+
+<span class="go">    Press enter to execute... [Enter]</span>
+<span class="go">...</span>
+<span class="go">--&gt; Results:</span>
+<span class="go">    Operation              Hosts   Success   Error   No Change</span>
+<span class="go">    apt update             1       1         -       -</span>
+<span class="go">    install nginx          1       1         -       -</span>
+<span class="go">    disable default site   1       1         -       -</span>
+<span class="go">    reload nginx           1       1         -       -</span>
+<span class="go">...</span>
+</code></pre></div>
+<p>...but &quot;disable default site&quot; does run, as the prophecy foretold
+(&quot;side effects of operations may alter behaviour of future operations&quot;).</p>
 <!--
 
-# Where are the commands?
-# Initial nginx setup
 # Static website
 # Python web app
 # Handling secrets
