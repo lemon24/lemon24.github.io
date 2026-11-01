@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2026-11-01">November 2026</span>
-∙ eight minute read
+∙ 13 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -146,6 +146,8 @@ an infrastructure automation tool.</p>
 <li><a href="#operations-and-facts">Operations and facts</a></li>
 <li><a href="#where-are-the-commands">Where are the commands?</a></li>
 <li><a href="#initial-nginx-setup">Initial nginx setup</a></li>
+<li><a href="#static-site-and-reuse">Static site and reuse</a></li>
+<li><a href="#web-app-and-secrets">Web app and secrets</a></li>
 </ul>
 </details>
 <h2 id="about-me">About me<span class="headerlink">&nbsp;<a href="#about-me" title="permalink">#</a></span></h2>
@@ -255,7 +257,7 @@ for when there's stuff you can't do from within deploy code.</p>
 but you can find the code in the <a class="external" href="https://github.com/lemon24/pyinfra-demo">pyinfra-demo</a> repo;
 the commit history reflects the topic order.</p>
 <p>At the end, we'll have two websites,
-a static website and a Python web application,
+a static home page and a Python web application,
 deployed in two stages,
 a local virtual machine for beta:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Text only"><span></span><code>.--- pyinfra.local ---.- app.pyinfra.local -.
@@ -461,14 +463,14 @@ but this time it also runs the commands returned by the operations:</p>
 <span class="go">...</span>
 </code></pre></div>
 <h2 id="initial-nginx-setup">Initial nginx setup<span class="headerlink">&nbsp;<a href="#initial-nginx-setup" title="permalink">#</a></span></h2>
-<p>OK, now we know enough to <a class="external" href="https://www.youtube.com/shorts/DuP84ULLy74">become dangerous</a>.</p>
+<p>OK, now we can <a class="external" href="https://www.youtube.com/shorts/DuP84ULLy74">become dangerous</a>.</p>
 <hr />
 <p>So far we've been using my local machine as a target,
 but we want beta to be as similar to prod as possible,
 so I've set up an Ubuntu 26.04 virtual machine <a class="external" href="https://github.com/lemon24/pyinfra-demo/blob/main/infra/Vagrantfile">using Vagrant</a>.</p>
 <p>We've also used pyinfra with a single host,
 but typically you will use
-an <strong>inventory</strong> file containing groups of hosts instead.
+an <strong>inventory</strong> file containing <strong>groups</strong> of hosts instead.
 For our demo, we need just one group:</p>
 <!-- FIXME: @vagrant footnote -->
 
@@ -498,8 +500,22 @@ list the instances in an cloud autoscaling group.</p>
 <hr />
 <p>We will use nginx to serve our websites,
 which means we need to install it first.</p>
-<p>Here's what the main deploy looks like:</p>
-<div class="highlight code-container"><span class="filename">infra/deploy.py</span><pre class="code" data-lang="Python"><span></span><code><span class="n">apt</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"apt update"</span><span class="p">,</span> <span class="n">cache_time</span><span class="o">=</span><span class="mi">24</span> <span class="o">*</span> <span class="mi">3600</span><span class="p">)</span>
+<p>Here's what the main deploy looks like (minus imports):</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/deploy.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 5</span>
+<span class="normal"> 6</span>
+<span class="normal"> 7</span>
+<span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="n">apt</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"apt update"</span><span class="p">,</span> <span class="n">cache_time</span><span class="o">=</span><span class="mi">24</span> <span class="o">*</span> <span class="mi">3600</span><span class="p">)</span>
 
 <span class="n">apt</span><span class="o">.</span><span class="n">packages</span><span class="p">(</span><span class="s1">'nginx'</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"install nginx"</span><span class="p">)</span>
 
@@ -514,7 +530,7 @@ which means we need to install it first.</p>
     <span class="n">reloaded</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="n">_if</span><span class="o">=</span><span class="n">disable_default</span><span class="o">.</span><span class="n">did_change</span><span class="p">,</span>
 <span class="p">)</span>
-</code></pre></div>
+</code></pre></div></td></tr></table></div>
 
 <p>After we update the package cache,
 we install nginx,
@@ -532,7 +548,7 @@ we could use a fact to gate the last two operations instead:</p>
 </code></pre></div>
 <p>...but that <code>if</code> happens in the <em>prepare</em> phase,
 when nginx hasn't been installed yet,
-so those operations will simply be skipped.</p>
+so those operations will simply be skipped on the first run.</p>
 <!--
 FIXME: footnote
 which is why you should use only immutable facts in deploy code,
@@ -567,11 +583,386 @@ no change is detected for &quot;disable default site&quot; (no symlink yet):</p>
 </code></pre></div>
 <p>...but &quot;disable default site&quot; does run, as the prophecy foretold
 (&quot;side effects of operations may alter behaviour of future operations&quot;).</p>
+<h2 id="static-site-and-reuse">Static site and reuse<span class="headerlink">&nbsp;<a href="#static-site-and-reuse" title="permalink">#</a></span></h2>
+<p>Now with nginx installed,
+we can proceed to the static home page.</p>
+<hr />
+<p>Instead of putting its operations in the main deploy,
+we include them from another file;
+in addition to keeping code tidy,
+this allows us to run individual tasks separately:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/deploy.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">23</span>
+<span class="normal">24</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">if</span> <span class="n">host</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'home_domain'</span><span class="p">):</span>
+    <span class="n">local</span><span class="o">.</span><span class="n">include</span><span class="p">(</span><span class="s1">'tasks/home.py'</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+
+<p>The include depends on <a class="external" href="https://docs.pyinfra.com/en/3.x/inventory-data.html#host-data">host data</a> –
+arbitrary data associated with hosts;
+one way to do this is to use (host, data) pairs instead of hosts
+in the inventory file:</p>
+<!-- FIXME: group data footnotes -->
+
+<div class="highlight code-container"><span class="filename">infra/inventories/beta.py</span><pre class="code" data-lang="Python"><span></span><code><span class="n">my_hosts</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="s1">'pyinfra.local'</span><span class="p">,</span> <span class="p">{</span>
+        <span class="s1">'home_domain'</span><span class="p">:</span> <span class="s1">'pyinfra.local'</span><span class="p">,</span>
+    <span class="p">}),</span>
+<span class="p">]</span>  <span class="c1"># fmt: skip</span>
+</code></pre></div>
+
+<p>The home page deploy itself is pretty straightforward:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/tasks/home.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
+<span class="normal"> 7</span>
+<span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="n">sync_files</span> <span class="o">=</span> <span class="n">files</span><span class="o">.</span><span class="n">sync</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"sync files"</span><span class="p">,</span>
+    <span class="n">src</span><span class="o">=</span><span class="s1">'../home'</span><span class="p">,</span>
+    <span class="n">dest</span><span class="o">=</span><span class="s1">'/opt/home'</span><span class="p">,</span>
+    <span class="n">delete</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">nginx</span><span class="o">.</span><span class="n">site</span><span class="p">(</span><span class="s1">'templates/nginx/home.conf'</span><span class="p">,</span> <span class="n">host</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">home_domain</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+
+<p>There's one operation
+that <a class="external" href="https://docs.pyinfra.com/en/3.x/operations/files.html#files-sync">copies files</a> from a local directory to a remote one,
+and another operation that sets up an nginx site
+using the domain from host data.</p>
+<hr />
+<p>Except I lied!
+There's no <code>nginx.site</code> operation,
+and that's not actually an operation,
+but a <a class="external" href="https://docs.pyinfra.com/en/3.x/api/deploys.html">packaged deploy</a>, which is a way to make deploys reusable:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/modules/nginx.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 7</span>
+<span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="nd">@deploy</span><span class="p">(</span><span class="s2">"nginx site"</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">site</span><span class="p">(</span><span class="n">template</span><span class="p">,</span> <span class="n">domain</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">):</span>
+
+    <span class="n">write_site</span> <span class="o">=</span> <span class="n">files</span><span class="o">.</span><span class="n">template</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">"write"</span><span class="p">,</span>
+        <span class="n">src</span><span class="o">=</span><span class="n">template</span><span class="p">,</span>
+        <span class="n">dest</span><span class="o">=</span><span class="sa">f</span><span class="s1">'/etc/nginx/sites-available/</span><span class="si">{</span><span class="n">domain</span><span class="si">}</span><span class="s1">'</span><span class="p">,</span>
+        <span class="n">domain</span><span class="o">=</span><span class="n">domain</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">context</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">enable_site</span> <span class="o">=</span> <span class="n">files</span><span class="o">.</span><span class="n">link</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">"enable"</span><span class="p">,</span>
+        <span class="n">path</span><span class="o">=</span><span class="sa">f</span><span class="s1">'/etc/nginx/sites-enabled/</span><span class="si">{</span><span class="n">domain</span><span class="si">}</span><span class="s1">'</span><span class="p">,</span>
+        <span class="n">target</span><span class="o">=</span><span class="sa">f</span><span class="s1">'/etc/nginx/sites-available/</span><span class="si">{</span><span class="n">domain</span><span class="si">}</span><span class="s1">'</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">server</span><span class="o">.</span><span class="n">service</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">"reload"</span><span class="p">,</span>
+        <span class="n">service</span><span class="o">=</span><span class="s1">'nginx'</span><span class="p">,</span>
+        <span class="n">reloaded</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">_if</span><span class="o">=</span><span class="n">any_changed</span><span class="p">(</span><span class="n">write_site</span><span class="p">,</span> <span class="n">enable_site</span><span class="p">),</span>
+    <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+
+<p>Besides the decorator and the function definition,
+it looks like any other deploy;
+there's an operation to write the config from a template,
+one to symlink it into <code>sites-enabled</code>,
+and one to maybe reload nginx, just like before.</p>
+<p>Another way to reuse stuff is via the <a class="external" href="https://docs.pyinfra.com/en/3.x/operations/files.html#files-template">files.template</a> operation,
+which uses Jinja.
+Here, we have a base template for any HTTP site:</p>
+<div class="highlight code-container"><span class="filename">infra/templates/nginx/http.conf</span><pre class="code" data-lang="Django/Jinja"><span></span><code><span class="x">server {</span>
+<span class="x">    listen 80;</span>
+<span class="x">    listen [::]:80;</span>
+<span class="x">    server_name </span><span class="cp">{{</span> <span class="nv">domain</span> <span class="cp">}}</span><span class="x">;</span>
+
+<span class="x">    </span><span class="cp">{%</span> <span class="k">block</span> <span class="nv">server</span> <span class="cp">%}{%</span> <span class="k">endblock</span> <span class="cp">%}</span>
+<span class="x">}</span>
+</code></pre></div>
+
+<p>...that we extend with specific site configuration:</p>
+<div class="highlight code-container"><span class="filename">infra/templates/nginx/home.conf</span><pre class="code" data-lang="Django/Jinja"><span></span><code><span class="cp">{%</span> <span class="k">extends</span> <span class="s1">'templates/nginx/http.conf'</span> <span class="cp">%}</span>
+
+<span class="cp">{%</span> <span class="k">block</span> <span class="nv">server</span> -<span class="cp">%}</span>
+
+<span class="x">    location / {</span>
+<span class="x">        root /opt/home;</span>
+<span class="x">    }</span>
+
+<span class="cp">{%</span>- <span class="k">endblock</span> <span class="cp">%}</span>
+</code></pre></div>
+
+<p>If we run the deploy with <code>--diff</code>,
+we get to see the rendered template;
+also note the operation names are prefixed
+with the include and packaged deploy name:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pyinfra<span class="w"> </span>inventories/beta.py<span class="w"> </span>deploy.py<span class="w"> </span>--diff
+<span class="go">...</span>
+<span class="go">--&gt; Preparing operation files...</span>
+<span class="go">    Loading: deploy.py</span>
+<span class="go">    [pyinfra.local] Will create /etc/nginx/sites-available/pyinfra.local</span>
+<span class="go">      @@ -0,0 +1,9 @@</span>
+<span class="go">      + server {</span>
+<span class="go">      +     listen 80;</span>
+<span class="go">      +     listen [::]:80;</span>
+<span class="go">      +     server_name pyinfra.local;</span>
+<span class="go">      +</span>
+<span class="go">      +     location / {</span>
+<span class="go">      +         root /opt/home;</span>
+<span class="go">      +     }</span>
+<span class="go">      + }</span>
+
+<span class="go">    [pyinfra.local] Ready: deploy.py</span>
+
+<span class="go">--&gt; Detected changes:</span>
+<span class="go">    Operation                             Change              Conditional Change</span>
+<span class="go">    apt update                            -                   -</span>
+<span class="go">    install nginx                         -                   -</span>
+<span class="go">    disable default site                  -                   -</span>
+<span class="go">    reload nginx                          -                   1 (pyinfra.local)</span>
+<span class="go">    tasks/home.py | sync files            1 (pyinfra.local)   -</span>
+<span class="go">    tasks/home.py | nginx site | write    1 (pyinfra.local)   -</span>
+<span class="go">    tasks/home.py | nginx site | enable   1 (pyinfra.local)   -</span>
+<span class="go">    tasks/home.py | nginx site | reload   -                   1 (pyinfra.local)</span>
+<span class="go">...</span>
+</code></pre></div>
+<p>And now we have a static site:</p>
+<!-- FIXME: image -->
+
+<h2 id="web-app-and-secrets">Web app and secrets<span class="headerlink">&nbsp;<a href="#web-app-and-secrets" title="permalink">#</a></span></h2>
+<p>The web application is a simple Flask app, as an installable Python package:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>tree<span class="w"> </span>app
+<span class="go">app</span>
+<span class="go">├── app</span>
+<span class="go">│   ├── __init__.py</span>
+<span class="go">│   ├── static</span>
+<span class="go">│   │   └── style.css</span>
+<span class="go">│   └── templates</span>
+<span class="go">│       └── index.html</span>
+<span class="go">└── pyproject.toml</span>
+</code></pre></div>
+<p>We serve it using a traditional
+<a class="external" href="https://gunicorn.org/deploy/#nginx-configuration">Gunicorn-being-nginx-on-a-Unix-socket</a> setup:</p>
+<pre class="code code-container"><code>   :80, :443
+       |
+.-------------.
+|    nginx    |  groups: app-socket, www-data
+'-------------'
+       |
+    app.sock     groups: app-socket
+       |
+.- Gunicorn --.
+|   web app   |  groups: app-socket, app
+'-------------'</code></pre>
+<p>The deploy is bigger than the other one,
+but hopefully still straightforward.</p>
+<p>We have operations to create users and groups:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/tasks/app.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="n">server</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="s1">'app'</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"create app group"</span><span class="p">)</span>
+<span class="n">server</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="s1">'app-socket'</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"create socket group"</span><span class="p">)</span>
+<span class="n">server</span><span class="o">.</span><span class="n">user</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"create user"</span><span class="p">,</span>
+    <span class="n">user</span><span class="o">=</span><span class="s1">'app'</span><span class="p">,</span>
+    <span class="n">group</span><span class="o">=</span><span class="s1">'app'</span><span class="p">,</span>
+    <span class="n">groups</span><span class="o">=</span><span class="p">[</span><span class="s1">'app-socket'</span><span class="p">],</span>
+    <span class="n">home</span><span class="o">=</span><span class="s2">"/var/lib/app"</span><span class="p">,</span>
+    <span class="n">shell</span><span class="o">=</span><span class="s2">"/usr/sbin/nologin"</span><span class="p">,</span>
+    <span class="n">system</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">server</span><span class="o">.</span><span class="n">user</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"nginx socket access"</span><span class="p">,</span>
+    <span class="n">user</span><span class="o">=</span><span class="s1">'www-data'</span><span class="p">,</span>
+    <span class="n">groups</span><span class="o">=</span><span class="p">[</span><span class="s1">'app-socket'</span><span class="p">],</span>
+    <span class="n">append</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+
+<p>...to create a virtual environment with our app and its dependencies:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/tasks/app.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span>
+<span class="normal">39</span>
+<span class="normal">40</span>
+<span class="normal">41</span>
+<span class="normal">42</span>
+<span class="normal">43</span>
+<span class="normal">44</span>
+<span class="normal">45</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="n">apt</span><span class="o">.</span><span class="n">packages</span><span class="p">(</span><span class="s1">'python3-venv'</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"install venv"</span><span class="p">)</span>
+<span class="n">pip</span><span class="o">.</span><span class="n">venv</span><span class="p">(</span><span class="s1">'/opt/app'</span><span class="p">,</span> <span class="s1">'python3'</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"create venv"</span><span class="p">)</span>
+<span class="n">pip</span><span class="o">.</span><span class="n">packages</span><span class="p">([</span><span class="s1">'gunicorn'</span><span class="p">],</span> <span class="n">virtualenv</span><span class="o">=</span><span class="s1">'/opt/app'</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"install deps"</span><span class="p">)</span>
+
+<span class="n">sync_files</span> <span class="o">=</span> <span class="n">files</span><span class="o">.</span><span class="n">sync</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"sync app files"</span><span class="p">,</span>
+    <span class="n">src</span><span class="o">=</span><span class="s1">'../app'</span><span class="p">,</span>
+    <span class="n">dest</span><span class="o">=</span><span class="s1">'/opt/app/src'</span><span class="p">,</span>
+    <span class="n">delete</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">exclude_dir</span><span class="o">=</span><span class="p">[</span><span class="s1">'**/__pycache__'</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="n">install_app</span> <span class="o">=</span> <span class="n">server</span><span class="o">.</span><span class="n">shell</span><span class="p">(</span>
+    <span class="s2">"/opt/app/bin/pip install /opt/app/src"</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"install app"</span><span class="p">,</span>
+    <span class="n">_if</span><span class="o">=</span><span class="n">sync_files</span><span class="o">.</span><span class="n">did_change</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+
+<p>...to create and start a systemd service for Gunicorn:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/tasks/app.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">56</span>
+<span class="normal">57</span>
+<span class="normal">58</span>
+<span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span>
+<span class="normal">62</span>
+<span class="normal">63</span>
+<span class="normal">64</span>
+<span class="normal">65</span>
+<span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="n">write_service</span> <span class="o">=</span> <span class="n">files</span><span class="o">.</span><span class="n">template</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"write service"</span><span class="p">,</span>
+    <span class="n">src</span><span class="o">=</span><span class="s1">'templates/systemd/app.service'</span><span class="p">,</span>
+    <span class="n">dest</span><span class="o">=</span><span class="s1">'/etc/systemd/system/app.service'</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">systemd</span><span class="o">.</span><span class="n">service</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"enable service"</span><span class="p">,</span>
+    <span class="n">service</span><span class="o">=</span><span class="s1">'app.service'</span><span class="p">,</span>
+    <span class="n">enabled</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">restarted</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">daemon_reload</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">_if</span><span class="o">=</span><span class="n">any_changed</span><span class="p">(</span><span class="n">install_app</span><span class="p">,</span> <span class="n">write_config</span><span class="p">,</span> <span class="n">write_service</span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+
+<p>...and finally to configure nginx:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/tasks/app.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">70</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="n">nginx</span><span class="o">.</span><span class="n">site</span><span class="p">(</span><span class="s1">'templates/nginx/app.conf'</span><span class="p">,</span> <span class="n">host</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">app_domain</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+
+<hr />
+<p>Flask uses a <a class="external" href="https://flask.palletsprojects.com/en/stable/config/#SECRET_KEY">secret key</a> that usually comes from a config file:</p>
+<!-- FIXME: secret manager service footnote -->
+
+<div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/tasks/app.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">47</span>
+<span class="normal">48</span>
+<span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span>
+<span class="normal">52</span>
+<span class="normal">53</span>
+<span class="normal">54</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="n">write_config</span> <span class="o">=</span> <span class="n">files</span><span class="o">.</span><span class="n">template</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"write config"</span><span class="p">,</span>
+    <span class="n">src</span><span class="o">=</span><span class="s1">'templates/config.py.jinja'</span><span class="p">,</span>
+    <span class="n">dest</span><span class="o">=</span><span class="s1">'/etc/opt/app/config.py'</span><span class="p">,</span>
+    <span class="n">group</span><span class="o">=</span><span class="s1">'app'</span><span class="p">,</span>
+    <span class="n">mode</span><span class="o">=</span><span class="mi">640</span><span class="p">,</span>
+    <span class="n">get_secret</span><span class="o">=</span><span class="n">secrets</span><span class="o">.</span><span class="n">get_secret</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+
+<p>The question is,
+where do we store the secret key before we write the config?</p>
+<p>The simple (and wrong) solution is to hardcode it in the deploy code;
+besides the whole unencrypted-secrets-in-version-control issue,
+beta and prod should have different secrets.</p>
+<p>But as I said,
+a deploy is a Python file,
+so we can do anything:
+we could get secrets from a
+<a class="external" href="https://keyring.readthedocs.io/en/latest/">password</a>
+<a class="external" href="https://keyring.readthedocs.io/en/latest/#third-party-backends">manager</a>,
+a security key,
+or even an <a class="external" href="https://pypi.org/project/keyrings.cryptfile/">encrypted</a>
+<a class="external" href="https://pypi.org/project/privy/">file</a>.
+To illustrate the point,
+here's a simple function
+that reads named secrets from a JSON file:</p>
+<!-- FIXME: footnote?
+(which you absolutely *should not* do,
+use [keyrings.cryptfile] instead)
+-->
+
+<div class="highlight code-container"><span class="filename">infra/modules/secrets.py</span><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pyinfra</span><span class="w"> </span><span class="kn">import</span> <span class="n">host</span>
+
+<span class="n">secrets_path</span> <span class="o">=</span> <span class="s1">'secrets.json'</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">get_secret</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">stage</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">stage</span><span class="p">:</span>
+<span class="hll">        <span class="n">stage</span> <span class="o">=</span> <span class="n">host</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">stage</span>
+</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">secrets_path</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">secret</span> <span class="o">:=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">secret</span>
+
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"secret </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> for stage </span><span class="si">{</span><span class="n">stage</span><span class="si">!r}</span><span class="s2"> not found"</span><span class="p">)</span>
+</code></pre></div>
+
+<p>The stage comes from host data,
+this time not from the inventory,
+but from a <a class="external" href="https://docs.pyinfra.com/en/3.x/inventory-data.html#group-data-files">group data file</a>
+that applies to all hosts in a group
+(the inventory name is an implicit group):</p>
+<div class="highlight code-container"><span class="filename">infra/group_data/beta.py</span><pre class="code" data-lang="Python"><span></span><code><span class="n">stage</span> <span class="o">=</span> <span class="s1">'beta'</span>
+</code></pre></div>
+
+<p>The config template looks like this:</p>
+<div class="highlight code-container"><span class="filename">infra/templates/config.py.jinja</span><pre class="code" data-lang="Django/Jinja"><span></span><code><span class="x">SECRET_KEY = </span><span class="cp">{{</span> <span class="s1">'{!r}'</span><span class="nv">.format</span><span class="o">(</span><span class="nv">get_secret</span><span class="o">(</span><span class="s1">'app_secret_key'</span><span class="o">))</span> <span class="cp">}}</span>
+</code></pre></div>
+
+<hr />
+<p>Deploying looks the same, only with way more operations:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pyinfra<span class="w"> </span>inventories/beta.py<span class="w"> </span>deploy.py
+<span class="go">...</span>
+<span class="go">--&gt; Results:</span>
+<span class="go">    Operation                             Hosts   Success   Error   No Change</span>
+<span class="go">    ...</span>
+<span class="go">    Grand total                           23      15        -       8</span>
+</code></pre></div>
+<p>And now we have a web app:</p>
+<!-- FIXME: image -->
+
 <!--
 
-# Static website
-# Python web app
-# Handling secrets
 # HTTPS using certbot
 # Questions?
 
