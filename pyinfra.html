@@ -79,7 +79,7 @@ window.addEventListener('resize', set_vh);
 
 <small>
 <span class="tooltip" data-tooltip="published on 2026-11-01">November 2026</span>
-∙ 13 minute read
+∙ 15 minute read
 ∙
 </small><span class="share-icons">
 <a
@@ -148,6 +148,7 @@ an infrastructure automation tool.</p>
 <li><a href="#initial-nginx-setup">Initial nginx setup</a></li>
 <li><a href="#static-site-and-reuse">Static site and reuse</a></li>
 <li><a href="#web-app-and-secrets">Web app and secrets</a></li>
+<li><a href="#https-and-prod">HTTPS and prod</a></li>
 </ul>
 </details>
 <h2 id="about-me">About me<span class="headerlink">&nbsp;<a href="#about-me" title="permalink">#</a></span></h2>
@@ -745,8 +746,7 @@ with the include and packaged deploy name:</p>
 <span class="go">...</span>
 </code></pre></div>
 <p>And now we have a static site:</p>
-<!-- FIXME: image -->
-
+<p><img class="img-responsive" src="/_file/pyinfra/images/pyinfra-local.png" alt="browser window showing http://pyinfra.local:2080" /></p>
 <h2 id="web-app-and-secrets">Web app and secrets<span class="headerlink">&nbsp;<a href="#web-app-and-secrets" title="permalink">#</a></span></h2>
 <p>The web application is a simple Flask app, as an installable Python package:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>tree<span class="w"> </span>app
@@ -950,20 +950,151 @@ that applies to all hosts in a group
 </code></pre></div>
 
 <hr />
-<p>Deploying looks the same, only with way more operations:</p>
+<p>Deploying looks the same, only with way more operations.</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pyinfra<span class="w"> </span>inventories/beta.py<span class="w"> </span>deploy.py
 <span class="go">...</span>
 <span class="go">--&gt; Results:</span>
 <span class="go">    Operation                             Hosts   Success   Error   No Change</span>
 <span class="go">    ...</span>
 <span class="go">    Grand total                           23      15        -       8</span>
+<span class="go">...</span>
 </code></pre></div>
 <p>And now we have a web app:</p>
-<!-- FIXME: image -->
+<p><img class="img-responsive" src="/_file/pyinfra/images/app-pyinfra-local.png" alt="browser window showing http://app.pyinfra.local:2080" /></p>
+<h2 id="https-and-prod">HTTPS and prod<span class="headerlink">&nbsp;<a href="#https-and-prod" title="permalink">#</a></span></h2>
+<p>That's a nice looking web app,
+but it would be even nicer
+if it weren't &quot;not secure&quot;.
+That requires HTTPS,
+which requires a TLS certificate.</p>
+<p>Fortunately,
+those are easy to get these days –
+<a class="external" href="https://en.wikipedia.org/wiki/Let%27s_Encrypt">Let's Encrypt</a> provides free certificates,
+and <a class="external" href="https://certbot.eff.org/pages/about">Certbot</a> will request, install, and renew them automatically.</p>
+<p>Unfortunately,
+there's no built-in Certbot operation,
+so we have to write a custom one:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/modules/certbot.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="nd">@operation</span><span class="p">()</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">certificate</span><span class="p">(</span><span class="n">domain</span><span class="p">):</span>
+
+    <span class="k">if</span> <span class="n">domain</span> <span class="ow">in</span> <span class="n">host</span><span class="o">.</span><span class="n">get_fact</span><span class="p">(</span><span class="n">Certificates</span><span class="p">):</span>
+        <span class="k">return</span>
+
+    <span class="k">yield</span> <span class="sa">f</span><span class="s2">"certbot certonly -d </span><span class="si">{</span><span class="n">quote</span><span class="p">(</span><span class="n">domain</span><span class="p">)</span><span class="si">}</span><span class="s2"> -n --nginx --agree-tos"</span>
+</code></pre></div></td></tr></table></div>
+
+<p>Like in the <a class="anchor" href="#where-are-the-commands">initial example</a>,
+we read the current host state using a fact
+and then return commands if it doesn't match the desired state.
+The fact is custom too:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/modules/certbot.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Certificates</span><span class="p">(</span><span class="n">FactBase</span><span class="p">):</span>
+    <span class="n">default</span> <span class="o">=</span> <span class="nb">dict</span>
+    <span class="n">requires_command</span> <span class="o">=</span> <span class="s2">"certbot"</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">command</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">"certbot certificates"</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">c</span><span class="p">[</span><span class="s1">'name'</span><span class="p">]:</span> <span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">_parse_certbot_certificates</span><span class="p">(</span><span class="n">output</span><span class="p">)}</span>
+</code></pre></div></td></tr></table></div>
+
+<p>Conveniently, we already have a place where to use the operation:</p>
+<div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/modules/nginx.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="nd">@deploy</span><span class="p">(</span><span class="s2">"nginx site"</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">site</span><span class="p">(</span><span class="n">template</span><span class="p">,</span> <span class="n">domain</span><span class="p">,</span> <span class="n">https</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">):</span>
+    <span class="n">reload_ops</span> <span class="o">=</span> <span class="p">[]</span>
+
+<span class="hll">    <span class="k">if</span> <span class="n">https</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span class="hll">        <span class="n">https</span> <span class="o">=</span> <span class="n">host</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'nginx_https'</span><span class="p">)</span>
+</span><span class="hll">    <span class="k">if</span> <span class="n">https</span><span class="p">:</span>
+</span><span class="hll">        <span class="n">reload_ops</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">certbot</span><span class="o">.</span><span class="n">certificate</span><span class="p">(</span><span class="n">domain</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"cert"</span><span class="p">))</span>
+</span><span class="hll">
+</span>    <span class="n">write_site</span> <span class="o">=</span> <span class="n">files</span><span class="o">.</span><span class="n">template</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">"write"</span><span class="p">,</span>
+        <span class="n">src</span><span class="o">=</span><span class="n">template</span><span class="p">,</span>
+        <span class="n">dest</span><span class="o">=</span><span class="sa">f</span><span class="s1">'/etc/nginx/sites-available/</span><span class="si">{</span><span class="n">domain</span><span class="si">}</span><span class="s1">'</span><span class="p">,</span>
+<span class="hll">        <span class="n">base</span><span class="o">=</span><span class="sa">f</span><span class="s2">"templates/nginx/http</span><span class="si">{</span><span class="s1">'s'</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">https</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">''</span><span class="si">}</span><span class="s2">.conf"</span><span class="p">,</span>
+</span>        <span class="n">domain</span><span class="o">=</span><span class="n">domain</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">context</span><span class="p">,</span>
+    <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+
+<hr />
+<p>Now,
+Certbot needs a publicly resolvable domain name to work,
+so we can't test this using the beta virtual machine...
+but one can always test in prod.
+( ≖ ‿ ≖ )</p>
+<p>Here's a new inventory with two hosts,
+each with its own domain and HTTPS enabled:</p>
+<div class="highlight code-container"><span class="filename">infra/inventories/prod.py</span><pre class="code" data-lang="Python"><span></span><code><span class="n">my_hosts</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="s1">'pyinfra.andgravity.com'</span><span class="p">,</span> <span class="p">{</span>
+        <span class="s1">'home_domain'</span><span class="p">:</span> <span class="s1">'pyinfra.andgravity.com'</span><span class="p">,</span>
+    <span class="p">}),</span>
+    <span class="p">(</span><span class="s1">'app.pyinfra.andgravity.com'</span><span class="p">,</span> <span class="p">{</span>
+        <span class="s1">'app_domain'</span><span class="p">:</span> <span class="s1">'app.pyinfra.andgravity.com'</span><span class="p">,</span>
+    <span class="p">}),</span>
+<span class="p">]</span>  <span class="c1"># fmt: skip</span>
+</code></pre></div>
+
+<div class="highlight code-container"><span class="filename">infra/group_data/prod.py</span><pre class="code" data-lang="Python"><span></span><code><span class="n">stage</span> <span class="o">=</span> <span class="s1">'prod'</span>
+<span class="n">nginx_https</span> <span class="o">=</span> <span class="kc">True</span>
+</code></pre></div>
+
+<p>I say we just go for it:</p>
+<div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pyinfra<span class="w"> </span>inventories/prod.py<span class="w"> </span>deploy.py<span class="w"> </span>--yes
+<span class="go">... stuff happens ...</span>
+</code></pre></div>
+<p>One minute later, we have two whole websites:</p>
+<div class="columns"><div class="column col-sm-6 col-xs-12">
+
+<figure class="figure">
+<img class="img-responsive" src="/_file/pyinfra/images/pyinfra-a-c.png" alt="browser window showing https://pyinfra.andgravity.com" /></figure>
+
+
+
+</div>
+<div class="column col-sm-6 col-xs-12">
+
+<figure class="figure">
+<img class="img-responsive" src="/_file/pyinfra/images/app-pyinfra-a-c.png" alt="browser window showing https://app.pyinfra.andgravity.com" /></figure>
+
+
+
+</div>
+</div>
 
 <!--
 
-# HTTPS using certbot
 # Questions?
 
 -->
