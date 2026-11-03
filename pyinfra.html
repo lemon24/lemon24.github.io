@@ -147,9 +147,9 @@ and you are welcome to follow along at home.</p>
 <li><a href="#operations-and-facts">Operations and facts</a></li>
 <li><a href="#where-are-the-commands">Where are the commands?</a></li>
 <li><a href="#inventory-nginx-setup">Inventory + nginx setup</a></li>
-<li><a href="#static-site-reuse">Static site + reuse</a></li>
-<li><a href="#web-app-and-secrets">Web app and secrets</a></li>
-<li><a href="#https-and-prod">HTTPS and prod</a></li>
+<li><a href="#static-site-code-reuse">Static site + code reuse</a></li>
+<li><a href="#web-app-secrets">Web app + secrets</a></li>
+<li><a href="#https-prod">HTTPS + prod</a></li>
 </ul>
 </details>
 <h2 id="about-me">About me<span class="headerlink">&nbsp;<a href="#about-me" title="permalink">#</a></span></h2>
@@ -231,7 +231,7 @@ If you configure servers over SSH:
 -->
 
 <p>pyinfra use cases follow from what it does –
-configures servers over SSH.</p>
+configuring servers over SSH.</p>
 <p>As such, pyinfra is good for boring,
 cloud-agnostic architectures,
 from lots of servers with different roles
@@ -390,7 +390,7 @@ so the <code>httpd</code> branch is chosen:<sup class="footnote-ref" id="fnref-3
 <span class="go">...</span>
 </code></pre></div>
 <h2 id="where-are-the-commands">Where are the commands?<span class="headerlink">&nbsp;<a href="#where-are-the-commands" title="permalink">#</a></span></h2>
-<p>Before looking at debug output,
+<p>Before we look at debug output,
 let's see how pyinfra operations are implemented.</p>
 <p>Here's a simplified version of the files.file <a class="external" href="https://github.com/pyinfra-dev/pyinfra/blob/v3.10.0/src/pyinfra/operations/files.py#L1663-L1762">implementation</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@operation</span><span class="p">()</span>
@@ -460,14 +460,14 @@ but this time it runs the commands returned by them too:</p>
 OK, now we can [become dangerous](https://www.youtube.com/shorts/DuP84ULLy74).
 -->
 
-<p>So far we've been targeting my local machine,
+<p>So far we've been using my local machine as target host,
 but we want beta to be as similar to prod as possible,
-so I've <a class="external" href="https://github.com/lemon24/pyinfra-demo/blob/main/infra/Vagrantfile">set up a Vagrant</a> Ubuntu 26.04 virtual machine.</p>
+so I've set up an Ubuntu virtual machine <a class="external" href="https://github.com/lemon24/pyinfra-demo/blob/main/infra/Vagrantfile">with Vagrant</a>.</p>
 <!-- TODO: if you're following along, ... -->
 
-<p>We've also used pyinfra directly with a host,
-but typically you will use
-an <strong>inventory</strong> file containing <strong>groups</strong> of hosts instead.
+<p>Also, you will typically use
+an <strong>inventory</strong> file containing <strong>groups</strong> of hosts
+instead of passing individual hosts directly to the CLI.
 For our demo, we need just one group:</p>
 <!-- FIXME: @vagrant footnote -->
 
@@ -482,9 +482,9 @@ For our demo, we need just one group:</p>
 </code></pre></div>
 
 <p>Since the inventory is a Python file,
-groups don't have to be static lists –
+groups don't have to be list literals –
 you could, for example, import a library and
-list the instances in an cloud autoscaling group.</p>
+list instances in an autoscaling group dynamically.</p>
 <p>Here's how you run an arbitrary command against an inventory:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pyinfra<span class="w"> </span>inventories/beta.py<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>--<span class="w"> </span>lsb_release<span class="w"> </span>-d
 <span class="go">...</span>
@@ -580,25 +580,23 @@ no change is detected for &quot;disable default site&quot; (no symlink yet):</p>
 </code></pre></div>
 <p>...but the operation does run, as the prophecy foretold
 (&quot;side effects of operations may alter behaviour of future operations&quot;).</p>
-<h2 id="static-site-reuse">Static site + reuse<span class="headerlink">&nbsp;<a href="#static-site-reuse" title="permalink">#</a></span></h2>
-<p>Now with nginx installed,
+<h2 id="static-site-code-reuse">Static site + code reuse<span class="headerlink">&nbsp;<a href="#static-site-code-reuse" title="permalink">#</a></span></h2>
+<p>With nginx installed,
 we can proceed to the static home page.</p>
-<p>Instead of putting its operations in the main deploy,
-we include them from another file;
+<p>We'll put the operations in a separate file
+that we include in the main deploy, which
 in addition to keeping code tidy,
-this allows us to run individual tasks separately:</p>
+allows specific tasks to be conditional:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/deploy.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">23</span>
 <span class="normal">24</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="k">if</span> <span class="n">host</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'home_domain'</span><span class="p">):</span>
     <span class="n">local</span><span class="o">.</span><span class="n">include</span><span class="p">(</span><span class="s1">'tasks/home.py'</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
-<p>The include depends on <a class="external" href="https://docs.pyinfra.com/en/3.x/inventory-data.html#host-data">host data</a> –
-arbitrary data associated with hosts;
-one way to do this is to use (host, data) pairs instead of hosts
+<p><strong><a class="external" href="https://docs.pyinfra.com/en/3.x/inventory-data.html#host-data">Host data</a></strong> is arbitrary data associated with hosts
 in the inventory file:</p>
-<!-- FIXME: group data footnotes -->
+<div class="highlight code-container"><span class="filename">infra/inventories/beta.py</span><pre class="code" data-lang="Python"><span></span><code><span class="c1"># group_name = [(host1, {'some custom': 'host data'}), ...]</span>
 
-<div class="highlight code-container"><span class="filename">infra/inventories/beta.py</span><pre class="code" data-lang="Python"><span></span><code><span class="n">my_hosts</span> <span class="o">=</span> <span class="p">[</span>
+<span class="n">my_hosts</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s1">'pyinfra.local'</span><span class="p">,</span> <span class="p">{</span>
         <span class="s1">'home_domain'</span><span class="p">:</span> <span class="s1">'pyinfra.local'</span><span class="p">,</span>
     <span class="p">}),</span>
@@ -606,14 +604,18 @@ in the inventory file:</p>
 </code></pre></div>
 
 <p>The home page deploy itself is pretty straightforward:</p>
-<div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/tasks/home.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 6</span>
+<div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/tasks/home.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 4</span>
+<span class="normal"> 5</span>
+<span class="normal"> 6</span>
 <span class="normal"> 7</span>
 <span class="normal"> 8</span>
 <span class="normal"> 9</span>
 <span class="normal">10</span>
 <span class="normal">11</span>
 <span class="normal">12</span>
-<span class="normal">13</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="n">sync_files</span> <span class="o">=</span> <span class="n">files</span><span class="o">.</span><span class="n">sync</span><span class="p">(</span>
+<span class="normal">13</span></code></pre></div></td><td class="code"><div><pre class="code" data-lang="Python"><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">nginx</span>
+
+<span class="n">sync_files</span> <span class="o">=</span> <span class="n">files</span><span class="o">.</span><span class="n">sync</span><span class="p">(</span>
     <span class="n">name</span><span class="o">=</span><span class="s2">"sync files"</span><span class="p">,</span>
     <span class="n">src</span><span class="o">=</span><span class="s1">'../home'</span><span class="p">,</span>
     <span class="n">dest</span><span class="o">=</span><span class="s1">'/opt/home'</span><span class="p">,</span>
@@ -624,14 +626,14 @@ in the inventory file:</p>
 </code></pre></div></td></tr></table></div>
 
 <p>There's one operation
-that <a class="external" href="https://docs.pyinfra.com/en/3.x/operations/files.html#files-sync">copies files</a> from a local directory to a remote one,
+that <a class="external" href="https://docs.pyinfra.com/en/3.x/operations/files.html#files-sync">synchronizes files</a> from a local directory to a remote one,
 and another operation that sets up an nginx site
 using the domain from host data.</p>
 <hr />
-<p>Except I lied!
-There's no <code>nginx.site</code> operation,
-and that's not actually an operation,
-but a <a class="external" href="https://docs.pyinfra.com/en/3.x/api/deploys.html">packaged deploy</a>, which is a way to make deploys reusable:</p>
+<p>Except <code>nginx.site</code> isn't actually an operation,
+but a <a class="external" href="https://docs.pyinfra.com/en/3.x/api/deploys.html">packaged deploy</a>;
+besides the function definition that makes it reusable,
+it looks like any other deploy:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/modules/nginx.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 7</span>
 <span class="normal"> 8</span>
 <span class="normal"> 9</span>
@@ -677,14 +679,8 @@ but a <a class="external" href="https://docs.pyinfra.com/en/3.x/api/deploys.html
     <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
-<p>Besides the decorator and the function definition,
-it looks like any other deploy;
-there's an operation to write the config from a template,
-one to symlink it into <code>sites-enabled</code>,
-and one to maybe reload nginx, just like before.</p>
-<p>Another way to reuse stuff is via the <a class="external" href="https://docs.pyinfra.com/en/3.x/operations/files.html#files-template">files.template</a> operation,
-which uses Jinja.
-Here, we have a base template for any HTTP site:</p>
+<p><a class="external" href="https://docs.pyinfra.com/en/3.x/operations/files.html#files-template">files.template</a> uses <a class="external" href="https://jinja.palletsprojects.com/en/stable/">Jinja</a>,
+so we can have a base template for all HTTP sites:</p>
 <div class="highlight code-container"><span class="filename">infra/templates/nginx/http.conf</span><pre class="code" data-lang="Django/Jinja"><span></span><code><span class="x">server {</span>
 <span class="x">    listen 80;</span>
 <span class="x">    listen [::]:80;</span>
@@ -694,7 +690,7 @@ Here, we have a base template for any HTTP site:</p>
 <span class="x">}</span>
 </code></pre></div>
 
-<p>...that we extend with specific site configuration:</p>
+<p>...that we then extend with site-specific configuration:</p>
 <div class="highlight code-container"><span class="filename">infra/templates/nginx/home.conf</span><pre class="code" data-lang="Django/Jinja"><span></span><code><span class="cp">{%</span> <span class="k">extends</span> <span class="s1">'templates/nginx/http.conf'</span> <span class="cp">%}</span>
 
 <span class="cp">{%</span> <span class="k">block</span> <span class="nv">server</span> -<span class="cp">%}</span>
@@ -706,10 +702,7 @@ Here, we have a base template for any HTTP site:</p>
 <span class="cp">{%</span>- <span class="k">endblock</span> <span class="cp">%}</span>
 </code></pre></div>
 
-<p>If we run the deploy with <code>--diff</code>,
-we get to see the rendered template;
-also note the operation names are prefixed
-with the include and packaged deploy name:</p>
+<p>Passing <code>--diff</code> shows the rendered template, which is pretty neat:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pyinfra<span class="w"> </span>inventories/beta.py<span class="w"> </span>deploy.py<span class="w"> </span>--diff
 <span class="go">...</span>
 <span class="go">--&gt; Preparing operation files...</span>
@@ -740,10 +733,10 @@ with the include and packaged deploy name:</p>
 <span class="go">    tasks/home.py | nginx site | reload   -                   1 (pyinfra.local)</span>
 <span class="go">...</span>
 </code></pre></div>
-<p>And now we have a static site:</p>
+<p>And now we have a static site!</p>
 <p><img class="img-responsive" src="/_file/pyinfra/images/pyinfra-local.png" alt="browser window showing http://pyinfra.local:2080" /></p>
-<h2 id="web-app-and-secrets">Web app and secrets<span class="headerlink">&nbsp;<a href="#web-app-and-secrets" title="permalink">#</a></span></h2>
-<p>The web application is a simple Flask app, as an installable Python package:</p>
+<h2 id="web-app-secrets">Web app + secrets<span class="headerlink">&nbsp;<a href="#web-app-secrets" title="permalink">#</a></span></h2>
+<p>The web application is a simple Flask app that we can install with pip:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>tree<span class="w"> </span>app
 <span class="go">app</span>
 <span class="go">├── app</span>
@@ -755,7 +748,7 @@ with the include and packaged deploy name:</p>
 <span class="go">└── pyproject.toml</span>
 </code></pre></div>
 <p>We serve it using a traditional
-<a class="external" href="https://gunicorn.org/deploy/#nginx-configuration">Gunicorn-being-nginx-on-a-Unix-socket</a> setup:</p>
+<a class="external" href="https://gunicorn.org/deploy/#nginx-configuration">Gunicorn being nginx on a Unix socket</a> setup:</p>
 <pre class="code code-container"><code>   :80, :443
        |
 .-------------.
@@ -767,7 +760,7 @@ with the include and packaged deploy name:</p>
 .- Gunicorn --.
 |   web app   |  groups: app-socket, app
 '-------------'</code></pre>
-<p>The deploy is bigger than the other one,
+<p>The deploy for it is slightly bigger,
 but hopefully still straightforward.</p>
 <p>We have operations to create users and groups:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/tasks/app.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">12</span>
@@ -872,7 +865,7 @@ but hopefully still straightforward.</p>
 </code></pre></div></td></tr></table></div>
 
 <hr />
-<p>Flask uses a <a class="external" href="https://flask.palletsprojects.com/en/stable/config/#SECRET_KEY">secret key</a> that usually comes from a config file:</p>
+<p>In addition, Flask needs a <a class="external" href="https://flask.palletsprojects.com/en/stable/config/#SECRET_KEY">secret key</a>, which usually comes from a config file:</p>
 <!-- FIXME: secret manager service footnote -->
 
 <div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/tasks/app.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">47</span>
@@ -892,15 +885,14 @@ but hopefully still straightforward.</p>
 <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
-<p>The question is,
-where do we store the secret key before we write the config?</p>
-<p>The simple (and wrong) solution is to hardcode it in the deploy code;
-besides the whole unencrypted-secrets-in-version-control issue,
-beta and prod should have different secrets.</p>
-<p>But as I said,
+<p>The question is, where do we store the secret key before writing the config?</p>
+<p>The simple (and wrong) solution is to hardcode it in the deploy or in the template;
+unencrypted-secrets-in-version-control issue aside,
+we'd also like the secrets to be different between beta and prod.</p>
+<p>As I said,
 a deploy is a Python file,
 so we can do anything:
-we could get secrets from a
+we can get them from a
 <a class="external" href="https://keyring.readthedocs.io/en/latest/">password</a>
 <a class="external" href="https://keyring.readthedocs.io/en/latest/#third-party-backends">manager</a>,
 a security key,
@@ -908,12 +900,7 @@ or even an <a class="external" href="https://pypi.org/project/keyrings.cryptfile
 <a class="external" href="https://pypi.org/project/privy/">file</a>.
 To illustrate the point,
 here's a simple function
-that reads named secrets from a JSON file:</p>
-<!-- FIXME: footnote?
-(which you absolutely *should not* do,
-use [keyrings.cryptfile] instead)
--->
-
+that reads named secrets from an unencrypted JSON file:<sup class="footnote-ref" id="fnref-4"><a href="#fn-4">4</a></sup></p>
 <div class="highlight code-container"><span class="filename">infra/modules/secrets.py</span><pre class="code" data-lang="Python"><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pyinfra</span><span class="w"> </span><span class="kn">import</span> <span class="n">host</span>
 
@@ -933,10 +920,10 @@ use [keyrings.cryptfile] instead)
 </code></pre></div>
 
 <p>The stage comes from host data,
-this time not from the inventory,
-but from a <a class="external" href="https://docs.pyinfra.com/en/3.x/inventory-data.html#group-data-files">group data file</a>
+this time not in the inventory,
+but in a <a class="external" href="https://docs.pyinfra.com/en/3.x/inventory-data.html#group-data-files">group data file</a>
 that applies to all hosts in a group
-(the inventory name is an implicit group):</p>
+(<code>beta</code>, the inventory name, is an implicit group):</p>
 <div class="highlight code-container"><span class="filename">infra/group_data/beta.py</span><pre class="code" data-lang="Python"><span></span><code><span class="n">stage</span> <span class="o">=</span> <span class="s1">'beta'</span>
 </code></pre></div>
 
@@ -944,8 +931,7 @@ that applies to all hosts in a group
 <div class="highlight code-container"><span class="filename">infra/templates/config.py.jinja</span><pre class="code" data-lang="Django/Jinja"><span></span><code><span class="x">SECRET_KEY = </span><span class="cp">{{</span> <span class="s1">'{!r}'</span><span class="nv">.format</span><span class="o">(</span><span class="nv">get_secret</span><span class="o">(</span><span class="s1">'app_secret_key'</span><span class="o">))</span> <span class="cp">}}</span>
 </code></pre></div>
 
-<hr />
-<p>Deploying looks the same, only with way more operations.</p>
+<p>Deploying looks the same, only with way more operations:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pyinfra<span class="w"> </span>inventories/beta.py<span class="w"> </span>deploy.py
 <span class="go">...</span>
 <span class="go">--&gt; Results:</span>
@@ -956,11 +942,11 @@ that applies to all hosts in a group
 </code></pre></div>
 <p>And now we have a web app:</p>
 <p><img class="img-responsive" src="/_file/pyinfra/images/app-pyinfra-local.png" alt="browser window showing http://app.pyinfra.local:2080" /></p>
-<h2 id="https-and-prod">HTTPS and prod<span class="headerlink">&nbsp;<a href="#https-and-prod" title="permalink">#</a></span></h2>
+<h2 id="https-prod">HTTPS + prod<span class="headerlink">&nbsp;<a href="#https-prod" title="permalink">#</a></span></h2>
 <p>That's a nice looking web app,
 but it would be even nicer
-if it weren't &quot;not secure&quot;.
-That requires HTTPS,
+if it were not &quot;not secure&quot;.
+This requires HTTPS,
 which requires a TLS certificate.</p>
 <p>Fortunately,
 those are easy to get these days –
@@ -985,7 +971,7 @@ so we have to write a custom one:</p>
 </code></pre></div></td></tr></table></div>
 
 <p>Like in the <a class="anchor" href="#where-are-the-commands">initial example</a>,
-we read the current host state using a fact
+we read the host state using a fact
 and then return commands if it doesn't match the desired state.
 The fact is custom too:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/modules/certbot.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">17</span>
@@ -1007,7 +993,7 @@ The fact is custom too:</p>
         <span class="k">return</span> <span class="p">{</span><span class="n">c</span><span class="p">[</span><span class="s1">'name'</span><span class="p">]:</span> <span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">_parse_certbot_certificates</span><span class="p">(</span><span class="n">output</span><span class="p">)}</span>
 </code></pre></div></td></tr></table></div>
 
-<p>Conveniently, we already have a place where to use the operation:</p>
+<p>And we already have a convenient place where we can use the operation:</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/modules/nginx.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal">10</span>
 <span class="normal">11</span>
 <span class="normal">12</span>
@@ -1044,11 +1030,10 @@ The fact is custom too:</p>
 </code></pre></div></td></tr></table></div>
 
 <hr />
-<p>Now,
-Certbot needs a publicly resolvable domain name to work,
+<p>Also unfortunately,
+Certbot needs a resolvable domain name to work,
 so we can't test this using the beta virtual machine...
-but one can always test in prod.
-( ≖ ‿ ≖ )</p>
+but we can always test in prod. ( ≖‿  ≖ )</p>
 <p>Here's a new inventory with two hosts,
 each with its own domain and HTTPS enabled:</p>
 <div class="highlight code-container"><span class="filename">infra/inventories/prod.py</span><pre class="code" data-lang="Python"><span></span><code><span class="n">my_hosts</span> <span class="o">=</span> <span class="p">[</span>
@@ -1069,7 +1054,7 @@ each with its own domain and HTTPS enabled:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pyinfra<span class="w"> </span>inventories/prod.py<span class="w"> </span>deploy.py<span class="w"> </span>--yes
 <span class="go">... stuff happens ...</span>
 </code></pre></div>
-<p>One minute later, we have two whole websites:</p>
+<p>One minute later, there are ✨ two new websites ✨ on the internet:<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">5</a></sup></p>
 <div class="columns"><div class="column col-sm-6 col-xs-12">
 
 <figure class="figure">
@@ -1102,6 +1087,9 @@ and need to reload stuff once in a while until you can find the root cause. <a h
 <li id="fn-3"><p>Deploy deploy code runs once per host,
 so you <em>could</em> have different branches on different hosts
 within the same run. <a href="#fnref-3" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-4"><p>Which you absolutely <em>should not</em> do,
+use <a class="external" href="https://pypi.org/project/keyrings.cryptfile/">keyrings.cryptfile</a> instead. <a href="#fnref-4" class="footnote"><sup>[return]</sup></a></p></li>
+<li id="fn-5"><p>Well, not anymore, there's no point in paying to host this :) <a href="#fnref-5" class="footnote"><sup>[return]</sup></a></p></li>
 </ol>
 </section>
 
