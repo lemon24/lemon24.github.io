@@ -146,8 +146,8 @@ and you are welcome to follow along at home.</p>
 <li><a href="#the-demo">The demo</a></li>
 <li><a href="#operations-and-facts">Operations and facts</a></li>
 <li><a href="#where-are-the-commands">Where are the commands?</a></li>
-<li><a href="#initial-nginx-setup">Initial nginx setup</a></li>
-<li><a href="#static-site-and-reuse">Static site and reuse</a></li>
+<li><a href="#inventory-nginx-setup">Inventory + nginx setup</a></li>
+<li><a href="#static-site-reuse">Static site + reuse</a></li>
 <li><a href="#web-app-and-secrets">Web app and secrets</a></li>
 <li><a href="#https-and-prod">HTTPS and prod</a></li>
 </ul>
@@ -444,7 +444,7 @@ which results in read-only commands being run:</p>
 </code></pre></div>
 <p>During the <em>execute</em> phase,
 pyinfra runs the previously loaded operations <em>again</em>,
-but this time it also runs the commands returned by them:</p>
+but this time it runs the commands returned by them too:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="go">    Press enter to execute... [Enter]</span>
 <span class="go">--&gt; Beginning operation run...</span>
 <span class="go">--&gt; Starting operation: files.file (hello.txt, present=False)</span>
@@ -455,13 +455,17 @@ but this time it also runs the commands returned by them:</p>
 </span><span class="go">    [@local] Success</span>
 <span class="go">...</span>
 </code></pre></div>
-<h2 id="initial-nginx-setup">Initial nginx setup<span class="headerlink">&nbsp;<a href="#initial-nginx-setup" title="permalink">#</a></span></h2>
-<p>OK, now we can <a class="external" href="https://www.youtube.com/shorts/DuP84ULLy74">become dangerous</a>.</p>
-<hr />
-<p>So far we've been using my local machine as a target,
+<h2 id="inventory-nginx-setup">Inventory + nginx setup<span class="headerlink">&nbsp;<a href="#inventory-nginx-setup" title="permalink">#</a></span></h2>
+<!--
+OK, now we can [become dangerous](https://www.youtube.com/shorts/DuP84ULLy74).
+-->
+
+<p>So far we've been targeting my local machine,
 but we want beta to be as similar to prod as possible,
-so I've set up an Ubuntu 26.04 virtual machine <a class="external" href="https://github.com/lemon24/pyinfra-demo/blob/main/infra/Vagrantfile">using Vagrant</a>.</p>
-<p>We've also used pyinfra with a single host,
+so I've <a class="external" href="https://github.com/lemon24/pyinfra-demo/blob/main/infra/Vagrantfile">set up a Vagrant</a> Ubuntu 26.04 virtual machine.</p>
+<!-- TODO: if you're following along, ... -->
+
+<p>We've also used pyinfra directly with a host,
 but typically you will use
 an <strong>inventory</strong> file containing <strong>groups</strong> of hosts instead.
 For our demo, we need just one group:</p>
@@ -491,7 +495,7 @@ list the instances in an cloud autoscaling group.</p>
 <span class="go">...</span>
 </code></pre></div>
 <hr />
-<p>We will use nginx to serve our websites,
+<p>We'll use nginx for both of our websites,
 which means we need to install it first.</p>
 <p>Here's what the main deploy looks like (minus imports):</p>
 <div class="highlight code-container"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">infra/deploy.py</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre class="code"><code><span class="normal"> 5</span>
@@ -521,18 +525,18 @@ which means we need to install it first.</p>
     <span class="n">name</span><span class="o">=</span><span class="s2">"reload nginx"</span><span class="p">,</span>
     <span class="n">service</span><span class="o">=</span><span class="s1">'nginx'</span><span class="p">,</span>
     <span class="n">reloaded</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">_if</span><span class="o">=</span><span class="n">disable_default</span><span class="o">.</span><span class="n">did_change</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="hll">    <span class="n">_if</span><span class="o">=</span><span class="n">disable_default</span><span class="o">.</span><span class="n">did_change</span><span class="p">,</span>
+</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
 
-<p>After we update the package cache,
+<p>We update the package cache,
 we install nginx,
 we disable the default &quot;Welcome to nginx!&quot; site,
 and then we reload the nginx config.
-To avoid unnecessary reloads after the first run,
-we use the <code>_if</code> global argument
-to reload only if the previous operation <a class="external" href="https://docs.pyinfra.com/en/3.x/deploy-process.html#checking-operation-changes">actually ran</a>.
-In theory,
+To avoid unnecessary reloads,
+we use the <code>_if</code> <a class="external" href="https://docs.pyinfra.com/en/3.x/arguments.html">global argument</a>
+to reload only if the previous operation <a class="external" href="https://docs.pyinfra.com/en/3.x/deploy-process.html#checking-operation-changes">actually ran</a>.</p>
+<p>In theory,
 we could use a fact to gate the last two operations instead:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="n">apt</span><span class="o">.</span><span class="n">packages</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
 <span class="k">if</span> <span class="n">host</span><span class="o">.</span><span class="n">get_fact</span><span class="p">(</span><span class="n">Link</span><span class="p">,</span> <span class="s1">'/etc/nginx/sites-enabled/default'</span><span class="p">):</span>
@@ -540,8 +544,8 @@ we could use a fact to gate the last two operations instead:</p>
     <span class="n">server</span><span class="o">.</span><span class="n">service</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
 </code></pre></div>
 <p>...but that <code>if</code> happens in the <em>prepare</em> phase,
-when nginx hasn't been installed yet,
-so those operations will simply be skipped on the first run.</p>
+when nginx (and the symlink) hasn't been installed yet,
+so they would be skipped on the first run.</p>
 <!--
 FIXME: footnote
 which is why you should use only immutable facts in deploy code,
@@ -574,12 +578,11 @@ no change is detected for &quot;disable default site&quot; (no symlink yet):</p>
 <span class="go">    reload nginx           1       1         -       -</span>
 <span class="go">...</span>
 </code></pre></div>
-<p>...but &quot;disable default site&quot; does run, as the prophecy foretold
+<p>...but the operation does run, as the prophecy foretold
 (&quot;side effects of operations may alter behaviour of future operations&quot;).</p>
-<h2 id="static-site-and-reuse">Static site and reuse<span class="headerlink">&nbsp;<a href="#static-site-and-reuse" title="permalink">#</a></span></h2>
+<h2 id="static-site-reuse">Static site + reuse<span class="headerlink">&nbsp;<a href="#static-site-reuse" title="permalink">#</a></span></h2>
 <p>Now with nginx installed,
 we can proceed to the static home page.</p>
-<hr />
 <p>Instead of putting its operations in the main deploy,
 we include them from another file;
 in addition to keeping code tidy,
