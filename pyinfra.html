@@ -156,8 +156,8 @@ and you are welcome to follow along at home.</p>
 <p>Before we talk about pyinfra, I should <a class="internal" href="/about">introduce myself</a>.</p>
 <p>I worked at a Fortune 10 company for most of my career,
 where I did site reliability engineering
-for the reverse proxy behind a bunch of really big websites
-and 2000 smaller ones,
+for the reverse proxy behind some really big websites
+and two thousand smaller ones,
 and where I built a data-lake-plus-feature-store
 for an ML organization.</p>
 <p>In my spare time,
@@ -300,8 +300,8 @@ Here's a sneak peek of the final deploy:
 <p>First,
 we should get familiar with two basic pyinfra concepts.</p>
 <hr />
-<p><strong>Operations</strong> change the server;
-most operations are declarative and idempotent,
+<p><strong>Operations</strong> change the server in some way;
+most are declarative and idempotent,
 and you use them to <em>ensure state</em>.
 A Python file containing operations is called a <strong>deploy</strong>.</p>
 <p>Here's a simple deploy with <a class="external" href="https://docs.pyinfra.com/en/3.x/operations/files.html#files-file">one operation</a>
@@ -377,9 +377,9 @@ you use them to control operations.</p>
 </code></pre></div>
 
 <p>The package is usually called <code>httpd</code>,
-but Debian-based distributions call it <code>apache2</code>;
+but Debian-based distributions call it <code>apache2</code>, so
 we use the <a class="external" href="https://docs.pyinfra.com/en/3.x/facts/server.html#server-LinuxName">LinuxName</a> fact to detect where we are
-and pass the correct name to the <a class="external" href="https://docs.pyinfra.com/en/3.x/operations/server.html#server-packages">server.packages</a> operation.
+and pass the right name to the <a class="external" href="https://docs.pyinfra.com/en/3.x/operations/server.html#server-packages">server.packages</a> operation.
 My machine is a Mac,
 so the <code>httpd</code> branch is chosen:<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup></p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pyinfra<span class="w"> </span>@local<span class="w"> </span>examples/install_apache.py<span class="w"> </span>--dry
@@ -390,10 +390,9 @@ so the <code>httpd</code> branch is chosen:<sup class="footnote-ref" id="fnref-3
 <span class="go">...</span>
 </code></pre></div>
 <h2 id="where-are-the-commands">Where are the commands?<span class="headerlink">&nbsp;<a href="#where-are-the-commands" title="permalink">#</a></span></h2>
-<p>So, where are the shell commands?</p>
-<p>Before we look at debug output,
-let's look at how pyinfra operations are implemented.</p>
-<p>Here's a simplified version of the file <a class="external" href="https://github.com/pyinfra-dev/pyinfra/blob/v3.10.0/src/pyinfra/operations/files.py#L1663-L1762">implementation</a>:</p>
+<p>Before looking at debug output,
+let's see how pyinfra operations are implemented.</p>
+<p>Here's a simplified version of the files.file <a class="external" href="https://github.com/pyinfra-dev/pyinfra/blob/v3.10.0/src/pyinfra/operations/files.py#L1663-L1762">implementation</a>:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Python"><span></span><code><span class="nd">@operation</span><span class="p">()</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">file</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">present</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
     <span class="n">info</span> <span class="o">=</span> <span class="n">host</span><span class="o">.</span><span class="n">get_fact</span><span class="p">(</span><span class="n">File</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">)</span>
@@ -405,9 +404,9 @@ let's look at how pyinfra operations are implemented.</p>
         <span class="k">yield</span> <span class="sa">f</span><span class="s2">"rm -f </span><span class="si">{</span><span class="n">quote</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
 </code></pre></div>
 <p>The structure is similar for all operations:
-read the current host state using facts,
+read the host state using facts,
 diff it against the desired state,
-and return commands to reach the desired state, <em>if needed</em>.</p>
+and return commands to reach the desired state if they don't match.</p>
 <hr />
 <p>Here's another deploy
 that says &quot;I want <code>hello.txt</code> to <em>not</em> exist&quot;:</p>
@@ -417,14 +416,14 @@ that says &quot;I want <code>hello.txt</code> to <em>not</em> exist&quot;:</p>
 </code></pre></div>
 
 <p>With <code>--debug</code>,
-we can observe the commands being run
+we can see the commands being run
 during each execution phase.</p>
 <p>During the <em>prepare</em> phase (before approval),
 pyinfra runs the deploy code <em>once per host</em> to load operations,
 and then runs each operation to see if it returns commands,
 <em>without running the commands themselves</em>
-(this is how &quot;detected changes&quot; works).
-Running operations also runs facts,
+(this is how &quot;detected changes&quot; works).</p>
+<p>Running operations runs facts,
 which results in read-only commands being run:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="gp">$ </span>pyinfra<span class="w"> </span>@local<span class="w"> </span>examples/delete_file.py<span class="w"> </span>--debug
 <span class="go">...</span>
@@ -444,8 +443,8 @@ which results in read-only commands being run:</p>
 <span class="go">    Press enter to execute...</span>
 </code></pre></div>
 <p>During the <em>execute</em> phase,
-pyinfra runs the loaded operations <em>again</em>,
-but this time it also runs the commands returned by the operations:</p>
+pyinfra runs the previously loaded operations <em>again</em>,
+but this time it also runs the commands returned by them:</p>
 <div class="highlight code-container"><pre class="code" data-lang="Bash Session"><span></span><code><span class="go">    Press enter to execute... [Enter]</span>
 <span class="go">--&gt; Beginning operation run...</span>
 <span class="go">--&gt; Starting operation: files.file (hello.txt, present=False)</span>
