@@ -2,13 +2,1021 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>https://death.andgravity.com/</id>
   <title>death and gravity #article</title>
-  <updated>2026-06-08T18:00:00+00:00</updated>
+  <updated>2026-11-03T14:45:00+00:00</updated>
   <author>
     <name>Adrian</name>
     <email>lemon@andgravity.com</email>
   </author>
   <link href="https://death.andgravity.com/" rel="alternate"/>
   <link href="https://death.andgravity.com/_feed/index/_tags/article.xml" rel="self"/>
+  <entry xml:base="https://death.andgravity.com/pyinfra">
+    <id>https://death.andgravity.com/pyinfra</id>
+    <title>pyinfra – simple infrastructure automation in Python</title>
+    <updated>2026-11-03T14:45:00+00:00</updated>
+    <content type="html">&lt;p&gt;Hi, I'm Adrian,
+and today I will live demo &lt;strong&gt;&lt;a class="external" href="https://pyinfra.com/"&gt;pyinfra&lt;/a&gt;&lt;/strong&gt;,
+an infrastructure automation tool.&lt;/p&gt;
+&lt;section class="admonition note"&gt;
+&lt;p class="admonition-title"&gt;Note&lt;/p&gt;
+&lt;p&gt;This is the edited transcript of
+a talk I gave at a local DevOps meetup.
+While part of the &amp;quot;live&amp;quot; aspect is lost in writing,
+I think it's a pretty decent pyinfra tutorial,
+so you are welcome to follow along at home.&lt;/p&gt;
+&lt;/section&gt;
+&lt;details class="toc"&gt;
+&lt;summary&gt;Contents&lt;/summary&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="#about-me"&gt;About me&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#what-is-pyinfra"&gt;What is pyinfra?&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#why-use-pyinfra"&gt;Why use pyinfra?&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#when-to-use-pyinfra"&gt;When to use pyinfra?&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#the-demo"&gt;The demo&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#operations-and-facts"&gt;Operations and facts&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#where-are-the-commands"&gt;Where are the commands?&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#inventory-nginx-setup"&gt;Inventory + nginx setup&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#static-site-code-reuse"&gt;Static site + code reuse&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#web-app-secrets"&gt;Web app + secrets&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#https-prod"&gt;HTTPS + prod&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#questions"&gt;Questions?&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/details&gt;
+&lt;h2 id="about-me"&gt;About me&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#about-me" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Before we talk about pyinfra, I should &lt;a class="internal" href="/about"&gt;introduce myself&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;I worked at a Fortune 10 company for most of my career,
+where I did site reliability engineering
+for the reverse proxy behind some really big websites
+and two thousand smaller ones,
+and where I built a data-lake-plus-feature-store
+for an ML organization.&lt;/p&gt;
+&lt;p&gt;In my spare time,
+I write about Python on &lt;a class="internal" href="/"&gt;this website&lt;/a&gt;,
+and I maintain the creatively named &lt;em&gt;&lt;a class="external" href="https://github.com/lemon24/reader"&gt;reader&lt;/a&gt;&lt;/em&gt;,
+a Python feed reader library and web app.
+Lately I've been working on a
+&lt;a class="internal" href="/reader-3-23#hosted-reader-status-update"&gt;hosted version of &lt;em&gt;reader&lt;/em&gt;&lt;/a&gt;,
+which is how I ended up using pyinfra.&lt;/p&gt;
+&lt;h2 id="what-is-pyinfra"&gt;What is pyinfra?&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#what-is-pyinfra" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;a class="external" href="https://pyinfra.com/"&gt;pyinfra&lt;/a&gt; is a mostly command-line tool that
+turns Python code into shell commands
+and runs them on many servers over SSH, in parallel.
+Think Ansible, but simpler.&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;span class="filename"&gt;deploy.py&lt;/span&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;user&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;'admin'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'alice'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'bob'&lt;/span&gt;&lt;span class="p"&gt;]:&lt;/span&gt;
+    &lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;user&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;user&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;put&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'files/hello.txt'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'/etc/motd'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;host&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'install_postgres'&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;apt&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;install&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'postgresql'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;h2 id="why-use-pyinfra"&gt;Why use pyinfra?&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#why-use-pyinfra" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;!--
+
+In short:
+
+* declarative and idempotent
+* infrastructure as actual code, not YAML
+* custom operations in 10 lines
+* works on any host you can SSH into
+* concurrent, "6× faster than Ansible"
+* scales to "thousands of servers"
+
+--&gt;
+
+&lt;p&gt;I chose pyinfra because, like &lt;a class="external" href="https://en.wikipedia.org/wiki/Ansible_(software)"&gt;Ansible&lt;/a&gt;, it is
+&lt;em&gt;declarative&lt;/em&gt; –
+you describe what a server should look like, and pyinfra makes it so
+– and &lt;em&gt;idempotent&lt;/em&gt; –
+nothing happens if the server is already in the desired state.&lt;/p&gt;
+&lt;p&gt;Unlike Ansible, there's no YAML – &lt;em&gt;deploys&lt;/em&gt; (playbooks) are Python code,
+which means you can do anything Python code can do:
+you can have &lt;code&gt;for&lt;/code&gt;s and &lt;code&gt;if&lt;/code&gt;s,
+you can have code completion and type checking,
+and you can even import libraries.&lt;/p&gt;
+&lt;p&gt;Of interest to people using Ansible at larger scales,
+pyinfra is also faster;
+in my limited, small-scale experience,
+it was faster than Ansible with the &lt;a class="external" href="https://mitogen.networkgenomics.com/ansible_detailed.html"&gt;Mitogen&lt;/a&gt; plugin.&lt;/p&gt;
+&lt;p&gt;In fairness to Ansible,
+while pyinfra has been around for 10 years,
+it has fewer built-in &lt;em&gt;operations&lt;/em&gt; (modules) and a smaller ecosystem,
+although that's partially offset
+by how easy it is to write custom operations.&lt;/p&gt;
+&lt;h2 id="when-to-use-pyinfra"&gt;When to use pyinfra?&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#when-to-use-pyinfra" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;!--
+
+If you configure servers over SSH:
+
+* cloud-optional / cloud-agnostic architecture
+* one-computer / one-process programming
+* self-hosting / home server
+
+...but maybe not if you need more than push over SSH:
+
+* fully automated pipelines
+* big / multiple teams
+
+--&gt;
+
+&lt;p&gt;pyinfra use cases follow from what it does –
+configuring servers over SSH.&lt;/p&gt;
+&lt;p&gt;As such, pyinfra is good for boring,
+cloud-agnostic architectures,
+from lots of servers with different roles
+all the way down &lt;a class="external" href="https://crawshaw.io/blog/one-process-programming-notes"&gt;one-computer programming&lt;/a&gt;,
+where it still makes deploys reproducible and prevents drift.&lt;sup class="footnote-ref" id="fnref-1"&gt;&lt;a href="#fn-1"&gt;1&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;It is pretty easy to learn too,
+so it's a good fit for self-hosting and home servers,
+and even if you don't use it for configuration management,
+pyinfra gives you a convenient way of running ad-hoc commands
+on fleets of servers.&lt;sup class="footnote-ref" id="fnref-2"&gt;&lt;a href="#fn-2"&gt;2&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;The simplicity comes with limitations:
+fully-automated pipelines are extra work,
+and care is needed
+if multiple people run deploys at the same time.
+Nevertheless,
+you can get pretty far if you structure your deploys well,
+and there's a &lt;a class="external" href="https://docs.pyinfra.com/en/3.x/api/index.html"&gt;Python API&lt;/a&gt; for building stuff on top.&lt;/p&gt;
+&lt;h2 id="the-demo"&gt;The demo&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#the-demo" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;I'll try to focus on the interesting parts,
+but you can find the entire code on &lt;a class="external" href="https://github.com/lemon24/pyinfra-demo"&gt;GitHub&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;At the end of the demo, we'll have two websites,
+a landing page and a Python web app,
+deployed in two stages –
+a local virtual machine for beta:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Text only"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;.--- pyinfra.local ---.- app.pyinfra.local -.
+|                   nginx                   |
+|   static website    :   Python web app    |
+'-------------------------------------------'
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;...and two separate servers for prod:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Text only"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;.--- pyinfra.a.c ----. .- app.pyinfra.a.c --.
+|       nginx        | |       nginx        |
+|   static website   | |   Python web app   |
+'--------------------' '--------------------'
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;details&gt;
+&lt;summary&gt;
+Here's a sneak peek of the final deploy:
+&lt;/summary&gt;
+
+&lt;div class="highlight code-container"&gt;&lt;span class="filename"&gt;infra/deploy.py&lt;/span&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;apt&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;update&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"apt update"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;cache_time&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;24&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mi"&gt;3600&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="n"&gt;apt&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;packages&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="s1"&gt;'nginx'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'python3-certbot-nginx'&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt; &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"install nginx"&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="n"&gt;disable_default&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;link&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"disable default site"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'/etc/nginx/sites-enabled/default'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;present&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;False&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;service&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"reload nginx"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;service&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'nginx'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;reloaded&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;_if&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;disable_default&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;did_change&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;host&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'home_domain'&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;local&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;include&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'tasks/home.py'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;host&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'app_domain'&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;local&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;include&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'tasks/app.py'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;/details&gt;
+
+&lt;h2 id="operations-and-facts"&gt;Operations and facts&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#operations-and-facts" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;First,
+we should get familiar with two basic pyinfra concepts.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;&lt;strong&gt;Operations&lt;/strong&gt; change the server in some way;
+most are declarative and idempotent,
+and you use them to &lt;em&gt;ensure state&lt;/em&gt;.
+A Python file containing operations is called a &lt;strong&gt;deploy&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;Here's a simple deploy with &lt;a class="external" href="https://docs.pyinfra.com/en/3.x/operations/files.html#files-file"&gt;one operation&lt;/a&gt;
+that says &amp;quot;I want &lt;code&gt;hello.txt&lt;/code&gt; to exist&amp;quot;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;span class="filename"&gt;examples/create_file.py&lt;/span&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;pyinfra.operations&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;files&lt;/span&gt;
+
+&lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'hello.txt'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;present&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;If we run this deploy (below, on my &lt;code&gt;@local&lt;/code&gt; machine),
+we see a list of all the operations
+and on which hosts they will produce changes,
+and are asked to approve them:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;pyinfra&lt;span class="w"&gt; &lt;/span&gt;@local&lt;span class="w"&gt; &lt;/span&gt;examples/create_file.py
+&lt;span class="go"&gt;--&amp;gt; Loading config...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Loading inventory...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Connecting to hosts...&lt;/span&gt;
+&lt;span class="go"&gt;    [@local] Connected&lt;/span&gt;
+
+&lt;span class="go"&gt;--&amp;gt; Preparing operation files...&lt;/span&gt;
+&lt;span class="go"&gt;    Loading: examples/create_file.py&lt;/span&gt;
+&lt;span class="go"&gt;    [@local] Ready: examples/create_file.py&lt;/span&gt;
+
+&lt;span class="go"&gt;--&amp;gt; Detected changes:&lt;/span&gt;
+&lt;span class="go"&gt;    Operation                              Change       Conditional Change&lt;/span&gt;
+&lt;span class="go"&gt;    files.file (hello.txt, present=True)   1 (@local)   -&lt;/span&gt;
+
+&lt;span class="go"&gt;    ...&lt;/span&gt;
+&lt;span class="go"&gt;    Press enter to execute...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;If we do, we see the operations running and their outcomes:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="go"&gt;    Press enter to execute... [Enter]&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Beginning operation run...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Starting operation: files.file (hello.txt, present=True)&lt;/span&gt;
+&lt;span class="go"&gt;    [@local] Success&lt;/span&gt;
+
+&lt;span class="go"&gt;--&amp;gt; Results:&lt;/span&gt;
+&lt;span class="go"&gt;    Operation                              Hosts   Success   Error   No Change&lt;/span&gt;
+&lt;span class="go"&gt;    files.file (hello.txt, present=True)   1       1         -       -&lt;/span&gt;
+&lt;span class="go"&gt;    Grand total                            1       1         -       -&lt;/span&gt;
+
+&lt;span class="go"&gt;--&amp;gt; Disconnecting from hosts...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;And now &lt;code&gt;hello.txt&lt;/code&gt; exists:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;ls&lt;span class="w"&gt; &lt;/span&gt;hello.txt
+&lt;span class="go"&gt;hello.txt&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Since &lt;a class="external" href="https://docs.pyinfra.com/en/3.x/operations/files.html#files-file"&gt;files.file&lt;/a&gt; is idempotent,
+nothing happens if we run the deploy again:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;pyinfra&lt;span class="w"&gt; &lt;/span&gt;@local&lt;span class="w"&gt; &lt;/span&gt;examples/create_file.py
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Detected changes:&lt;/span&gt;
+&lt;span class="go"&gt;    Operation                              Change   Conditional Change&lt;/span&gt;
+&lt;span class="go"&gt;    files.file (hello.txt, present=True)   -        -&lt;/span&gt;
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Beginning operation run...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Starting operation: files.file (hello.txt, present=True)&lt;/span&gt;
+&lt;span class="go"&gt;    [@local] No changes&lt;/span&gt;
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;hr /&gt;
+&lt;p&gt;&lt;strong&gt;Facts&lt;/strong&gt; gather data about the target host;
+you use them to control operations.&lt;/p&gt;
+&lt;p&gt;Here's a deploy that installs the Apache web server:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;span class="filename"&gt;examples/install_apache.py&lt;/span&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;pyinfra&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;host&lt;/span&gt;
+&lt;span class="kn"&gt;from&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;pyinfra.facts.server&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;LinuxName&lt;/span&gt;
+&lt;span class="kn"&gt;from&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;pyinfra.operations&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;server&lt;/span&gt;
+
+&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;host&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get_fact&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;LinuxName&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;'Ubuntu'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'Debian'&lt;/span&gt;&lt;span class="p"&gt;]:&lt;/span&gt;
+    &lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;packages&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'apache2'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;packages&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'httpd'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;The package is usually called &lt;code&gt;httpd&lt;/code&gt;,
+but Debian-based distributions call it &lt;code&gt;apache2&lt;/code&gt;, so
+we use the &lt;a class="external" href="https://docs.pyinfra.com/en/3.x/facts/server.html#server-LinuxName"&gt;LinuxName&lt;/a&gt; fact to detect where we are
+and pass the right name to the &lt;a class="external" href="https://docs.pyinfra.com/en/3.x/operations/server.html#server-packages"&gt;server.packages&lt;/a&gt; operation.
+My machine is a Mac,
+so the &lt;code&gt;httpd&lt;/code&gt; branch is chosen:&lt;sup class="footnote-ref" id="fnref-3"&gt;&lt;a href="#fn-3"&gt;3&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;pyinfra&lt;span class="w"&gt; &lt;/span&gt;@local&lt;span class="w"&gt; &lt;/span&gt;examples/install_apache.py&lt;span class="w"&gt; &lt;/span&gt;--dry
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Detected changes:&lt;/span&gt;
+&lt;span class="go"&gt;    Operation                 Change       Conditional Change&lt;/span&gt;
+&lt;span class="go"&gt;    server.packages (httpd)   1 (@local)   -&lt;/span&gt;
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id="where-are-the-commands"&gt;Where are the commands?&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#where-are-the-commands" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Before we look at debug output,
+let's see how pyinfra operations are implemented.&lt;/p&gt;
+&lt;p&gt;Here's a simplified version of the files.file &lt;a class="external" href="https://github.com/pyinfra-dev/pyinfra/blob/v3.10.0/src/pyinfra/operations/files.py#L1663-L1762"&gt;implementation&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@operation&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;file&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;present&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;bool&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;info&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;host&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get_fact&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;File&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;info&lt;/span&gt; &lt;span class="ow"&gt;is&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt; &lt;span class="ow"&gt;and&lt;/span&gt; &lt;span class="n"&gt;present&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;"touch &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;quote&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;
+
+    &lt;span class="k"&gt;elif&lt;/span&gt; &lt;span class="n"&gt;info&lt;/span&gt; &lt;span class="ow"&gt;and&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="n"&gt;present&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;"rm -f &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;quote&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The structure is similar for all operations:
+read the host state using facts,
+diff it against the desired state,
+and return commands to reach the desired state if they don't match.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;Here's another deploy
+that says &amp;quot;I want &lt;code&gt;hello.txt&lt;/code&gt; to &lt;em&gt;not&lt;/em&gt; exist&amp;quot;:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;span class="filename"&gt;examples/delete_file.py&lt;/span&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;pyinfra.operations&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;files&lt;/span&gt;
+
+&lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'hello.txt'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;present&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;False&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;With &lt;code&gt;--debug&lt;/code&gt;,
+we can see the commands being run
+during each execution phase.&lt;/p&gt;
+&lt;p&gt;During the &lt;em&gt;prepare&lt;/em&gt; phase (before approval),
+pyinfra runs the deploy code &lt;em&gt;once per host&lt;/em&gt; to load operations,
+and then runs each operation to see if it returns commands,
+&lt;em&gt;without running the commands themselves&lt;/em&gt;
+(this is how &amp;quot;detected changes&amp;quot; works).&lt;/p&gt;
+&lt;p&gt;Running operations runs facts,
+which results in read-only commands being run:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;pyinfra&lt;span class="w"&gt; &lt;/span&gt;@local&lt;span class="w"&gt; &lt;/span&gt;examples/delete_file.py&lt;span class="w"&gt; &lt;/span&gt;--debug
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Preparing operation files...&lt;/span&gt;
+&lt;span class="go"&gt;    Loading: examples/delete_file.py&lt;/span&gt;
+&lt;span class="go"&gt;    [pyinfra.api.operation] Adding operation, {'files.file'}, ...&lt;/span&gt;
+&lt;span class="go"&gt;    [pyinfra.api.facts] Getting fact: files.File (path=hello.txt)&lt;/span&gt;
+&lt;span class="hll"&gt;&lt;span class="go"&gt;[pyinfra.connectors.local] --&amp;gt; Running command on localhost: sh -c '! (test -e hello.txt || test -L hello.txt ) || ( stat -c '"'"'user=%U group=%G mode=%A atime=%X mtime=%Y ctime=%Z size=%s %N'"'"' hello.txt 2&amp;gt; /dev/null || stat -f '"'"'user=%Su group=%Sg mode=%Sp atime=%a mtime=%m ctime=%c size=%z %N%SY'"'"' hello.txt || ls -ld hello.txt )'&lt;/span&gt;
+&lt;/span&gt;&lt;span class="go"&gt;    [pyinfra.api.facts] [@local] Loaded fact files.File (path=hello.txt)&lt;/span&gt;
+&lt;span class="go"&gt;    [@local] Ready: examples/delete_file.py&lt;/span&gt;
+
+&lt;span class="go"&gt;--&amp;gt; Detected changes:&lt;/span&gt;
+&lt;span class="go"&gt;    Operation                               Change       Conditional Change&lt;/span&gt;
+&lt;span class="go"&gt;    files.file (hello.txt, present=False)   1 (@local)   -&lt;/span&gt;
+
+&lt;span class="go"&gt;    ...&lt;/span&gt;
+&lt;span class="go"&gt;    Press enter to execute...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;During the &lt;em&gt;execute&lt;/em&gt; phase,
+pyinfra runs the previously loaded operations &lt;em&gt;again&lt;/em&gt;,
+but this time it runs the commands returned by them too:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="go"&gt;    Press enter to execute... [Enter]&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Beginning operation run...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Starting operation: files.file (hello.txt, present=False)&lt;/span&gt;
+&lt;span class="go"&gt;    [pyinfra.api.facts] Getting fact: files.File (path=hello.txt)&lt;/span&gt;
+&lt;span class="hll"&gt;&lt;span class="go"&gt;[pyinfra.connectors.local] --&amp;gt; Running command on localhost: sh -c '! (test -e hello.txt || test -L hello.txt ) || ( stat -c '"'"'user=%U group=%G mode=%A atime=%X mtime=%Y ctime=%Z size=%s %N'"'"' hello.txt 2&amp;gt; /dev/null || stat -f '"'"'user=%Su group=%Sg mode=%Sp atime=%a mtime=%m ctime=%c size=%z %N%SY'"'"' hello.txt || ls -ld hello.txt )'&lt;/span&gt;
+&lt;/span&gt;&lt;span class="go"&gt;    [pyinfra.api.facts] [@local] Loaded fact files.File (path=hello.txt)&lt;/span&gt;
+&lt;span class="hll"&gt;&lt;span class="go"&gt;[pyinfra.connectors.local] --&amp;gt; Running command on localhost: sh -c 'rm -f hello.txt'&lt;/span&gt;
+&lt;/span&gt;&lt;span class="go"&gt;    [@local] Success&lt;/span&gt;
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id="inventory-nginx-setup"&gt;Inventory + nginx setup&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#inventory-nginx-setup" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;!--
+OK, now we can [become dangerous](https://www.youtube.com/shorts/DuP84ULLy74).
+--&gt;
+
+&lt;p&gt;So far we've been using my local machine as target host,
+but we want beta to be as similar to prod as possible,
+so I've set up an Ubuntu virtual machine &lt;a class="external" href="https://github.com/lemon24/pyinfra-demo/blob/main/infra/Vagrantfile"&gt;with Vagrant&lt;/a&gt;.&lt;/p&gt;
+&lt;!-- TODO: if you're following along, ... --&gt;
+
+&lt;p&gt;Also, you will typically use
+an &lt;strong&gt;inventory&lt;/strong&gt; file containing &lt;strong&gt;groups&lt;/strong&gt; of hosts
+instead of passing individual hosts directly to the CLI.
+For our demo, we need just one group:&lt;/p&gt;
+&lt;!-- FIXME: @vagrant footnote --&gt;
+
+&lt;div class="highlight code-container"&gt;&lt;span class="filename"&gt;infra/inventories/beta.py&lt;/span&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# group_name = [host1, host2, ...]&lt;/span&gt;
+
+&lt;span class="n"&gt;my_hosts&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;'pyinfra.local'&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+
+&lt;span class="c1"&gt;# you can have more groups:&lt;/span&gt;
+&lt;span class="c1"&gt;#&lt;/span&gt;
+&lt;span class="c1"&gt;# db_servers = ['db-1.net', 'db-2.net']&lt;/span&gt;
+&lt;span class="c1"&gt;# web_servers = [i.hostname for i in aws.ec2.list_instances(asg='my-asg')]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;Since the inventory is a Python file,
+groups don't have to be list literals –
+you could, for example, import a library and
+list instances in an autoscaling group dynamically.&lt;/p&gt;
+&lt;p&gt;Here's how you use an inventory to run arbitrary commands:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;pyinfra&lt;span class="w"&gt; &lt;/span&gt;inventories/beta.py&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;exec&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;--&lt;span class="w"&gt; &lt;/span&gt;lsb_release&lt;span class="w"&gt; &lt;/span&gt;-d
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Beginning operation run...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Starting operation: server.shell (lsb_release -d)&lt;/span&gt;
+&lt;span class="go"&gt;[pyinfra.local] Description: Ubuntu 26.04.1 LTS&lt;/span&gt;
+&lt;span class="go"&gt;    [pyinfra.local] Success&lt;/span&gt;
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;hr /&gt;
+&lt;p&gt;We'll use nginx for both of our websites,
+which means we need to install it first.&lt;/p&gt;
+&lt;p&gt;Here's what the main deploy looks like (minus imports):&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;table class="highlighttable"&gt;&lt;tr&gt;&lt;th colspan="2" class="filename"&gt;&lt;span class="filename"&gt;infra/deploy.py&lt;/span&gt;&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt; 5&lt;/span&gt;
+&lt;span class="normal"&gt; 6&lt;/span&gt;
+&lt;span class="normal"&gt; 7&lt;/span&gt;
+&lt;span class="normal"&gt; 8&lt;/span&gt;
+&lt;span class="normal"&gt; 9&lt;/span&gt;
+&lt;span class="normal"&gt;10&lt;/span&gt;
+&lt;span class="normal"&gt;11&lt;/span&gt;
+&lt;span class="normal"&gt;12&lt;/span&gt;
+&lt;span class="normal"&gt;13&lt;/span&gt;
+&lt;span class="normal"&gt;14&lt;/span&gt;
+&lt;span class="normal"&gt;15&lt;/span&gt;
+&lt;span class="normal"&gt;16&lt;/span&gt;
+&lt;span class="normal"&gt;17&lt;/span&gt;
+&lt;span class="normal"&gt;18&lt;/span&gt;
+&lt;span class="normal"&gt;19&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;apt&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;update&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"apt update"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;cache_time&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;24&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mi"&gt;3600&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="n"&gt;apt&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;packages&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'nginx'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"install nginx"&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="n"&gt;disable_default&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;link&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"disable default site"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'/etc/nginx/sites-enabled/default'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;present&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;False&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;service&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"reload nginx"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;service&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'nginx'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;reloaded&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="hll"&gt;    &lt;span class="n"&gt;_if&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;disable_default&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;did_change&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;
+
+&lt;p&gt;We update the package cache,
+we install nginx,
+we disable the default &amp;quot;Welcome to nginx!&amp;quot; site,
+and then we reload the nginx config.
+To avoid unnecessary reloads,
+we use the &lt;code&gt;_if&lt;/code&gt; &lt;a class="external" href="https://docs.pyinfra.com/en/3.x/arguments.html"&gt;global argument&lt;/a&gt;
+to reload only if the previous operation &lt;a class="external" href="https://docs.pyinfra.com/en/3.x/deploy-process.html#checking-operation-changes"&gt;actually ran&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;In theory,
+we could use a fact to gate the last two operations instead:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;apt&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;packages&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;...&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;host&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get_fact&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Link&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'/etc/nginx/sites-enabled/default'&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;link&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;...&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;service&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;...&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;...but that &lt;code&gt;if&lt;/code&gt; happens in the &lt;em&gt;prepare&lt;/em&gt; phase,
+when nginx (and the symlink) hasn't been installed yet,
+so they would be skipped on the first run.&lt;/p&gt;
+&lt;!--
+FIXME: footnote
+which is why you should use only immutable facts in deploy code,
+and simply use declarative operations instead
+--&gt;
+
+&lt;p&gt;If we run the deploy,
+no change is detected for &amp;quot;disable default site&amp;quot; (no symlink yet):&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;pyinfra&lt;span class="w"&gt; &lt;/span&gt;inventories/beta.py&lt;span class="w"&gt; &lt;/span&gt;deploy.py
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Detected changes:&lt;/span&gt;
+&lt;span class="go"&gt;    Operation              Change              Conditional Change&lt;/span&gt;
+&lt;span class="go"&gt;    apt update             1 (pyinfra.local)   -&lt;/span&gt;
+&lt;span class="go"&gt;    install nginx          1 (pyinfra.local)   -&lt;/span&gt;
+&lt;span class="go"&gt;    disable default site   -                   -&lt;/span&gt;
+&lt;span class="go"&gt;    reload nginx           -                   1 (pyinfra.local)&lt;/span&gt;
+
+&lt;span class="go"&gt;    Detected changes may not include every change pyinfra will execute.&lt;/span&gt;
+&lt;span class="go"&gt;    Hidden side effects of operations may alter behaviour of future operations,&lt;/span&gt;
+&lt;span class="go"&gt;    this will be shown in the results. The remote state will always be updated&lt;/span&gt;
+&lt;span class="go"&gt;    to reflect the state defined by the input operations.&lt;/span&gt;
+
+&lt;span class="go"&gt;    Press enter to execute... [Enter]&lt;/span&gt;
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Results:&lt;/span&gt;
+&lt;span class="go"&gt;    Operation              Hosts   Success   Error   No Change&lt;/span&gt;
+&lt;span class="go"&gt;    apt update             1       1         -       -&lt;/span&gt;
+&lt;span class="go"&gt;    install nginx          1       1         -       -&lt;/span&gt;
+&lt;span class="go"&gt;    disable default site   1       1         -       -&lt;/span&gt;
+&lt;span class="go"&gt;    reload nginx           1       1         -       -&lt;/span&gt;
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;...but the operation does run, as the prophecy foretold
+(&amp;quot;side effects of operations may alter behaviour of future operations&amp;quot;).&lt;/p&gt;
+&lt;h2 id="static-site-code-reuse"&gt;Static site + code reuse&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#static-site-code-reuse" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;With nginx installed,
+we can proceed to the static home page.&lt;/p&gt;
+&lt;p&gt;We'll put the operations in a separate file
+that we include in the main deploy, which
+in addition to keeping code tidy,
+allows specific tasks to be conditional:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;table class="highlighttable"&gt;&lt;tr&gt;&lt;th colspan="2" class="filename"&gt;&lt;span class="filename"&gt;infra/deploy.py&lt;/span&gt;&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;23&lt;/span&gt;
+&lt;span class="normal"&gt;24&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;host&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'home_domain'&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;local&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;include&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'tasks/home.py'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;strong&gt;&lt;a class="external" href="https://docs.pyinfra.com/en/3.x/inventory-data.html#host-data"&gt;Host data&lt;/a&gt;&lt;/strong&gt; is arbitrary data associated with hosts
+in the inventory file:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;span class="filename"&gt;infra/inventories/beta.py&lt;/span&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="c1"&gt;# group_name = [(host1, {'some custom': 'host data'}), ...]&lt;/span&gt;
+
+&lt;span class="n"&gt;my_hosts&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;
+    &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'pyinfra.local'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+        &lt;span class="s1"&gt;'home_domain'&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s1"&gt;'pyinfra.local'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="p"&gt;}),&lt;/span&gt;
+&lt;span class="p"&gt;]&lt;/span&gt;  &lt;span class="c1"&gt;# fmt: skip&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;The home page deploy itself is pretty straightforward:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;table class="highlighttable"&gt;&lt;tr&gt;&lt;th colspan="2" class="filename"&gt;&lt;span class="filename"&gt;infra/tasks/home.py&lt;/span&gt;&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt; 4&lt;/span&gt;
+&lt;span class="normal"&gt; 5&lt;/span&gt;
+&lt;span class="normal"&gt; 6&lt;/span&gt;
+&lt;span class="normal"&gt; 7&lt;/span&gt;
+&lt;span class="normal"&gt; 8&lt;/span&gt;
+&lt;span class="normal"&gt; 9&lt;/span&gt;
+&lt;span class="normal"&gt;10&lt;/span&gt;
+&lt;span class="normal"&gt;11&lt;/span&gt;
+&lt;span class="normal"&gt;12&lt;/span&gt;
+&lt;span class="normal"&gt;13&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;from&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;modules&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;nginx&lt;/span&gt;
+
+&lt;span class="n"&gt;sync_files&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sync&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"sync files"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;src&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'../home'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;dest&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'/opt/home'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;delete&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="n"&gt;nginx&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;site&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'templates/nginx/home.conf'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;host&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;home_domain&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;
+
+&lt;p&gt;There's one operation
+that &lt;a class="external" href="https://docs.pyinfra.com/en/3.x/operations/files.html#files-sync"&gt;synchronizes files&lt;/a&gt; from a local directory to a remote one,
+and another operation that sets up an nginx site
+using the domain from host data.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;Except &lt;code&gt;nginx.site&lt;/code&gt; isn't actually an operation,
+but a &lt;a class="external" href="https://docs.pyinfra.com/en/3.x/api/deploys.html"&gt;packaged deploy&lt;/a&gt;;
+besides the function definition that makes it reusable,
+it looks like any other deploy:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;table class="highlighttable"&gt;&lt;tr&gt;&lt;th colspan="2" class="filename"&gt;&lt;span class="filename"&gt;infra/modules/nginx.py&lt;/span&gt;&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt; 7&lt;/span&gt;
+&lt;span class="normal"&gt; 8&lt;/span&gt;
+&lt;span class="normal"&gt; 9&lt;/span&gt;
+&lt;span class="normal"&gt;10&lt;/span&gt;
+&lt;span class="normal"&gt;11&lt;/span&gt;
+&lt;span class="normal"&gt;12&lt;/span&gt;
+&lt;span class="normal"&gt;13&lt;/span&gt;
+&lt;span class="normal"&gt;14&lt;/span&gt;
+&lt;span class="normal"&gt;15&lt;/span&gt;
+&lt;span class="normal"&gt;16&lt;/span&gt;
+&lt;span class="normal"&gt;17&lt;/span&gt;
+&lt;span class="normal"&gt;18&lt;/span&gt;
+&lt;span class="normal"&gt;19&lt;/span&gt;
+&lt;span class="normal"&gt;20&lt;/span&gt;
+&lt;span class="normal"&gt;21&lt;/span&gt;
+&lt;span class="normal"&gt;22&lt;/span&gt;
+&lt;span class="normal"&gt;23&lt;/span&gt;
+&lt;span class="normal"&gt;24&lt;/span&gt;
+&lt;span class="normal"&gt;25&lt;/span&gt;
+&lt;span class="normal"&gt;26&lt;/span&gt;
+&lt;span class="normal"&gt;27&lt;/span&gt;
+&lt;span class="normal"&gt;28&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@deploy&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;"nginx site"&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;site&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;template&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;domain&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;context&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+
+    &lt;span class="n"&gt;write_site&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;template&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+        &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"write"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;src&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;template&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;dest&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s1"&gt;'/etc/nginx/sites-available/&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;domain&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s1"&gt;'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;domain&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;domain&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;context&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;enable_site&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;link&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+        &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"enable"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s1"&gt;'/etc/nginx/sites-enabled/&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;domain&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s1"&gt;'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;target&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s1"&gt;'/etc/nginx/sites-available/&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;domain&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s1"&gt;'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;service&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+        &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"reload"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;service&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'nginx'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;reloaded&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;_if&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;any_changed&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;write_site&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;enable_site&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;
+    &lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;a class="external" href="https://docs.pyinfra.com/en/3.x/operations/files.html#files-template"&gt;files.template&lt;/a&gt; uses &lt;a class="external" href="https://jinja.palletsprojects.com/en/stable/"&gt;Jinja&lt;/a&gt;,
+so we can have a base template for all HTTP sites:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;span class="filename"&gt;infra/templates/nginx/http.conf&lt;/span&gt;&lt;pre class="code" data-lang="Django/Jinja"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="x"&gt;server {&lt;/span&gt;
+&lt;span class="x"&gt;    listen 80;&lt;/span&gt;
+&lt;span class="x"&gt;    listen [::]:80;&lt;/span&gt;
+&lt;span class="x"&gt;    server_name &lt;/span&gt;&lt;span class="cp"&gt;{{&lt;/span&gt; &lt;span class="nv"&gt;domain&lt;/span&gt; &lt;span class="cp"&gt;}}&lt;/span&gt;&lt;span class="x"&gt;;&lt;/span&gt;
+
+&lt;span class="x"&gt;    &lt;/span&gt;&lt;span class="cp"&gt;{%&lt;/span&gt; &lt;span class="k"&gt;block&lt;/span&gt; &lt;span class="nv"&gt;server&lt;/span&gt; &lt;span class="cp"&gt;%}{%&lt;/span&gt; &lt;span class="k"&gt;endblock&lt;/span&gt; &lt;span class="cp"&gt;%}&lt;/span&gt;
+&lt;span class="x"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;...that we then extend with site-specific configuration:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;span class="filename"&gt;infra/templates/nginx/home.conf&lt;/span&gt;&lt;pre class="code" data-lang="Django/Jinja"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="cp"&gt;{%&lt;/span&gt; &lt;span class="k"&gt;extends&lt;/span&gt; &lt;span class="s1"&gt;'templates/nginx/http.conf'&lt;/span&gt; &lt;span class="cp"&gt;%}&lt;/span&gt;
+
+&lt;span class="cp"&gt;{%&lt;/span&gt; &lt;span class="k"&gt;block&lt;/span&gt; &lt;span class="nv"&gt;server&lt;/span&gt; -&lt;span class="cp"&gt;%}&lt;/span&gt;
+
+&lt;span class="x"&gt;    location / {&lt;/span&gt;
+&lt;span class="x"&gt;        root /opt/home;&lt;/span&gt;
+&lt;span class="x"&gt;    }&lt;/span&gt;
+
+&lt;span class="cp"&gt;{%&lt;/span&gt;- &lt;span class="k"&gt;endblock&lt;/span&gt; &lt;span class="cp"&gt;%}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;Passing &lt;code&gt;--diff&lt;/code&gt; shows the rendered template, which is pretty neat:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;pyinfra&lt;span class="w"&gt; &lt;/span&gt;inventories/beta.py&lt;span class="w"&gt; &lt;/span&gt;deploy.py&lt;span class="w"&gt; &lt;/span&gt;--diff
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Preparing operation files...&lt;/span&gt;
+&lt;span class="go"&gt;    Loading: deploy.py&lt;/span&gt;
+&lt;span class="go"&gt;    [pyinfra.local] Will create /etc/nginx/sites-available/pyinfra.local&lt;/span&gt;
+&lt;span class="go"&gt;      @@ -0,0 +1,9 @@&lt;/span&gt;
+&lt;span class="go"&gt;      + server {&lt;/span&gt;
+&lt;span class="go"&gt;      +     listen 80;&lt;/span&gt;
+&lt;span class="go"&gt;      +     listen [::]:80;&lt;/span&gt;
+&lt;span class="go"&gt;      +     server_name pyinfra.local;&lt;/span&gt;
+&lt;span class="go"&gt;      +&lt;/span&gt;
+&lt;span class="go"&gt;      +     location / {&lt;/span&gt;
+&lt;span class="go"&gt;      +         root /opt/home;&lt;/span&gt;
+&lt;span class="go"&gt;      +     }&lt;/span&gt;
+&lt;span class="go"&gt;      + }&lt;/span&gt;
+
+&lt;span class="go"&gt;    [pyinfra.local] Ready: deploy.py&lt;/span&gt;
+
+&lt;span class="go"&gt;--&amp;gt; Detected changes:&lt;/span&gt;
+&lt;span class="go"&gt;    Operation                             Change              Conditional Change&lt;/span&gt;
+&lt;span class="go"&gt;    apt update                            -                   -&lt;/span&gt;
+&lt;span class="go"&gt;    install nginx                         -                   -&lt;/span&gt;
+&lt;span class="go"&gt;    disable default site                  -                   -&lt;/span&gt;
+&lt;span class="go"&gt;    reload nginx                          -                   1 (pyinfra.local)&lt;/span&gt;
+&lt;span class="go"&gt;    tasks/home.py | sync files            1 (pyinfra.local)   -&lt;/span&gt;
+&lt;span class="go"&gt;    tasks/home.py | nginx site | write    1 (pyinfra.local)   -&lt;/span&gt;
+&lt;span class="go"&gt;    tasks/home.py | nginx site | enable   1 (pyinfra.local)   -&lt;/span&gt;
+&lt;span class="go"&gt;    tasks/home.py | nginx site | reload   -                   1 (pyinfra.local)&lt;/span&gt;
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;And now we have a static site!&lt;/p&gt;
+&lt;p&gt;&lt;img class="img-responsive" src="/_file/pyinfra/images/pyinfra-local.png" alt="browser window showing http://pyinfra.local:2080" /&gt;&lt;/p&gt;
+&lt;h2 id="web-app-secrets"&gt;Web app + secrets&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#web-app-secrets" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;The web application is a simple Flask app that we can install with pip:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;tree&lt;span class="w"&gt; &lt;/span&gt;app
+&lt;span class="go"&gt;app&lt;/span&gt;
+&lt;span class="go"&gt;├── app&lt;/span&gt;
+&lt;span class="go"&gt;│   ├── __init__.py&lt;/span&gt;
+&lt;span class="go"&gt;│   ├── static&lt;/span&gt;
+&lt;span class="go"&gt;│   │   └── style.css&lt;/span&gt;
+&lt;span class="go"&gt;│   └── templates&lt;/span&gt;
+&lt;span class="go"&gt;│       └── index.html&lt;/span&gt;
+&lt;span class="go"&gt;└── pyproject.toml&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;We serve it using a traditional
+&lt;a class="external" href="https://gunicorn.org/deploy/#nginx-configuration"&gt;Gunicorn being nginx on a Unix socket&lt;/a&gt; setup:&lt;/p&gt;
+&lt;pre class="code code-container"&gt;&lt;code&gt;   :80, :443
+       |
+.-------------.
+|    nginx    |  groups: app-socket, www-data
+'-------------'
+       |
+    app.sock     groups: app-socket
+       |
+.- Gunicorn --.
+|   web app   |  groups: app-socket, app
+'-------------'&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The deploy for it is slightly bigger,
+but hopefully still straightforward.&lt;/p&gt;
+&lt;p&gt;We have operations to create users and groups:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;table class="highlighttable"&gt;&lt;tr&gt;&lt;th colspan="2" class="filename"&gt;&lt;span class="filename"&gt;infra/tasks/app.py&lt;/span&gt;&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;12&lt;/span&gt;
+&lt;span class="normal"&gt;13&lt;/span&gt;
+&lt;span class="normal"&gt;14&lt;/span&gt;
+&lt;span class="normal"&gt;15&lt;/span&gt;
+&lt;span class="normal"&gt;16&lt;/span&gt;
+&lt;span class="normal"&gt;17&lt;/span&gt;
+&lt;span class="normal"&gt;18&lt;/span&gt;
+&lt;span class="normal"&gt;19&lt;/span&gt;
+&lt;span class="normal"&gt;20&lt;/span&gt;
+&lt;span class="normal"&gt;21&lt;/span&gt;
+&lt;span class="normal"&gt;22&lt;/span&gt;
+&lt;span class="normal"&gt;23&lt;/span&gt;
+&lt;span class="normal"&gt;24&lt;/span&gt;
+&lt;span class="normal"&gt;25&lt;/span&gt;
+&lt;span class="normal"&gt;26&lt;/span&gt;
+&lt;span class="normal"&gt;27&lt;/span&gt;
+&lt;span class="normal"&gt;28&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;group&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'app'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"create app group"&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;group&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'app-socket'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"create socket group"&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;user&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"create user"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;user&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'app'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;group&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'app'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;groups&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;'app-socket'&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;
+    &lt;span class="n"&gt;home&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"/var/lib/app"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;shell&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"/usr/sbin/nologin"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;system&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;user&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"nginx socket access"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;user&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'www-data'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;groups&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;'app-socket'&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;
+    &lt;span class="n"&gt;append&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;
+
+&lt;p&gt;...to create a virtual environment with our app and its dependencies:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;table class="highlighttable"&gt;&lt;tr&gt;&lt;th colspan="2" class="filename"&gt;&lt;span class="filename"&gt;infra/tasks/app.py&lt;/span&gt;&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;30&lt;/span&gt;
+&lt;span class="normal"&gt;31&lt;/span&gt;
+&lt;span class="normal"&gt;32&lt;/span&gt;
+&lt;span class="normal"&gt;33&lt;/span&gt;
+&lt;span class="normal"&gt;34&lt;/span&gt;
+&lt;span class="normal"&gt;35&lt;/span&gt;
+&lt;span class="normal"&gt;36&lt;/span&gt;
+&lt;span class="normal"&gt;37&lt;/span&gt;
+&lt;span class="normal"&gt;38&lt;/span&gt;
+&lt;span class="normal"&gt;39&lt;/span&gt;
+&lt;span class="normal"&gt;40&lt;/span&gt;
+&lt;span class="normal"&gt;41&lt;/span&gt;
+&lt;span class="normal"&gt;42&lt;/span&gt;
+&lt;span class="normal"&gt;43&lt;/span&gt;
+&lt;span class="normal"&gt;44&lt;/span&gt;
+&lt;span class="normal"&gt;45&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;apt&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;packages&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'python3-venv'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"install venv"&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;pip&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;venv&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'/opt/app'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'python3'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"create venv"&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;pip&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;packages&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="s1"&gt;'gunicorn'&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt; &lt;span class="n"&gt;virtualenv&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'/opt/app'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"install deps"&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="n"&gt;sync_files&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sync&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"sync app files"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;src&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'../app'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;dest&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'/opt/app/src'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;delete&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;exclude_dir&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;'**/__pycache__'&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;install_app&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;shell&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="s2"&gt;"/opt/app/bin/pip install /opt/app/src"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"install app"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;_if&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;sync_files&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;did_change&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;
+
+&lt;p&gt;...to create and start a systemd service for Gunicorn:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;table class="highlighttable"&gt;&lt;tr&gt;&lt;th colspan="2" class="filename"&gt;&lt;span class="filename"&gt;infra/tasks/app.py&lt;/span&gt;&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;56&lt;/span&gt;
+&lt;span class="normal"&gt;57&lt;/span&gt;
+&lt;span class="normal"&gt;58&lt;/span&gt;
+&lt;span class="normal"&gt;59&lt;/span&gt;
+&lt;span class="normal"&gt;60&lt;/span&gt;
+&lt;span class="normal"&gt;61&lt;/span&gt;
+&lt;span class="normal"&gt;62&lt;/span&gt;
+&lt;span class="normal"&gt;63&lt;/span&gt;
+&lt;span class="normal"&gt;64&lt;/span&gt;
+&lt;span class="normal"&gt;65&lt;/span&gt;
+&lt;span class="normal"&gt;66&lt;/span&gt;
+&lt;span class="normal"&gt;67&lt;/span&gt;
+&lt;span class="normal"&gt;68&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;write_service&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;template&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"write service"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;src&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'templates/systemd/app.service'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;dest&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'/etc/systemd/system/app.service'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;systemd&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;service&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"enable service"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;service&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'app.service'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;enabled&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;restarted&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;daemon_reload&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;_if&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;any_changed&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;install_app&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;write_config&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;write_service&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;
+
+&lt;p&gt;...and finally to configure nginx:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;table class="highlighttable"&gt;&lt;tr&gt;&lt;th colspan="2" class="filename"&gt;&lt;span class="filename"&gt;infra/tasks/app.py&lt;/span&gt;&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;70&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;nginx&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;site&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'templates/nginx/app.conf'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;host&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;app_domain&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;
+
+&lt;hr /&gt;
+&lt;p&gt;In addition, Flask needs a &lt;a class="external" href="https://flask.palletsprojects.com/en/stable/config/#SECRET_KEY"&gt;secret key&lt;/a&gt;, which usually comes from a config file:&lt;/p&gt;
+&lt;!-- FIXME: secret manager service footnote --&gt;
+
+&lt;div class="highlight code-container"&gt;&lt;table class="highlighttable"&gt;&lt;tr&gt;&lt;th colspan="2" class="filename"&gt;&lt;span class="filename"&gt;infra/tasks/app.py&lt;/span&gt;&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;47&lt;/span&gt;
+&lt;span class="normal"&gt;48&lt;/span&gt;
+&lt;span class="normal"&gt;49&lt;/span&gt;
+&lt;span class="normal"&gt;50&lt;/span&gt;
+&lt;span class="normal"&gt;51&lt;/span&gt;
+&lt;span class="normal"&gt;52&lt;/span&gt;
+&lt;span class="normal"&gt;53&lt;/span&gt;
+&lt;span class="normal"&gt;54&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;write_config&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;template&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+    &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"write config"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;src&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'templates/config.py.jinja'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;dest&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'/etc/opt/app/config.py'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;group&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;'app'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;mode&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;640&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="n"&gt;get_secret&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;secrets&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get_secret&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;
+
+&lt;p&gt;The question is, where do we store the secret key before writing the config?&lt;/p&gt;
+&lt;p&gt;The simple (and wrong) solution is to hardcode it in the deploy or in the template;
+unencrypted-secrets-in-version-control issue aside,
+we'd also like the secrets to be different between beta and prod.&lt;/p&gt;
+&lt;p&gt;As I said,
+a deploy is a Python file,
+so we can do anything:
+we can get them from a
+&lt;a class="external" href="https://keyring.readthedocs.io/en/latest/"&gt;password&lt;/a&gt;
+&lt;a class="external" href="https://keyring.readthedocs.io/en/latest/#third-party-backends"&gt;manager&lt;/a&gt;,
+a security key,
+or even an &lt;a class="external" href="https://pypi.org/project/keyrings.cryptfile/"&gt;encrypted&lt;/a&gt;
+&lt;a class="external" href="https://pypi.org/project/privy/"&gt;file&lt;/a&gt;.
+To illustrate the point,
+here's a simple function
+that reads named secrets from an unencrypted JSON file:&lt;sup class="footnote-ref" id="fnref-4"&gt;&lt;a href="#fn-4"&gt;4&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;span class="filename"&gt;infra/modules/secrets.py&lt;/span&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;json&lt;/span&gt;
+&lt;span class="kn"&gt;from&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;pyinfra&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;host&lt;/span&gt;
+
+&lt;span class="n"&gt;secrets_path&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s1"&gt;'secrets.json'&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;get_secret&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;stage&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="n"&gt;stage&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+&lt;span class="hll"&gt;        &lt;span class="n"&gt;stage&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;host&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;stage&lt;/span&gt;
+&lt;/span&gt;
+    &lt;span class="k"&gt;with&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;secrets_path&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="n"&gt;data&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;json&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;load&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;secret&lt;/span&gt; &lt;span class="o"&gt;:=&lt;/span&gt; &lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;stage&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;{})&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;secret&lt;/span&gt;
+
+    &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;RuntimeError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;"secret &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="si"&gt;!r}&lt;/span&gt;&lt;span class="s2"&gt; for stage &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;stage&lt;/span&gt;&lt;span class="si"&gt;!r}&lt;/span&gt;&lt;span class="s2"&gt; not found"&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;The stage comes from host data,
+this time not in the inventory,
+but in a &lt;a class="external" href="https://docs.pyinfra.com/en/3.x/inventory-data.html#group-data-files"&gt;group data file&lt;/a&gt;
+that applies to all hosts in a group
+(&lt;code&gt;beta&lt;/code&gt;, the inventory name, is an implicit group):&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;span class="filename"&gt;infra/group_data/beta.py&lt;/span&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;stage&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s1"&gt;'beta'&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;The config template looks like this:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;span class="filename"&gt;infra/templates/config.py.jinja&lt;/span&gt;&lt;pre class="code" data-lang="Django/Jinja"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="x"&gt;SECRET_KEY = &lt;/span&gt;&lt;span class="cp"&gt;{{&lt;/span&gt; &lt;span class="s1"&gt;'{!r}'&lt;/span&gt;&lt;span class="nv"&gt;.format&lt;/span&gt;&lt;span class="o"&gt;(&lt;/span&gt;&lt;span class="nv"&gt;get_secret&lt;/span&gt;&lt;span class="o"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'app_secret_key'&lt;/span&gt;&lt;span class="o"&gt;))&lt;/span&gt; &lt;span class="cp"&gt;}}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;Deploying looks the same, only with way more operations:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;pyinfra&lt;span class="w"&gt; &lt;/span&gt;inventories/beta.py&lt;span class="w"&gt; &lt;/span&gt;deploy.py
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;span class="go"&gt;--&amp;gt; Results:&lt;/span&gt;
+&lt;span class="go"&gt;    Operation                             Hosts   Success   Error   No Change&lt;/span&gt;
+&lt;span class="go"&gt;    ...&lt;/span&gt;
+&lt;span class="go"&gt;    Grand total                           23      15        -       8&lt;/span&gt;
+&lt;span class="go"&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;And now we have a web app:&lt;/p&gt;
+&lt;p&gt;&lt;img class="img-responsive" src="/_file/pyinfra/images/app-pyinfra-local.png" alt="browser window showing http://app.pyinfra.local:2080" /&gt;&lt;/p&gt;
+&lt;h2 id="https-prod"&gt;HTTPS + prod&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#https-prod" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;That's a nice looking web app,
+but it would be even nicer
+if it were not &amp;quot;not secure&amp;quot;.
+This requires HTTPS,
+which requires a TLS certificate.&lt;/p&gt;
+&lt;p&gt;Fortunately,
+those are easy to get these days –
+&lt;a class="external" href="https://en.wikipedia.org/wiki/Let%27s_Encrypt"&gt;Let's Encrypt&lt;/a&gt; provides free certificates,
+and &lt;a class="external" href="https://certbot.eff.org/pages/about"&gt;Certbot&lt;/a&gt; will request, install, and renew them automatically.&lt;/p&gt;
+&lt;p&gt;Unfortunately,
+there's no built-in Certbot operation,
+so we have to write a custom one:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;table class="highlighttable"&gt;&lt;tr&gt;&lt;th colspan="2" class="filename"&gt;&lt;span class="filename"&gt;infra/modules/certbot.py&lt;/span&gt;&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt; 8&lt;/span&gt;
+&lt;span class="normal"&gt; 9&lt;/span&gt;
+&lt;span class="normal"&gt;10&lt;/span&gt;
+&lt;span class="normal"&gt;11&lt;/span&gt;
+&lt;span class="normal"&gt;12&lt;/span&gt;
+&lt;span class="normal"&gt;13&lt;/span&gt;
+&lt;span class="normal"&gt;14&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@operation&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;certificate&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;domain&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;domain&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;host&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get_fact&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Certificates&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt;
+
+    &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;"certbot certonly -d &lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;quote&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;domain&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; -n --nginx --agree-tos"&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;
+
+&lt;p&gt;Like in the &lt;a class="anchor" href="#where-are-the-commands"&gt;initial example&lt;/a&gt;,
+we read the host state using a fact
+and then return commands if it doesn't match the desired state.
+The fact is custom too:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;table class="highlighttable"&gt;&lt;tr&gt;&lt;th colspan="2" class="filename"&gt;&lt;span class="filename"&gt;infra/modules/certbot.py&lt;/span&gt;&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;17&lt;/span&gt;
+&lt;span class="normal"&gt;18&lt;/span&gt;
+&lt;span class="normal"&gt;19&lt;/span&gt;
+&lt;span class="normal"&gt;20&lt;/span&gt;
+&lt;span class="normal"&gt;21&lt;/span&gt;
+&lt;span class="normal"&gt;22&lt;/span&gt;
+&lt;span class="normal"&gt;23&lt;/span&gt;
+&lt;span class="normal"&gt;24&lt;/span&gt;
+&lt;span class="normal"&gt;25&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nc"&gt;Certificates&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;FactBase&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;default&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;dict&lt;/span&gt;
+    &lt;span class="n"&gt;requires_command&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s2"&gt;"certbot"&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;command&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="s2"&gt;"certbot certificates"&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;process&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;output&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="n"&gt;c&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;'name'&lt;/span&gt;&lt;span class="p"&gt;]:&lt;/span&gt; &lt;span class="n"&gt;c&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;c&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;_parse_certbot_certificates&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;output&lt;/span&gt;&lt;span class="p"&gt;)}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;
+
+&lt;p&gt;And we already have a convenient place where we can use the operation:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;table class="highlighttable"&gt;&lt;tr&gt;&lt;th colspan="2" class="filename"&gt;&lt;span class="filename"&gt;infra/modules/nginx.py&lt;/span&gt;&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td class="linenos"&gt;&lt;div class="linenodiv"&gt;&lt;pre class="code"&gt;&lt;code&gt;&lt;span class="normal"&gt;10&lt;/span&gt;
+&lt;span class="normal"&gt;11&lt;/span&gt;
+&lt;span class="normal"&gt;12&lt;/span&gt;
+&lt;span class="normal"&gt;13&lt;/span&gt;
+&lt;span class="normal"&gt;14&lt;/span&gt;
+&lt;span class="normal"&gt;15&lt;/span&gt;
+&lt;span class="normal"&gt;16&lt;/span&gt;
+&lt;span class="normal"&gt;17&lt;/span&gt;
+&lt;span class="normal"&gt;18&lt;/span&gt;
+&lt;span class="normal"&gt;19&lt;/span&gt;
+&lt;span class="normal"&gt;20&lt;/span&gt;
+&lt;span class="normal"&gt;21&lt;/span&gt;
+&lt;span class="normal"&gt;22&lt;/span&gt;
+&lt;span class="normal"&gt;23&lt;/span&gt;
+&lt;span class="normal"&gt;24&lt;/span&gt;
+&lt;span class="normal"&gt;25&lt;/span&gt;
+&lt;span class="normal"&gt;26&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nd"&gt;@deploy&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;"nginx site"&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;site&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;template&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;domain&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;https&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;context&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;reload_ops&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[]&lt;/span&gt;
+
+&lt;span class="hll"&gt;    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;https&lt;/span&gt; &lt;span class="ow"&gt;is&lt;/span&gt; &lt;span class="kc"&gt;None&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+&lt;/span&gt;&lt;span class="hll"&gt;        &lt;span class="n"&gt;https&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;host&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'nginx_https'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/span&gt;&lt;span class="hll"&gt;    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;https&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+&lt;/span&gt;&lt;span class="hll"&gt;        &lt;span class="n"&gt;reload_ops&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;append&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;certbot&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;certificate&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;domain&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"cert"&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+&lt;/span&gt;&lt;span class="hll"&gt;
+&lt;/span&gt;    &lt;span class="n"&gt;write_site&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;template&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+        &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;"write"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;src&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;template&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="n"&gt;dest&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s1"&gt;'/etc/nginx/sites-available/&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="n"&gt;domain&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s1"&gt;'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;span class="hll"&gt;        &lt;span class="n"&gt;base&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="sa"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;"templates/nginx/http&lt;/span&gt;&lt;span class="si"&gt;{&lt;/span&gt;&lt;span class="s1"&gt;'s'&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;https&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s1"&gt;''&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;.conf"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;/span&gt;        &lt;span class="n"&gt;domain&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;domain&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;context&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/div&gt;
+
+&lt;hr /&gt;
+&lt;p&gt;Also unfortunately,
+Certbot needs a resolvable domain name to work,
+so we can't test this using the beta virtual machine...
+but we can always test in prod. ( ≖‿  ≖ )&lt;/p&gt;
+&lt;p&gt;Here's a new inventory with two hosts,
+each with its own domain and HTTPS enabled:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;span class="filename"&gt;infra/inventories/prod.py&lt;/span&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;my_hosts&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;
+    &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'pyinfra.andgravity.com'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+        &lt;span class="s1"&gt;'home_domain'&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s1"&gt;'pyinfra.andgravity.com'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="p"&gt;}),&lt;/span&gt;
+    &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'app.pyinfra.andgravity.com'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+        &lt;span class="s1"&gt;'app_domain'&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s1"&gt;'app.pyinfra.andgravity.com'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="p"&gt;}),&lt;/span&gt;
+&lt;span class="p"&gt;]&lt;/span&gt;  &lt;span class="c1"&gt;# fmt: skip&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;div class="highlight code-container"&gt;&lt;span class="filename"&gt;infra/group_data/prod.py&lt;/span&gt;&lt;pre class="code" data-lang="Python"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;stage&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s1"&gt;'prod'&lt;/span&gt;
+&lt;span class="n"&gt;nginx_https&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;True&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;I say we just go for it:&lt;/p&gt;
+&lt;div class="highlight code-container"&gt;&lt;pre class="code" data-lang="Bash Session"&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="gp"&gt;$ &lt;/span&gt;pyinfra&lt;span class="w"&gt; &lt;/span&gt;inventories/prod.py&lt;span class="w"&gt; &lt;/span&gt;deploy.py&lt;span class="w"&gt; &lt;/span&gt;--yes
+&lt;span class="go"&gt;... stuff happens ...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;One minute later, there are ✨ two new websites ✨ on the internet:&lt;sup class="footnote-ref" id="fnref-5"&gt;&lt;a href="#fn-5"&gt;5&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;div class="columns"&gt;&lt;div class="column col-sm-6 col-xs-12"&gt;
+
+&lt;figure class="figure"&gt;
+&lt;img class="img-responsive" src="/_file/pyinfra/images/pyinfra-a-c.png" alt="browser window showing https://pyinfra.andgravity.com" /&gt;&lt;/figure&gt;
+
+
+
+&lt;/div&gt;
+&lt;div class="column col-sm-6 col-xs-12"&gt;
+
+&lt;figure class="figure"&gt;
+&lt;img class="img-responsive" src="/_file/pyinfra/images/app-pyinfra-a-c.png" alt="browser window showing https://app.pyinfra.andgravity.com" /&gt;&lt;/figure&gt;
+
+
+
+&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;h2 id="questions"&gt;Questions?&lt;span class="headerlink"&gt;&amp;nbsp;&lt;a href="#questions" title="permalink"&gt;#&lt;/a&gt;&lt;/span&gt;&lt;/h2&gt;
+&lt;p&gt;Coming soon :)&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;Anyway, that's it for now.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Learned something new today?&lt;/strong&gt; Share it with others, it really helps! &lt;span class="text-large"&gt;
+&lt;span class="share-icons"&gt;
+&lt;a
+    class="share-icon pycoders color"
+    href="https://pycoders.com/submissions"
+    target="_blank"
+&gt;PyCoder's Weekly&lt;/a&gt;
+&lt;a
+    class="share-icon hacker-news color"
+    href="https://news.ycombinator.%63%6f%6d/submitlink?u=https%3A//death.andgravity.com/pyinfra&amp;t=pyinfra%20%E2%80%93%20simple%20infrastructure%20automation%20in%20Python"
+&gt;HN&lt;/a&gt;
+&lt;a
+    class="share-icon bluesky color"
+    href="https://bsky.%61%70%70/intent/compose?text=pyinfra%20%E2%80%93%20simple%20infrastructure%20automation%20in%20Python%20https%3A//death.andgravity.com/pyinfra"
+&gt;Bluesky&lt;/a&gt;
+&lt;!--
+&lt;a
+    class="share-icon reddit color"
+    href="https://www.reddit.%63%6f%6d/%73%75%62%6d%69%74?url=https%3A//death.andgravity.com/pyinfra&amp;title=pyinfra%20%E2%80%93%20simple%20infrastructure%20automation%20in%20Python"
+&gt;Reddit&lt;/a&gt;
+--&gt;
+&lt;a
+    class="share-icon linkedin color"
+    href="https://www.linkedin.%63%6f%6d/sharing/share-offsite/?url=https%3A//death.andgravity.com/pyinfra"
+&gt;linkedin&lt;/a&gt;
+&lt;a
+    class="share-icon twitter color"
+    href="https://twitter.%63%6f%6d/%73%68%61%72%65?text=pyinfra%20%E2%80%93%20simple%20infrastructure%20automation%20in%20Python&amp;url=https%3A//death.andgravity.com/pyinfra&amp;via=_andgravity"
+&gt;Twitter&lt;/a&gt;
+&lt;/span&gt;
+&lt;/span&gt;&lt;/p&gt;
+
+
+&lt;section class="footnotes"&gt;
+&lt;ol&gt;
+&lt;li id="fn-1"&gt;&lt;p&gt;And you're bound to have extra dev and pre-prod machines anyway. &lt;a href="#fnref-1" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-2"&gt;&lt;p&gt;Say you have a memory leak during a high traffic period
+and need to reload stuff once in a while until you can find the root cause. &lt;a href="#fnref-2" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-3"&gt;&lt;p&gt;Deploy deploy code runs once per host,
+so you &lt;em&gt;could&lt;/em&gt; have different branches on different hosts
+within the same run. &lt;a href="#fnref-3" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-4"&gt;&lt;p&gt;Which you absolutely &lt;em&gt;should not&lt;/em&gt; do,
+use &lt;a class="external" href="https://pypi.org/project/keyrings.cryptfile/"&gt;keyrings.cryptfile&lt;/a&gt; instead. &lt;a href="#fnref-4" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;li id="fn-5"&gt;&lt;p&gt;Well, not anymore, there's no point in paying to host this :) &lt;a href="#fnref-5" class="footnote"&gt;&lt;sup&gt;[return]&lt;/sup&gt;&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+    <link href="https://death.andgravity.com/pyinfra" rel="alternate"/>
+    <summary>Hi, I'm Adrian, and today I will live demo pyinfra, an infrastructure automation tool.</summary>
+    <published>2026-11-03T14:45:00+00:00</published>
+  </entry>
   <entry xml:base="https://death.andgravity.com/albumtitle">
     <id>https://death.andgravity.com/albumtitle</id>
     <title>Ordered key sharding in DynamoDB</title>
